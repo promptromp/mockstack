@@ -10,6 +10,7 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix="mockstack_",
+        env_file=".env",
     )
 
     strategy: Literal["filefixtures", "chaosmonkey"] = "filefixtures"

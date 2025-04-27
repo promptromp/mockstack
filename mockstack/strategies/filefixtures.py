@@ -1,7 +1,8 @@
 """MockStack strategy for using file-based fixtures."""
 
-from fastapi import Request, Response
+from fastapi import Request, Response, HTTPException
 from fastapi.templating import Jinja2Templates
+from jinja2.exceptions import TemplateNotFound
 
 from mockstack.config import Settings
 from mockstack.strategies.base import BaseStrategy
@@ -71,7 +72,10 @@ class FileFixturesStrategy(BaseStrategy):
         self.templates = Jinja2Templates(directory=settings.templates_dir)
 
     def apply(self, request: Request, response: Response | None = None) -> None:
-        return self.templates.TemplateResponse(
-            request=request,
-            **infer_template_arguments(request),
-        )
+        try:
+            return self.templates.TemplateResponse(
+                request=request,
+                **infer_template_arguments(request),
+            )
+        except TemplateNotFound as e:
+            raise HTTPException(status_code=404, detail=str(e))
