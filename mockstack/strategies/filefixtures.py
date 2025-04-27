@@ -71,7 +71,9 @@ def iter_possible_template_arguments(
         template_file_extension=template_file_extension,
         default_template_name=default_template_name,
     )
-    for name in iter_possible_template_filenames(name_segments, **template_name_kwargs):
+    for name in iter_possible_template_filenames(
+        name_segments, context, **template_name_kwargs
+    ):
         yield dict(
             name=name,
             context=context,
@@ -101,25 +103,32 @@ def parse_template_name_segments_and_context(
 
 def iter_possible_template_filenames(
     name_segments: list[str],
+    context: dict[str, str],
     *,
     template_file_separator: str,
     template_file_extension: str,
     default_template_name: str,
-) -> Generator:
+) -> Generator[str, None, None]:
     """Infer the template filename from the name segments and context.
 
     We have a cascade of possible filename formats:
 
-    - <name>.<id>.<id>.j2
-    - <name>.<id>.j2
-    - <name>.j2
+    - <n>.<id>.<id>.j2
+    - <n>.<id>.j2
+    - <n>.j2
 
     The first option is the most specific, and the last option is the least specific.
     The IDs correspond to any identifiers found in the path of the request, in order.
 
     """
-    yield (
-        template_file_separator.join(name_segments) + template_file_extension
-        if name_segments
-        else default_template_name
-    )
+    if name_segments:
+        if context:
+            yield (
+                template_file_separator.join(name_segments)
+                + "".join(context.values())
+                + template_file_extension
+            )
+
+        yield template_file_separator.join(name_segments) + template_file_extension
+
+    yield default_template_name

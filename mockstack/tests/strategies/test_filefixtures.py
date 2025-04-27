@@ -4,7 +4,6 @@ import os
 import pytest
 from fastapi import Request, HTTPException
 from jinja2 import Environment, FileSystemLoader
-from jinja2.exceptions import TemplateNotFound
 from unittest.mock import MagicMock, patch
 
 from mockstack.config import Settings
@@ -31,20 +30,40 @@ def templates_dir():
             "/api/v1/projects/1234",
             [
                 {
+                    "name": "api-v1-projects1234.j2",
+                    "context": {"projects": "1234"},
+                    "media_type": "application/json",
+                },
+                {
                     "name": "api-v1-projects.j2",
                     "context": {"projects": "1234"},
                     "media_type": "application/json",
-                }
+                },
+                {
+                    "name": "index.j2",
+                    "context": {"projects": "1234"},
+                    "media_type": "application/json",
+                },
             ],
         ),
         (
             "/api/v1/users/3a4e5ad9-17ee-41af-972f-864dfccd4856",
             [
                 {
+                    "name": "api-v1-users3a4e5ad9-17ee-41af-972f-864dfccd4856.j2",
+                    "context": {"users": "3a4e5ad9-17ee-41af-972f-864dfccd4856"},
+                    "media_type": "application/json",
+                },
+                {
                     "name": "api-v1-users.j2",
                     "context": {"users": "3a4e5ad9-17ee-41af-972f-864dfccd4856"},
                     "media_type": "application/json",
-                }
+                },
+                {
+                    "name": "index.j2",
+                    "context": {"users": "3a4e5ad9-17ee-41af-972f-864dfccd4856"},
+                    "media_type": "application/json",
+                },
             ],
         ),
         (
@@ -54,7 +73,12 @@ def templates_dir():
                     "name": "api-v1-projects.j2",
                     "context": {},
                     "media_type": "application/json",
-                }
+                },
+                {
+                    "name": "index.j2",
+                    "context": {},
+                    "media_type": "application/json",
+                },
             ],
         ),
         (
@@ -64,7 +88,7 @@ def templates_dir():
                     "name": "index.j2",
                     "context": {"id": "1234"},
                     "media_type": "application/json",
-                }
+                },
             ],
         ),
     ],
@@ -106,8 +130,9 @@ def test_iter_possible_template_arguments_with_custom_media_type():
     )
 
     results = list(iter_possible_template_arguments(request))
-    assert len(results) == 1
+    assert len(results) == 2
     assert results[0]["media_type"] == "application/xml"
+    assert results[1]["media_type"] == "application/xml"
 
 
 def test_parse_template_name_segments_and_context():
@@ -143,21 +168,47 @@ def test_parse_template_name_segments_and_context():
 
 def test_iter_possible_template_filenames():
     """Test the iter_possible_template_filenames function."""
-    # Test with name segments
+    # Test with name segments and context
     filenames = list(
         iter_possible_template_filenames(
             ["api", "v1", "projects"],
+            context={"projects": "1234"},
             template_file_separator="-",
             template_file_extension=".j2",
             default_template_name="index.j2",
         )
     )
-    assert filenames == ["api-v1-projects.j2"]
+    assert filenames == ["api-v1-projects1234.j2", "api-v1-projects.j2", "index.j2"]
 
-    # Test with no name segments
+    # Test with name segments and no context
+    filenames = list(
+        iter_possible_template_filenames(
+            ["api", "v1", "projects"],
+            context={},
+            template_file_separator="-",
+            template_file_extension=".j2",
+            default_template_name="index.j2",
+        )
+    )
+    assert filenames == ["api-v1-projects.j2", "index.j2"]
+
+    # Test with no name segments and context
     filenames = list(
         iter_possible_template_filenames(
             [],
+            context={"id": "1234"},
+            template_file_separator="-",
+            template_file_extension=".j2",
+            default_template_name="index.j2",
+        )
+    )
+    assert filenames == ["index.j2"]
+
+    # Test with no name segments and no context
+    filenames = list(
+        iter_possible_template_filenames(
+            [],
+            context={},
             template_file_separator="-",
             template_file_extension=".j2",
             default_template_name="index.j2",
@@ -169,12 +220,17 @@ def test_iter_possible_template_filenames():
     filenames = list(
         iter_possible_template_filenames(
             ["api", "v1", "projects"],
+            context={"projects": "1234"},
             template_file_separator="_",
             template_file_extension=".html",
             default_template_name="default.html",
         )
     )
-    assert filenames == ["api_v1_projects.html"]
+    assert filenames == [
+        "api_v1_projects1234.html",
+        "api_v1_projects.html",
+        "default.html",
+    ]
 
 
 def test_file_fixtures_strategy_init(templates_dir):
@@ -222,15 +278,17 @@ def test_file_fixtures_strategy_apply_success(mock_exists, mock_env, templates_d
 
 
 @patch("mockstack.strategies.filefixtures.Environment")
-def test_file_fixtures_strategy_apply_template_not_found(mock_env, templates_dir):
+@patch("os.path.exists")
+def test_file_fixtures_strategy_apply_template_not_found(
+    mock_exists, mock_env, templates_dir
+):
     """Test the FileFixturesStrategy apply method when template doesn't exist."""
     # Setup
     settings = Settings(templates_dir=templates_dir)
     strategy = FileFixturesStrategy(settings)
 
-    mock_env.return_value.get_template.side_effect = TemplateNotFound(
-        "Template not found"
-    )
+    # Mock os.path.exists to return False for all template files
+    mock_exists.return_value = False
 
     request = Request(
         scope={
