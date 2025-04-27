@@ -13,7 +13,5 @@ def catchall_router_provider(app: FastAPI, settings: Settings) -> None:
     async def catch_all(request: Request):
         """Catch all requests and delegate to the strategy."""
         tracer = trace.get_tracer(__name__)
-        with tracer.start_span(name="mockstack-http-request") as span:
-            span.set_attribute("http.method", request.method)
-            span.set_attribute("http.url", str(request.url.path))
+        with tracer.start_as_current_span("catchall"):
             return await app.state.strategy.apply(request)
