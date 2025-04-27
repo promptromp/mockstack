@@ -1,18 +1,24 @@
 """Application entrypoints."""
 
-from typing import Union
-
 from fastapi import FastAPI
 
-
-app = FastAPI()
-
-
-@app.get("/")
-async def read_root():
-    return {"Hello": "World"}
+from mockstack.lifespan import lifespan_provider
+from mockstack.routers.catchall import catchall_router_provider
+from mockstack.routers.homepage import homepage_router_provider
+from mockstack.config import settings_provider
 
 
-@app.get("/items/{item_id}")
-async def read_item(item_id: int, q: Union[str, None] = None):
-    return {"item_id": item_id, "q": q}
+def create_app() -> FastAPI:
+    """Create the FastAPI app."""
+    settings = settings_provider()
+
+    app = FastAPI(lifespan=lifespan_provider(settings))
+
+    homepage_router_provider(app, settings)
+    catchall_router_provider(app, settings)
+
+    return app
+
+
+# expose top-level app object for fastapi cli
+app = create_app()

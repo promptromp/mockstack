@@ -3,7 +3,11 @@ name = "mockstack"
 version = "0.1.0"
 requires-python = ">=3.13"
 dependencies = [
-    "fastapi>=0.115.12",
+    "colorama>=0.4.6",
+    "fastapi[standard]>=0.115.12",
+    "jinja2>=3.1.6",
+    "pydantic>=2.11.3",
+    "pydantic-settings>=2.9.1",
 ]
 
 [dependency-groups]
