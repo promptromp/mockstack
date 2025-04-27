@@ -24,5 +24,7 @@ def announce(settings: Settings):
 
     logger = logging.getLogger("uvicorn")
     logger.info(
-        f"{HIGHLIGHT}mockstack{ENDC} ready to roll. Using strategy: {HIGHLIGHT}{settings.strategy}{ENDC}, templates_dir: {HIGHLIGHT}{settings.templates_dir}{ENDC}"
+        f"{HIGHLIGHT}mockstack{ENDC} ready to roll. "
+        f"Using strategy: {HIGHLIGHT}{settings.strategy}{ENDC}, "
+        f"templates_dir: {HIGHLIGHT}{settings.templates_dir}{ENDC}"
     )

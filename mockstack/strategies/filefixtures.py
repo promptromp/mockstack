@@ -25,14 +25,15 @@ class FileFixturesStrategy(BaseStrategy):
         self.env = Environment(loader=FileSystemLoader(settings.templates_dir))
 
     def apply(self, request: Request, response: Response | None = None) -> None:
+        print(request.headers)
         for template_args in iter_possible_template_arguments(request):
             # iterate over all candidate template arguments, from most specific to least specific.
             filename = self.templates_dir / template_args["name"]
-            self.logger.debug("** Looking for template filename: %s", filename)
+            self.logger.debug("Looking for template filename: %s", filename)
             if not os.path.exists(filename):
                 continue
 
-            self.logger.debug("** Found template filename: %s", filename)
+            self.logger.debug("Found template filename: %s", filename)
 
             template = self.env.get_template(template_args["name"])
             return Response(

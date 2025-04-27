@@ -29,23 +29,19 @@ class Settings(BaseSettings):
         "disable_existing_loggers": False,
         "formatters": {
             "standard": {
-                "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+                "format": "     %(levelname)s   [%(name)s] %(message)s",
             },
         },
         "handlers": {
             "console": {
                 "class": "logging.StreamHandler",
-                "level": "INFO",
+                "level": "DEBUG",
                 "formatter": "standard",
                 "stream": "ext://sys.stdout",
             },
         },
-        "root": {
-            "handlers": ["console"],
-            "level": "WARNING",
-        },
         "loggers": {
-            "mockstack": {
+            "FileFixturesStrategy": {
                 "handlers": ["console"],
                 "level": "DEBUG",
             },

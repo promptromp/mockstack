@@ -1,5 +1,7 @@
 """FastAPI application lifecycle management."""
 
+from logging import config
+
 from contextlib import asynccontextmanager
 from typing import Callable
 from fastapi import FastAPI
@@ -19,6 +21,7 @@ def lifespan_provider(
 
         This is the context manager that FastAPI will use to manage the lifecycle of the application.
         """
+        config.dictConfig(settings.logging)
         announce(settings)
 
         yield
