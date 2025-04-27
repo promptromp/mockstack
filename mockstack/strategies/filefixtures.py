@@ -1,5 +1,6 @@
 """MockStack strategy for using file-based fixtures."""
 
+import logging
 import os
 from collections import OrderedDict
 from pathlib import Path
@@ -16,6 +17,8 @@ from mockstack.strategies.base import BaseStrategy
 class FileFixturesStrategy(BaseStrategy):
     """Strategy for using file-based fixtures."""
 
+    logger = logging.getLogger("FileFixturesStrategy")
+
     def __init__(self, settings: Settings, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.templates_dir = Path(settings.templates_dir)
@@ -25,9 +28,11 @@ class FileFixturesStrategy(BaseStrategy):
         for template_args in iter_possible_template_arguments(request):
             # iterate over all candidate template arguments, from most specific to least specific.
             filename = self.templates_dir / template_args["name"]
-            print("** looking for template at: ", filename)
+            self.logger.debug("** Looking for template filename: %s", filename)
             if not os.path.exists(filename):
                 continue
+
+            self.logger.debug("** Found template filename: %s", filename)
 
             template = self.env.get_template(template_args["name"])
             return Response(
@@ -38,8 +43,18 @@ class FileFixturesStrategy(BaseStrategy):
         # if we get here, we have no template to render.
         raise HTTPException(
             status_code=404,
-            detail=f"Template not found for given request. path: {request.url.path}, templates_dir: {self.templates_dir}",
+            detail=missing_template_detail(request, templates_dir=self.templates_dir),
         )
+
+
+def missing_template_detail(request: Request, *, templates_dir: Path) -> str:
+    """Return a detail message for a missing template."""
+    return (
+        "Template not found for given request. "
+        f"path: {request.url.path}, "
+        f"query: {request.query_params}, "
+        f"templates_dir: {templates_dir}, "
+    )
 
 
 def iter_possible_template_arguments(
