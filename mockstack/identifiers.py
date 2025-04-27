@@ -4,33 +4,61 @@
 def looks_like_id(chunk: str) -> bool:
     """Check if a URL path segment looks like an ID.
 
-    Identifiers are typically numeric or alphanumeric (e.g. UUIDs) and are used to identify a resource.
+    Identifiers are typically numeric or hexadecimal (e.g. UUIDs) and are used to identify a resource.
 
-    We apply a couple of simple heuristics to determine if a segment looks like an ID:
-    - It must be numeric and have an even number of characters.
-    - Or, It must be a hexdecimal string with an even number of characters.
-    - Or, It must be a valid UUID4 (36 characters, alphanumeric, and dashes).
+    We apply a few simple heuristics to try and provide a good balance between false positives and false negatives.
 
     Examples:
+    ---------
     >>> looks_like_id("123")
-    True
+    False  # Odd length numeric
+
     >>> looks_like_id("1234567890")
-    True
+    True   # Even length numeric
+
     >>> looks_like_id("1234567890abcdef")
-    True
+    True   # Even length hex
+
     >>> looks_like_id("3a4e5ad9-17ee-41af-972f-864dfccd4856")
-    True
+    True   # UUID with dashes
+
+    >>> looks_like_id("3a4e5ad917ee41af972f864dfccd4856")
+    True   # UUID without dashes
+
     >>> looks_like_id("project")
-    False
+    False  # Not a valid ID format
+
     >>> looks_like_id("api")
-    False
+    False  # Not a valid ID format
+
     >>> looks_like_id("v1")
-    False
+    False  # Not a valid ID format
 
     """
+    if not chunk or chunk.isspace():
+        return False
+
+    # Check for special characters that aren't allowed in IDs
+    if any(c in chunk for c in "_./+@"):
+        return False
+
     N = len(chunk)
-    return (
-        (N % 2 == 0 and chunk.isdigit())
-        or (N % 2 == 0 and all(c in "0123456789abcdef" for c in chunk))
-        or (N == 36 and all(c in "0123456789abcdef-" for c in chunk))
+
+    # Check for UUID format (with or without dashes)
+    if N == 36:
+        # UUID with dashes
+        parts = chunk.lower().split("-")
+        if len(parts) == 5 and all(
+            all(c in "0123456789abcdef" for c in p) for p in parts
+        ):
+            lengths = [len(p) for p in parts]
+            if lengths == [8, 4, 4, 4, 12]:
+                return True
+    elif N == 32:
+        # UUID without dashes
+        return all(c in "0123456789abcdefABCDEF" for c in chunk)
+
+    # Check for even length numeric or hex
+    return (N % 2 == 0 and chunk.isdigit()) or (
+        N % 2 == 0 and all(c in "0123456789abcdefABCDEF" for c in chunk)
     )

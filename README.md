@@ -1,10 +1,28 @@
 # mockstack
 
-An API mocking workhorse.
+:racehorse: An API mocking workhorse.
 
 
 ## Installation
 
-Install using `pip`:
+Install using `uv`. This will create a virtualenv for you and install all dependencies:
 
-    pip install mockstack
+    uv sync
+
+
+## Usage
+
+Run in development mode (for live-reload of changes):
+
+    uv run fastapi dev mockstack/main.py
+
+Run in production mode:
+
+    uv run fastapi run mockstack/main.py
+
+
+## Testing
+
+Invoke unit-tests with:
+
+    uv run python -m pytest

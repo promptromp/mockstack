@@ -2,13 +2,13 @@
 
 import os
 import pytest
-from fastapi import Request
-from fastapi.templating import Jinja2Templates
+from fastapi import Request, HTTPException
+from jinja2 import Environment, FileSystemLoader
+from jinja2.exceptions import TemplateNotFound
 from unittest.mock import MagicMock, patch
 
 from mockstack.config import Settings
 from mockstack.strategies.filefixtures import (
-    looks_like_id,
     infer_template_arguments,
     FileFixturesStrategy,
 )
@@ -23,37 +23,34 @@ def templates_dir():
 
 
 @pytest.mark.parametrize(
-    "chunk,expected",
+    "path,expected_name,expected_context,expected_media_type",
     [
-        ("1234", True),  # Even length numeric
-        ("1234567890", True),  # Even length numeric
-        ("1234567890abcdef", True),  #  even length hex
-        ("1234567890abcdefg", False),  # Odd length hex
-        ("3a4e5ad9-17ee-41af-972f-864dfccd4856", True),  # UUID
-        ("project", False),
-        ("api", False),
-        ("v1", False),
-    ],
-)
-def test_looks_like_id(chunk: str, expected: bool) -> None:
-    """Test the looks_like_id function with various inputs."""
-    assert looks_like_id(chunk) == expected
-
-
-@pytest.mark.parametrize(
-    "path,expected_name,expected_context",
-    [
-        ("/api/v1/projects/1234", "api-v1-projects.j2", {"projects": "1234"}),
+        (
+            "/api/v1/projects/1234",
+            "api-v1-projects.j2",
+            {"projects": "1234"},
+            "application/json",
+        ),
         (
             "/api/v1/users/3a4e5ad9-17ee-41af-972f-864dfccd4856",
             "api-v1-users.j2",
             {"users": "3a4e5ad9-17ee-41af-972f-864dfccd4856"},
+            "application/json",
         ),
-        ("/api/v1/projects", "api-v1-projects.j2", {}),
+        ("/api/v1/projects", "api-v1-projects.j2", {}, "application/json"),
+        (
+            "/1234",
+            "index.j2",
+            {"id": "1234"},
+            "application/json",
+        ),
     ],
 )
 def test_infer_template_arguments(
-    path: str, expected_name: str, expected_context: dict
+    path: str,
+    expected_name: str,
+    expected_context: dict,
+    expected_media_type: str,
 ) -> None:
     """Test the infer_template_arguments function with various paths."""
     request = Request(
@@ -70,6 +67,23 @@ def test_infer_template_arguments(
 
     assert result["name"] == expected_name
     assert result["context"] == expected_context
+    assert result["media_type"] == expected_media_type
+
+
+def test_infer_template_arguments_with_custom_media_type():
+    """Test that custom media type from headers is respected."""
+    request = Request(
+        scope={
+            "type": "http",
+            "method": "GET",
+            "path": "/api/v1/projects",
+            "query_string": b"",
+            "headers": [(b"content-type", b"application/xml")],
+        }
+    )
+
+    result = infer_template_arguments(request)
+    assert result["media_type"] == "application/xml"
 
 
 def test_file_fixtures_strategy_init(templates_dir):
@@ -77,20 +91,21 @@ def test_file_fixtures_strategy_init(templates_dir):
     settings = Settings(templates_dir=templates_dir)
     strategy = FileFixturesStrategy(settings)
 
-    assert isinstance(strategy.templates, Jinja2Templates)
-    # Since we can't access the directory directly, we'll verify the strategy was initialized
-    assert strategy.templates is not None
+    assert isinstance(strategy.env, Environment)
+    assert isinstance(strategy.env.loader, FileSystemLoader)
+    assert strategy.env.loader.searchpath == [templates_dir]
 
 
-@patch("mockstack.strategies.filefixtures.Jinja2Templates")
-def test_file_fixtures_strategy_apply(mock_templates, templates_dir):
-    """Test the FileFixturesStrategy apply method."""
+@patch("mockstack.strategies.filefixtures.Environment")
+def test_file_fixtures_strategy_apply_success(mock_env, templates_dir):
+    """Test the FileFixturesStrategy apply method when template exists."""
     # Setup
     settings = Settings(templates_dir=templates_dir)
     strategy = FileFixturesStrategy(settings)
 
-    mock_template_response = MagicMock()
-    mock_templates.return_value.TemplateResponse.return_value = mock_template_response
+    mock_template = MagicMock()
+    mock_template.render.return_value = '{"status": "success"}'
+    mock_env.return_value.get_template.return_value = mock_template
 
     request = Request(
         scope={
@@ -103,12 +118,38 @@ def test_file_fixtures_strategy_apply(mock_templates, templates_dir):
     )
 
     # Execute
-    result = strategy.apply(request)
+    response = strategy.apply(request)
 
     # Assert
-    assert result == mock_template_response
-    mock_templates.return_value.TemplateResponse.assert_called_once()
-    call_args = mock_templates.return_value.TemplateResponse.call_args[1]
-    assert call_args["request"] == request
-    assert call_args["name"] == "api-v1-projects.j2"
-    assert call_args["context"] == {"projects": "1234"}
+    assert response.media_type == "application/json"
+    assert response.body.decode() == '{"status": "success"}'
+    mock_template.render.assert_called_once_with(projects="1234")
+
+
+@patch("mockstack.strategies.filefixtures.Environment")
+def test_file_fixtures_strategy_apply_template_not_found(mock_env, templates_dir):
+    """Test the FileFixturesStrategy apply method when template doesn't exist."""
+    # Setup
+    settings = Settings(templates_dir=templates_dir)
+    strategy = FileFixturesStrategy(settings)
+
+    mock_env.return_value.get_template.side_effect = TemplateNotFound(
+        "Template not found"
+    )
+
+    request = Request(
+        scope={
+            "type": "http",
+            "method": "GET",
+            "path": "/api/v1/projects/1234",
+            "query_string": b"",
+            "headers": [],
+        }
+    )
+
+    # Execute and Assert
+    with pytest.raises(HTTPException) as exc_info:
+        strategy.apply(request)
+
+    assert exc_info.value.status_code == 404
+    assert "Template not found" in str(exc_info.value.detail)

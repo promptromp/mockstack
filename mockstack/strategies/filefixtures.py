@@ -41,7 +41,7 @@ def infer_template_arguments(
             name_segments.append(segment)
 
     # build template filename
-    name = "-".join(name_segments) + ".j2"
+    name = "-".join(name_segments) + ".j2" if name_segments else "index.j2"
 
     media_type = request.headers.get("Content-Type", default_media_type)
 
