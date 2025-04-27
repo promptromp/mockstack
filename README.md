@@ -21,7 +21,7 @@ Install using [uv](https://docs.astral.sh/uv/). This will create a virtualenv fo
 
 ## Usage
 
-Copy the included .env.example file to `.env` and fill in configuration as needed based on the given examples.
+Copy the included [.env.example](.env.example) file to `.env` and fill in configuration as needed based on the given examples.
 
 Run in development mode (for live-reload of changes when developing):
 
