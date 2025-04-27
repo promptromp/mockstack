@@ -1,22 +1,26 @@
 """Routes for the mockstack app."""
 
-from fastapi import APIRouter, FastAPI, Request
+import time
+
+from fastapi import FastAPI, Request
 
 from mockstack.config import Settings
 
 
-def catchall_router_provider(app: FastAPI, settings: Settings) -> APIRouter:
+def catchall_router_provider(app: FastAPI, settings: Settings) -> None:
     """Create the catch-all routes for the mockstack app."""
 
-    router = APIRouter()
+    @app.middleware("http")
+    async def add_process_time_header(request: Request, call_next):
+        start_time = time.time()
+        response = await call_next(request)
+        process_time = time.time() - start_time
+        response.headers["X-Process-Time"] = str(process_time)
+        return response
 
-    @router.api_route(
-        "/{full_path:path}", methods=["GET", "PATCH", "POST", "PUT", "DELETE"]
-    )
-    async def catch_all(full_path: str, request: Request):
+    @app.route("/{full_path:path}", methods=["GET", "PATCH", "POST", "PUT", "DELETE"])
+    async def catch_all(request: Request):
         """Catch all requests and delegate to the strategy."""
-
-        with settings.strategy.handle(full_path, request.method) as strategy:
-            return await strategy.handle(full_path, request)
-
-    return router
+        strategy = app.state.strategy
+        results = await strategy.apply(request)
+        return results

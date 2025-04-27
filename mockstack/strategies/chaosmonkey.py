@@ -11,5 +11,5 @@ class ChaosMonkeyStrategy(BaseStrategy):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def apply(self, request: Request, response: Response) -> None:
+    def apply(self, request: Request, response: Response | None = None) -> None:
         pass

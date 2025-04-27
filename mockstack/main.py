@@ -6,6 +6,7 @@ from mockstack.lifespan import lifespan_provider
 from mockstack.routers.catchall import catchall_router_provider
 from mockstack.routers.homepage import homepage_router_provider
 from mockstack.config import settings_provider
+from mockstack.strategies.factory import strategy_provider
 
 
 def create_app() -> FastAPI:
@@ -13,6 +14,8 @@ def create_app() -> FastAPI:
     settings = settings_provider()
 
     app = FastAPI(lifespan=lifespan_provider(settings))
+
+    app.state.strategy = strategy_provider(settings)
 
     homepage_router_provider(app, settings)
     catchall_router_provider(app, settings)
