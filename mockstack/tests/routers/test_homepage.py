@@ -7,18 +7,6 @@ from mockstack.config import Settings
 from mockstack.routers.homepage import homepage_router_provider
 
 
-@pytest.fixture
-def app():
-    """Create a FastAPI app for testing."""
-    return FastAPI()
-
-
-@pytest.fixture
-def settings():
-    """Create settings for testing."""
-    return Settings(strategy="filefixtures", templates_dir="./templates")
-
-
 @pytest.mark.asyncio
 async def test_homepage_router_provider(app, settings):
     """Test that the homepage router provider sets up routes correctly."""

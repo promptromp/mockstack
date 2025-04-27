@@ -5,6 +5,13 @@ from pydantic import DirectoryPath
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+class OpenTelemetrySettings(BaseSettings):
+    """Settings for OpenTelemetry."""
+
+    enabled: bool = True
+    endpoint: str = "http://localhost:4317/"
+
+
 class Settings(BaseSettings):
     """Settings for mockstack.
 
@@ -17,6 +24,9 @@ class Settings(BaseSettings):
         env_prefix="mockstack__",
         env_file=".env",
     )
+
+    # OpenTelemetry configuration
+    opentelemetry: OpenTelemetrySettings = OpenTelemetrySettings()
 
     # strategy to use for handling requests
     strategy: Literal["filefixtures", "chaosmonkey"] = "filefixtures"

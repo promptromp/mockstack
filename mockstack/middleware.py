@@ -4,8 +4,10 @@ import time
 
 from fastapi import FastAPI, Request
 
+from mockstack.config import Settings
 
-def middleware_provider(app: FastAPI) -> None:
+
+def middleware_provider(app: FastAPI, settings: Settings) -> None:
     """Instrument the middlewares to the mockstack app."""
 
     @app.middleware("http")

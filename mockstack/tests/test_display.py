@@ -21,13 +21,6 @@ def test_ansicolors_constants():
     assert ANSIColors.UNDERLINE == "\033[4m"
 
 
-@pytest.mark.parametrize(
-    "settings",
-    [
-        Settings(strategy="filefixtures", templates_dir="./templates"),
-        Settings(strategy="chaosmonkey", templates_dir="./templates"),
-    ],
-)
 def test_announce(settings):
     """Test the announce function logs the correct message."""
     with patch("mockstack.display.logging") as mock_logging:

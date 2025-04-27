@@ -1,33 +1,20 @@
 """Unit tests for the filefixtures strategy module."""
 
 import os
-import pytest
-from fastapi import Request, HTTPException
 from unittest.mock import MagicMock, patch
 
+import pytest
+from fastapi import HTTPException, Request
+
 from mockstack.config import Settings
-from mockstack.templating import (
-    iter_possible_template_arguments,
-    parse_template_name_segments_and_context,
-    iter_possible_template_filenames,
-)
 from mockstack.strategies.filefixtures import (
     FileFixturesStrategy,
 )
-
-
-@pytest.fixture
-def templates_dir():
-    """Return the path to the test templates directory."""
-    return os.path.join(
-        os.path.dirname(os.path.dirname(__file__)), "fixtures", "templates"
-    )
-
-
-@pytest.fixture
-def settings(templates_dir):
-    """Return a Settings object for testing."""
-    return Settings(templates_dir=templates_dir)
+from mockstack.templating import (
+    iter_possible_template_arguments,
+    iter_possible_template_filenames,
+    parse_template_name_segments_and_context,
+)
 
 
 @pytest.mark.parametrize(
@@ -278,8 +265,9 @@ async def test_file_fixtures_strategy_apply_success(settings):
     mock_template.render.return_value = '{"status": "success"}'
 
     # Patch the environment to return our mock template
-    with patch.object(strategy.env, "get_template", return_value=mock_template), patch(
-        "os.path.exists", return_value=True
+    with (
+        patch.object(strategy.env, "get_template", return_value=mock_template),
+        patch("os.path.exists", return_value=True),
     ):
         request = Request(
             scope={

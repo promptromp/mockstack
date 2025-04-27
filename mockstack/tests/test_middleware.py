@@ -3,23 +3,16 @@
 import time
 
 import pytest
-from fastapi import FastAPI
 from starlette.testclient import TestClient
 
 from mockstack.middleware import middleware_provider
 
 
-@pytest.fixture
-def app():
-    """Create a FastAPI app for testing."""
-    return FastAPI()
-
-
 @pytest.mark.asyncio
-async def test_middleware_provider_process_time(app):
+async def test_middleware_provider_process_time(app, settings):
     """Test that the middleware provider adds the process time header."""
     # Apply the middleware provider
-    middleware_provider(app)
+    middleware_provider(app, settings)
 
     # Create a test client
     client = TestClient(app)

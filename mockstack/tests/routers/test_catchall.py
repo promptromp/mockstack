@@ -12,18 +12,6 @@ from mockstack.routers.catchall import catchall_router_provider
 
 
 @pytest.fixture
-def app():
-    """Create a FastAPI app for testing."""
-    return FastAPI()
-
-
-@pytest.fixture
-def settings():
-    """Create settings for testing."""
-    return Settings(strategy="filefixtures", templates_dir="./templates")
-
-
-@pytest.fixture
 def mock_strategy():
     """Create a mock strategy for testing."""
     strategy = AsyncMock()
