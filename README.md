@@ -1,6 +1,8 @@
 # mockstack
 
-:racehorse: An API mocking workhorse :racehorse:. Ideal for microservice-oriented architectures.
+An API mocking workhorse :racehorse:
+
+Ideal for a sane development lifecycle of microservice-oriented architectures.
 
 
 ## Installation
