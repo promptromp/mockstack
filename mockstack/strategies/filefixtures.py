@@ -28,7 +28,8 @@ def infer_template_arguments(
     """
     path = request.scope["path"]
 
-    name_segments, context = [], {}
+    name_segments: list[str] = []
+    context: dict[str, str] = {}
     for segment in (s for s in path.split("/") if s):
         if looks_like_id(segment):
             if name_segments:

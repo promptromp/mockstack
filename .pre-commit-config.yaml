@@ -21,11 +21,15 @@ repos:
       args: [ --fix ]
     # Run the formatter.
     - id: ruff-format
-# - repo: local
-#   hooks:
-#   - id: pytest
-#     name: pytest [with coverage, without slow]
-#     entry: bash -ec "uv run pytest --cov=mockstack mockstack/tests --cov-fail-under='70' -m 'not slow'"
-#     language: system
-#     types: [python]
-#     pass_filenames: false
+- repo: https://github.com/pre-commit/mirrors-mypy
+  rev: v1.15.0
+  hooks:
+    - id: mypy
+- repo: local
+  hooks:
+  - id: pytest
+    name: pytest [with coverage, without slow]
+    entry: bash -ec "uv run python -m pytest --cov=mockstack mockstack/tests --cov-fail-under='60' -m 'not slow'"
+    language: system
+    types: [python]
+    pass_filenames: false

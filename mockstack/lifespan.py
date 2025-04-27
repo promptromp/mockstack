@@ -1,7 +1,7 @@
 """FastAPI application lifecycle management."""
 
 from contextlib import asynccontextmanager
-from typing import Callable, AsyncGenerator
+from typing import Callable
 from fastapi import FastAPI
 
 from mockstack.display import announce
@@ -10,7 +10,7 @@ from mockstack.config import Settings
 
 def lifespan_provider(
     settings: Settings,
-) -> Callable[[FastAPI], AsyncGenerator[None, None]]:
+) -> Callable:
     """Provide the lifespan context manager."""
 
     @asynccontextmanager
