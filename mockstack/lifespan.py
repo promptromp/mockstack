@@ -1,13 +1,13 @@
 """FastAPI application lifecycle management."""
 
-from logging import config
-
 from contextlib import asynccontextmanager
+from logging import config
 from typing import Callable
+
 from fastapi import FastAPI
 
-from mockstack.display import announce
 from mockstack.config import Settings
+from mockstack.display import announce
 
 
 def lifespan_provider(

@@ -1,9 +1,7 @@
 """Tests for the homepage router module."""
 
 import pytest
-from fastapi import FastAPI
 
-from mockstack.config import Settings
 from mockstack.routers.homepage import homepage_router_provider
 
 

@@ -1,7 +1,8 @@
 """Unit tests for the identifiers module."""
 
 import pytest
-from mockstack.identifiers import prefixes, looks_like_id
+
+from mockstack.identifiers import looks_like_id, prefixes
 
 
 def test_prefixes():
