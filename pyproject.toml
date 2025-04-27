@@ -23,5 +23,8 @@ dev = [
     "pytest-cov>=6.1.1",
 ]
 
+[tool.pytest.ini_options]
+asyncio_default_fixture_loop_scope = "function"
+
 [tool.ruff.lint]
 select = ["I"]
