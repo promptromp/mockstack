@@ -1,19 +1,51 @@
 """MockStack strategy for using file-based fixtures."""
 
+import os
+from pathlib import Path
+from typing import Generator
 from fastapi import Request, Response, HTTPException
 from jinja2 import Environment, FileSystemLoader
-from jinja2.exceptions import TemplateNotFound
 
 from mockstack.config import Settings
 from mockstack.identifiers import looks_like_id
 from mockstack.strategies.base import BaseStrategy
 
 
-def infer_template_arguments(
+class FileFixturesStrategy(BaseStrategy):
+    """Strategy for using file-based fixtures."""
+
+    def __init__(self, settings: Settings, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.templates_dir = Path(settings.templates_dir)
+        self.env = Environment(loader=FileSystemLoader(settings.templates_dir))
+
+    def apply(self, request: Request, response: Response | None = None) -> None:
+        for template_args in iter_possible_template_arguments(request):
+            # iterate over all candidate template arguments, from most specific to least specific.
+            if not os.path.exists(self.templates_dir / template_args["name"]):
+                continue
+
+            template = self.env.get_template(template_args["name"])
+            return Response(
+                template.render(**template_args["context"]),
+                media_type=template_args["media_type"],
+            )
+
+        # if we get here, we have no template to render.
+        raise HTTPException(
+            status_code=404,
+            detail=f"Template not found for given request. path: {request.url.path}, templates_dir: {self.templates_dir}",
+        )
+
+
+def iter_possible_template_arguments(
     request: Request,
     default_identifier_key: str = "id",
     default_media_type: str = "application/json",
-) -> dict:
+    default_template_name: str = "index.j2",
+    template_file_separator: str = "-",
+    template_file_extension: str = ".j2",
+) -> Generator[dict, None, None]:
     """Infer the template arguments for a given request.
 
     This includes:
@@ -26,8 +58,31 @@ def infer_template_arguments(
     a behavior that "just works" for the majority of the cases encountered in practice.
 
     """
-    path = request.scope["path"]
+    path = request.url.path
 
+    name_segments, context = parse_template_name_segments_and_context(
+        path,
+        default_identifier_key=default_identifier_key,
+    )
+    media_type = request.headers.get("Content-Type", default_media_type)
+
+    template_name_kwargs = dict(
+        template_file_separator=template_file_separator,
+        template_file_extension=template_file_extension,
+        default_template_name=default_template_name,
+    )
+    for name in iter_possible_template_filenames(name_segments, **template_name_kwargs):
+        yield dict(
+            name=name,
+            context=context,
+            media_type=media_type,
+        )
+
+
+def parse_template_name_segments_and_context(
+    path: str, *, default_identifier_key: str
+) -> tuple[list[str], dict[str, str]]:
+    """Infer the template name segments and the template context for a given URI path."""
     name_segments: list[str] = []
     context: dict[str, str] = {}
     for segment in (s for s in path.split("/") if s):
@@ -41,33 +96,30 @@ def infer_template_arguments(
         else:
             name_segments.append(segment)
 
-    # build template filename
-    name = "-".join(name_segments) + ".j2" if name_segments else "index.j2"
+    return name_segments, context
 
-    media_type = request.headers.get("Content-Type", default_media_type)
 
-    return dict(
-        name=name,
-        context=context,
-        media_type=media_type,
+def iter_possible_template_filenames(
+    name_segments: list[str],
+    *,
+    template_file_separator: str,
+    template_file_extension: str,
+    default_template_name: str,
+) -> Generator:
+    """Infer the template filename from the name segments and context.
+
+    We have a cascade of possible filename formats:
+
+    - <name>.<id>.<id>.j2
+    - <name>.<id>.j2
+    - <name>.j2
+
+    The first option is the most specific, and the last option is the least specific.
+    The IDs correspond to any identifiers found in the path of the request, in order.
+
+    """
+    yield (
+        template_file_separator.join(name_segments) + template_file_extension
+        if name_segments
+        else default_template_name
     )
-
-
-class FileFixturesStrategy(BaseStrategy):
-    """Strategy for using file-based fixtures."""
-
-    def __init__(self, settings: Settings, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        self.env = Environment(loader=FileSystemLoader(settings.templates_dir))
-
-    def apply(self, request: Request, response: Response | None = None) -> None:
-        template_args = infer_template_arguments(request)
-        try:
-            template = self.env.get_template(template_args["name"])
-            return Response(
-                template.render(**template_args["context"]),
-                media_type=template_args["media_type"],
-            )
-        except TemplateNotFound as e:
-            raise HTTPException(status_code=404, detail=str(e))
