@@ -1,12 +1,10 @@
 """Unit tests for the filefixtures strategy module."""
 
-import os
 from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import HTTPException, Request
 
-from mockstack.config import Settings
 from mockstack.strategies.filefixtures import (
     FileFixturesStrategy,
 )

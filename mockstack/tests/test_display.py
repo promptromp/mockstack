@@ -2,9 +2,6 @@
 
 from unittest.mock import patch
 
-import pytest
-
-from mockstack.config import Settings
 from mockstack.display import ANSIColors, announce
 
 

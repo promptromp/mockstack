@@ -3,11 +3,9 @@
 from unittest.mock import AsyncMock
 
 import pytest
-from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from starlette.testclient import TestClient
 
-from mockstack.config import Settings
 from mockstack.routers.catchall import catchall_router_provider
 
 
