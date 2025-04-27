@@ -5,7 +5,7 @@
 
 ## Installation
 
-Install using `uv`. This will create a virtualenv for you and install all dependencies:
+Install using [uv](https://docs.astral.sh/uv/). This will create a virtualenv for you and install all dependencies:
 
     uv sync
 
