@@ -11,4 +11,6 @@ def catchall_router_provider(app: FastAPI, settings: Settings) -> None:
     @app.route("/{full_path:path}", methods=["GET", "PATCH", "POST", "PUT", "DELETE"])
     async def catch_all(request: Request):
         """Catch all requests and delegate to the strategy."""
-        return app.state.strategy.apply(request)
+        response = await app.state.strategy.apply(request)
+
+        return response
