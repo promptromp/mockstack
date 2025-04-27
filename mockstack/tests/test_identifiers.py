@@ -1,8 +1,51 @@
 """Unit tests for the identifiers module."""
 
 import pytest
+from mockstack.identifiers import prefixes, maybe_add_identifier, looks_like_id
 
-from mockstack.identifiers import looks_like_id
+
+def test_prefixes():
+    # Test basic functionality
+    assert list(prefixes([1, 2, 3])) == [(1,), (1, 2), (1, 2, 3)]
+
+    # Test with reverse=True
+    assert list(prefixes([1, 2, 3], reverse=True)) == [(1, 2, 3), (1, 2), (1,)]
+
+    # Test with empty list
+    assert list(prefixes([])) == []
+
+    # Test with single element
+    assert list(prefixes([1])) == [(1,)]
+
+    # Test with strings
+    assert list(prefixes(["a", "b", "c"])) == [("a",), ("a", "b"), ("a", "b", "c")]
+
+
+def test_maybe_add_identifier():
+    # Test when resource doesn't have an id
+    resource = {"name": "test"}
+    result = maybe_add_identifier(resource)
+    assert "id" in result
+    assert result["name"] == "test"
+    assert result is not resource  # Should return a copy
+
+    # Test when resource already has an id
+    resource = {"id": "existing-id", "name": "test"}
+    result = maybe_add_identifier(resource)
+    assert result["id"] == "existing-id"
+
+    # Test with copy=False
+    resource = {"name": "test"}
+    result = maybe_add_identifier(resource, copy=False)
+    assert result is resource  # Should modify in place
+
+    # Test with custom id provider
+    def custom_id_provider(x):
+        return "custom-id"
+
+    resource = {"name": "test"}
+    result = maybe_add_identifier(resource, default_id_provider=custom_id_provider)
+    assert result["id"] == "custom-id"
 
 
 @pytest.mark.parametrize(
