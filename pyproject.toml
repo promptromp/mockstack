@@ -1,0 +1,13 @@
+[project]
+name = "mockstack"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.115.12",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+    "pytest-cov>=6.1.1",
+]
