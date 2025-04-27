@@ -1,5 +1,25 @@
 """Identifiers helpers."""
 
+import itertools
+
+
+def prefixes(iterable, reverse=False):
+    """Return an iterator of the prefixes of the iterable.
+
+    Examples:
+    ---------
+    >>> list(prefixes([1, 2, 3]))
+    [(1,), (1, 2), (1, 2, 3)]
+
+    >>> list(prefixes([1, 2, 3], reverse=True))
+    [(1, 2, 3), (1, 2), (1,)]
+
+    """
+    iterator = itertools.accumulate(map(lambda x: (x,), iterable))
+    if reverse:
+        return reversed(list(iterator))
+    return iterator
+
 
 def looks_like_id(chunk: str) -> bool:
     """Check if a URL path segment looks like an ID.

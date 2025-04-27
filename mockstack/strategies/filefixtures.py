@@ -1,13 +1,15 @@
 """MockStack strategy for using file-based fixtures."""
 
 import os
+from collections import OrderedDict
 from pathlib import Path
 from typing import Generator
+
 from fastapi import Request, Response, HTTPException
 from jinja2 import Environment, FileSystemLoader
 
 from mockstack.config import Settings
-from mockstack.identifiers import looks_like_id
+from mockstack.identifiers import looks_like_id, prefixes
 from mockstack.strategies.base import BaseStrategy
 
 
@@ -22,7 +24,9 @@ class FileFixturesStrategy(BaseStrategy):
     def apply(self, request: Request, response: Response | None = None) -> None:
         for template_args in iter_possible_template_arguments(request):
             # iterate over all candidate template arguments, from most specific to least specific.
-            if not os.path.exists(self.templates_dir / template_args["name"]):
+            filename = self.templates_dir / template_args["name"]
+            print("** looking for template at: ", filename)
+            if not os.path.exists(filename):
                 continue
 
             template = self.env.get_template(template_args["name"])
@@ -86,7 +90,7 @@ def parse_template_name_segments_and_context(
 ) -> tuple[list[str], dict[str, str]]:
     """Infer the template name segments and the template context for a given URI path."""
     name_segments: list[str] = []
-    context: dict[str, str] = {}
+    context: OrderedDict[str, str] = OrderedDict()
     for segment in (s for s in path.split("/") if s):
         if looks_like_id(segment):
             if name_segments:
@@ -123,11 +127,10 @@ def iter_possible_template_filenames(
     """
     if name_segments:
         if context:
-            yield (
-                template_file_separator.join(name_segments)
-                + "".join(context.values())
-                + template_file_extension
-            )
+            for prefix in prefixes(context.values(), reverse=True):
+                yield (
+                    f"{template_file_separator.join(name_segments)}.{".".join(prefix)}{template_file_extension}"
+                )
 
         yield template_file_separator.join(name_segments) + template_file_extension
 

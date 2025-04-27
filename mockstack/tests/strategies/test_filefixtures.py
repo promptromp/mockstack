@@ -30,7 +30,7 @@ def templates_dir():
             "/api/v1/projects/1234",
             [
                 {
-                    "name": "api-v1-projects1234.j2",
+                    "name": "api-v1-projects.1234.j2",
                     "context": {"projects": "1234"},
                     "media_type": "application/json",
                 },
@@ -50,7 +50,7 @@ def templates_dir():
             "/api/v1/users/3a4e5ad9-17ee-41af-972f-864dfccd4856",
             [
                 {
-                    "name": "api-v1-users3a4e5ad9-17ee-41af-972f-864dfccd4856.j2",
+                    "name": "api-v1-users.3a4e5ad9-17ee-41af-972f-864dfccd4856.j2",
                     "context": {"users": "3a4e5ad9-17ee-41af-972f-864dfccd4856"},
                     "media_type": "application/json",
                 },
@@ -178,7 +178,7 @@ def test_iter_possible_template_filenames():
             default_template_name="index.j2",
         )
     )
-    assert filenames == ["api-v1-projects1234.j2", "api-v1-projects.j2", "index.j2"]
+    assert filenames == ["api-v1-projects.1234.j2", "api-v1-projects.j2", "index.j2"]
 
     # Test with name segments and no context
     filenames = list(
@@ -227,7 +227,7 @@ def test_iter_possible_template_filenames():
         )
     )
     assert filenames == [
-        "api_v1_projects1234.html",
+        "api_v1_projects.1234.html",
         "api_v1_projects.html",
         "default.html",
     ]
