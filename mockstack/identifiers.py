@@ -1,6 +1,7 @@
 """Identifiers helpers."""
 
 import itertools
+from uuid import uuid4
 
 
 def prefixes(iterable, reverse=False):
@@ -19,6 +20,24 @@ def prefixes(iterable, reverse=False):
     if reverse:
         return reversed(list(iterator))
     return iterator
+
+
+def maybe_add_identifier(
+    resource: dict, copy=True, default_id_provider=lambda x: str(uuid4())
+) -> dict:
+    """Add an identifier to a resource if it doesn't already have one.
+
+    We use a simple heuristic to determine if the resource has an identifier.
+    If we can't find one, we inject one
+
+
+    """
+    _resource = resource.copy() if copy else resource
+
+    if "id" not in _resource:
+        _resource["id"] = default_id_provider(_resource)
+
+    return _resource
 
 
 def looks_like_id(chunk: str) -> bool:

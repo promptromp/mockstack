@@ -2,9 +2,12 @@
 
 import logging
 import os
+from datetime import datetime, timezone
 from pathlib import Path
+from uuid import uuid4
 
 from fastapi import Request, Response, HTTPException, status
+from fastapi.responses import JSONResponse
 from jinja2 import Environment, FileSystemLoader
 
 from mockstack.config import Settings
@@ -13,6 +16,11 @@ from mockstack.templating import (
     iter_possible_template_arguments,
     missing_template_detail,
 )
+
+
+def is_json_media_type(media_type: str) -> bool:
+    """Check if the media type is JSON."""
+    return media_type in ("application/json", "text/json")
 
 
 class FileFixturesStrategy(BaseStrategy):
@@ -24,46 +32,133 @@ class FileFixturesStrategy(BaseStrategy):
         super().__init__(*args, **kwargs)
         self.templates_dir = Path(settings.templates_dir)
         self.env = Environment(loader=FileSystemLoader(settings.templates_dir))
+        self.created_resource_metadata = settings.created_resource_metadata
 
     async def apply(self, request: Request) -> Response:
         match request.method:
             case "GET":
-                return self._get(request)
+                return await self._get(request)
             case "POST":
-                return self._post(request)
+                return await self._post(request)
             case "PATCH":
-                return self._patch(request)
+                return await self._patch(request)
             case "PUT":
-                return self._put(request)
+                return await self._put(request)
             case "DELETE":
-                return self._delete(request)
+                return await self._delete(request)
             case _:
                 raise HTTPException(status_code=405, detail="Method not allowed")
 
-    def _delete(self, request: Request) -> Response:
-        """Apply the strategy for DELETE requests."""
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
+    async def _post(self, request: Request) -> Response:
+        """Apply the strategy for POST requests.
 
-    def _patch(self, request: Request) -> Response:
-        """Apply the strategy for PATCH requests."""
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
+        POST requests are typically used for a few different purposes:
 
-    def _put(self, request: Request) -> Response:
-        """Apply the strategy for PUT requests."""
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
+        - Creating a new resource
+        - Searching for resources with a complex query that cannot be expressed in a URI
+        - Executing a 'command' of some sort, like a workflow or a batch job
 
-    def _post(self, request: Request) -> Response:
-        """Apply the strategy for POST requests."""
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
+        We try to infer the intent from the request URI and body.
+        We also allow a configuration to specify a default intent.
 
-    def _get(self, request: Request) -> Response:
+        """
+        uri = request.url.path
+
+        if uri.endswith("search"):
+            # Searching for resources with a complex query that cannot be expressed in a URI.
+            # We return a 200 OK response with a JSON body.
+            return self._response_from_template(request)
+        elif uri.endswith("command"):
+            # Executing a 'command' of some sort, like a workflow or a batch job.
+            # We return a 202 ACCEPTED response with a JSON body.
+            return self._response_from_template(
+                request, status_code=status.HTTP_202_ACCEPTED
+            )
+        else:
+            # Creating a new resource.
+            media_type = request.headers.get("Content-Type", "application/json")
+
+            if is_json_media_type(media_type):
+                # We return a 201 CREATED response with the resource as the body,
+                # potentially injecting the resource ID into the response.
+                resource = await request.json()
+
+                return JSONResponse(
+                    status_code=status.HTTP_201_CREATED,
+                    content=self._created(resource, request=request),
+                )
+            else:
+                # We return a 201 CREATEDresponse with an empty body.
+                return Response(
+                    status_code=status.HTTP_201_CREATED,
+                    content=None,
+                )
+
+    async def _get(self, request: Request) -> Response:
         """Apply the strategy for GET requests.
 
         We try to find a template that matches the request.
+
+        for a URI path like `/api/v1/projects/1234`, we try the following templates:
+
+        - api-v1-projects.1234.j2
+        - api-v1-projects.j2
+        - index.j2
+
+        where `1234` is the identifier of the project.
+
         If we find one, we render it and return the response.
         If we don't find one, we raise a 404 error.
 
         """
+        return self._response_from_template(request)
+
+    async def _delete(self, request: Request) -> Response:
+        """Apply the strategy for DELETE requests."""
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    async def _patch(self, request: Request) -> Response:
+        """Apply the strategy for PATCH requests."""
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    async def _put(self, request: Request) -> Response:
+        """Apply the strategy for PUT requests."""
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    def _created(self, resource: dict, *, request: Request) -> dict:
+        """Create a new resource given a request resource.
+
+        We use the request resource as the basis for the new resource.
+        We then inject an identifier into the resource if it doesn't already have one,
+        as well as any other metadata fields that are configured for the strategy.
+
+        """
+
+        def with_metadata(resource: dict, copy=True) -> dict:
+            """Inject metadata fields into the resource."""
+            _resource = resource.copy() if copy else resource
+            for key, value in self.created_resource_metadata.items():
+                if isinstance(value, str):
+                    _resource[key] = self.env.from_string(value).render(
+                        self._metadata_context(request)
+                    )
+                else:
+                    _resource[key] = value
+            return _resource
+
+        return with_metadata(resource)
+
+    def _metadata_context(self, request: Request) -> dict:
+        """Context for injecting metadata fields into resources."""
+        return {
+            "utcnow": lambda: datetime.now(timezone.utc),
+            "uuid4": uuid4,
+            "request": request,
+        }
+
+    def _response_from_template(
+        self, request: Request, status_code: int = status.HTTP_200_OK
+    ) -> Response:
         for template_args in iter_possible_template_arguments(request):
             filename = self.templates_dir / template_args["name"]
             self.logger.debug("Looking for template filename: %s", filename)
@@ -76,10 +171,11 @@ class FileFixturesStrategy(BaseStrategy):
             return Response(
                 template.render(**template_args["context"]),
                 media_type=template_args["media_type"],
+                status_code=status_code,
             )
 
         # if we get here, we have no template to render.
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail=missing_template_detail(request, templates_dir=self.templates_dir),
         )
