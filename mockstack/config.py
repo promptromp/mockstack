@@ -6,10 +6,15 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Settings for MockStack."""
+    """Settings for mockstack.
+
+    Default values are defined below and can be overwritten using an .env file
+    or with environment variables.
+
+    """
 
     model_config = SettingsConfigDict(
-        env_prefix="mockstack_",
+        env_prefix="mockstack__",
         env_file=".env",
     )
 
