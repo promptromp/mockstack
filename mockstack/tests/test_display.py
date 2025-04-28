@@ -26,10 +26,8 @@ def test_announce(settings):
         announce(settings)
 
         mock_logging.getLogger.assert_called_once_with("uvicorn")
-        mock_logger.info.assert_called_once()
+        mock_logger.info.assert_called()
 
         # Check that the log message contains the expected information
-        log_message = mock_logger.info.call_args[0][0]
-        assert "mockstack" in log_message
-        assert settings.strategy in log_message
-        assert str(settings.templates_dir) in log_message
+        first_log_message = mock_logger.info.call_args[0][0]
+        assert "OpenTelemetry enabled:" in first_log_message

@@ -32,6 +32,10 @@ Or, run in production mode:
 
     uv run fastapi run mockstack/main.py
 
+Available configuration options are [here](./mockstack/config.py). Setting individual options can be done with env. variables as in the following example:
+
+    MOCKSTACK__OPENTELEMETRY__ENABLED=true MOCKSTACK__OPENTELEMETRY__CAPTURE_RESPONSE_BODY=true uv run fastapi run mockstack/main.py
+
 Out of the box, you get the following behavior when using the default `filefixtures` strategy:
 
 - The HTTP request `GET /someservice/api/v1/user/c27f5b2b-6e81-420d-a4e4-6426e1c32db8` will try to find `<templates_dir>/someservice-api-v1-user.c27f5b2b-6e81-420d-a4e4-6426e1c32db8.j2`,

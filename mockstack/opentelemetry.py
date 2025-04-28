@@ -2,7 +2,7 @@
 
 from importlib import metadata
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
@@ -13,8 +13,13 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from mockstack.config import Settings
 
 
+def span_name_for(request: Request) -> str:
+    """Get the span name for a request."""
+    return f"{request.method.upper()} {request.url.path}"
+
+
 def opentelemetry_provider(app: FastAPI, settings: Settings) -> None:
-    """Initialize OpenTelemetry for the fastapi app."""
+    """Initialize OpenTelemetry for the mockstack app."""
     if not settings.opentelemetry.enabled:
         return
 
@@ -34,5 +39,6 @@ def opentelemetry_provider(app: FastAPI, settings: Settings) -> None:
     span_processor = BatchSpanProcessor(otlp_exporter)
     trace.get_tracer_provider().add_span_processor(span_processor)
 
-    # Instrument FastAPI with OpenTelemetry
-    FastAPIInstrumentor.instrument_app(app)
+    # Nb. we do not actually use the default FastAPIInstrumentor here
+    # because we use custom tracing in various places.
+    # FastAPIInstrumentor.instrument_app(app)

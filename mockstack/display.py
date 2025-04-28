@@ -26,5 +26,10 @@ def announce(settings: Settings):
     logger.info(
         f"{HIGHLIGHT}mockstack{ENDC} ready to roll. "
         f"Using strategy: {HIGHLIGHT}{settings.strategy}{ENDC}, "
-        f"templates_dir: {HIGHLIGHT}{settings.templates_dir}{ENDC}"
+        f"templates_dir: {HIGHLIGHT}{settings.templates_dir}{ENDC}. "
+    )
+    logger.info(
+        f"OpenTelemetry enabled: {HIGHLIGHT}{settings.opentelemetry.enabled}{ENDC}, "
+        f"endpoint: {HIGHLIGHT}{settings.opentelemetry.endpoint}{ENDC}, "
+        f"capture_response_body: {HIGHLIGHT}{settings.opentelemetry.capture_response_body}{ENDC}"
     )

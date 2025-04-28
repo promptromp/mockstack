@@ -31,8 +31,10 @@ class FileFixturesStrategy(BaseStrategy):
     def __init__(self, settings: Settings, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.templates_dir = Path(settings.templates_dir)
-        self.env = Environment(loader=FileSystemLoader(settings.templates_dir))
         self.created_resource_metadata = settings.created_resource_metadata
+        self.missing_resource_fields = settings.missing_resource_fields
+
+        self.env = Environment(loader=FileSystemLoader(settings.templates_dir))
 
     async def apply(self, request: Request) -> Response:
         match request.method:
@@ -149,7 +151,12 @@ class FileFixturesStrategy(BaseStrategy):
         return with_metadata(resource)
 
     def _metadata_context(self, request: Request) -> dict:
-        """Context for injecting metadata fields into resources."""
+        """Context for injecting metadata fields into resources.
+
+        Some care is needed to ensure that we only expose the minimum amount
+        of information here since templates are user-defined.
+
+        """
         return {
             "utcnow": lambda: datetime.now(timezone.utc),
             "uuid4": uuid4,
@@ -179,3 +186,10 @@ class FileFixturesStrategy(BaseStrategy):
             status_code=status.HTTP_404_NOT_FOUND,
             detail=missing_template_detail(request, templates_dir=self.templates_dir),
         )
+        """
+        # TODO: return custom fields from settings
+        return JSONResponse(
+            content=self.missing_resource_fields,
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+        """
