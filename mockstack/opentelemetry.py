@@ -32,12 +32,13 @@ def opentelemetry_provider(app: FastAPI, settings: Settings) -> None:
         }
     )
 
-    trace.set_tracer_provider(TracerProvider(resource=resource))
+    tracer_provider = TracerProvider(resource=resource)
+    trace.set_tracer_provider(tracer_provider)
 
     # Set up OTLP exporter
     otlp_exporter = OTLPSpanExporter(endpoint=settings.opentelemetry.endpoint)
     span_processor = BatchSpanProcessor(otlp_exporter)
-    trace.get_tracer_provider().add_span_processor(span_processor)
+    tracer_provider.add_span_processor(span_processor)
 
     # Nb. we do not actually use the default FastAPIInstrumentor here
     # because we use custom tracing in various places.
