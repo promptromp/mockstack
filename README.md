@@ -1,10 +1,11 @@
-[![Build](https://github.com/adamhadani/mockstack/actions/workflows/python-package.yml/badge.svg)](https://github.com/adamhadani/mockstack/actions/workflows/python-package.yml)
-
 # mockstack
+
+[![CI](https://github.com/adamhadani/mockstack/actions/workflows/ci.yml/badge.svg)](https://github.com/adamhadani/mockstack/actions/workflows/ci.yml)
+![GitHub License](https://img.shields.io/github/license/adamhadani/mockstack)
 
 An API mocking workhorse :racehorse:
 
-Ideal for a sane development lifecycle of microservice-oriented architectures.
+Enabling a sane development lifecycle for microservice-oriented architectures.
 
 Highlights include:
 
