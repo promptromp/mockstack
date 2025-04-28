@@ -1,4 +1,4 @@
-[![Python package](https://github.com/adamhadani/mockstack/actions/workflows/python-package.yml/badge.svg)](https://github.com/adamhadani/mockstack/actions/workflows/python-package.yml)
+[![Build](https://github.com/adamhadani/mockstack/actions/workflows/python-package.yml/badge.svg)](https://github.com/adamhadani/mockstack/actions/workflows/python-package.yml)
 
 # mockstack
 
