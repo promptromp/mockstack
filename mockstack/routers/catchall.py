@@ -24,9 +24,9 @@ def catchall_router_provider(app: FastAPI, settings: Settings) -> None:
 
             span.set_attribute("http.status_code", response.status_code)
 
-            # Nb. persisting response body can hamper performance and/or
-            # not needed depending on the use case.
-            # it is therefore done depending on the settings.
+            # Nb. persisting response body can hamper performance,
+            # expose sensitive / PII data, and / or may not be needed.
+            # it is therefore an opt-in setting.
             if settings.opentelemetry.capture_response_body:
                 span.set_attribute("response", response.body)
 
