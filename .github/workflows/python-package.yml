@@ -24,8 +24,9 @@ jobs:
       uses: astral-sh/setup-uv@v5
       with:
         python-version: ${{ matrix.python-version }}
-        version: "0.6.17"
+        version: "latest"
     - name: Install ruff
+        version: "latest"
       uses: astral-sh/ruff-action@v3
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v3
@@ -38,4 +39,4 @@ jobs:
         ruff check --fix
         ruff format
     - name: Run tests
-      run: uv run pytest tests
+      run: uv run pytest
