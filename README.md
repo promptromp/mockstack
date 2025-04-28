@@ -53,3 +53,7 @@ while leaving room for advanced users to go in and customize behavior using the 
 Invoke unit-tests with:
 
     uv run python -m pytest
+
+Linting, formatting, static type checks etc. are all managed via [pre-commit](https://pre-commit.com/) hooks. These will run automatically on every commit. You can invoke these manually on all files with:
+
+    pre-commit run --all-files
