@@ -37,7 +37,7 @@ jobs:
       run: uv sync --all-extras --dev
     - name: Run ruff lint and formatting checks
       run: |
-        ruff check --fix
+        ruff check
         ruff format
     - name: Run tests
       run: uv run pytest
