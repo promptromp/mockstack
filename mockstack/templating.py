@@ -106,7 +106,7 @@ def iter_possible_template_filenames(
         if context:
             for prefix in prefixes(context.values(), reverse=True):
                 yield (
-                    f"{template_file_separator.join(name_segments)}.{".".join(prefix)}{template_file_extension}"
+                    f"{template_file_separator.join(name_segments)}.{'.'.join(prefix)}{template_file_extension}"
                 )
 
         yield template_file_separator.join(name_segments) + template_file_extension
