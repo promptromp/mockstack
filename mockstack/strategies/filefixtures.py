@@ -23,6 +23,44 @@ def is_json_media_type(media_type: str) -> bool:
     return media_type in ("application/json", "text/json")
 
 
+def looks_like_a_search(request: Request) -> bool:
+    """Check if the request looks like a search.
+
+    This is a heuristic to try and identify cases where a POST
+    request is used for issuing a search rather than for creating
+    a new resource.
+
+    """
+    return any(
+        (
+            request.url.path.endswith("_search"),
+            request.url.path.endswith("/search"),
+            request.url.path.endswith("_query"),
+        )
+    )
+
+
+def looks_like_a_command(request: Request) -> bool:
+    """Check if the request looks like a command.
+
+    This is a heuristic to try and identify cases where a POST
+    request is used for issuing a command rather than for creating
+    a new resource.
+    """
+    return any(
+        (
+            request.url.path.endswith("_command"),
+            request.url.path.endswith("/command"),
+            request.url.path.endswith("_request"),
+            request.url.path.endswith("/request"),
+            request.url.path.endswith("_run"),
+            request.url.path.endswith("/run"),
+            request.url.path.endswith("_execute"),
+            request.url.path.endswith("/execute"),
+        )
+    )
+
+
 class FileFixturesStrategy(BaseStrategy):
     """Strategy for using file-based fixtures."""
 
@@ -64,17 +102,14 @@ class FileFixturesStrategy(BaseStrategy):
         We also allow a configuration to specify a default intent.
 
         """
-        uri = request.url.path
-
-        if uri.endswith("search"):
+        if looks_like_a_search(request):
             # Searching for resources with a complex query that cannot be expressed in a URI.
-            # We return a 200 OK response with a JSON body.
             return self._response_from_template(request)
-        elif uri.endswith("command"):
+        elif looks_like_a_command(request):
             # Executing a 'command' of some sort, like a workflow or a batch job.
-            # We return a 202 ACCEPTED response with a JSON body.
+            # We return a 201 CREATED status code with response from template.
             return self._response_from_template(
-                request, status_code=status.HTTP_202_ACCEPTED
+                request, status_code=status.HTTP_201_CREATED
             )
         else:
             # Creating a new resource.
