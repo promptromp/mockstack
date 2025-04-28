@@ -21,7 +21,7 @@ def prefixes(iterable, reverse=False):
     return iterator
 
 
-def looks_like_id(chunk: str) -> bool:
+def looks_like_id(segment: str) -> bool:
     """Check if a URL path segment looks like an ID.
 
     Identifiers are typically numeric or hexadecimal (e.g. UUIDs) and are used to identify a resource.
@@ -55,19 +55,19 @@ def looks_like_id(chunk: str) -> bool:
     False  # Not a valid ID format
 
     """
-    if not chunk or chunk.isspace():
+    if not segment or segment.isspace():
         return False
 
     # Check for special characters that aren't allowed in IDs
-    if any(c in chunk for c in "_./+@"):
+    if any(c in segment for c in "_./+@"):
         return False
 
-    N = len(chunk)
+    N = len(segment)
 
     # Check for UUID format (with or without dashes)
     if N == 36:
         # UUID with dashes
-        parts = chunk.lower().split("-")
+        parts = segment.lower().split("-")
         if len(parts) == 5 and all(
             all(c in "0123456789abcdef" for c in p) for p in parts
         ):
@@ -76,9 +76,9 @@ def looks_like_id(chunk: str) -> bool:
                 return True
     elif N == 32:
         # UUID without dashes
-        return all(c in "0123456789abcdefABCDEF" for c in chunk)
+        return all(c in "0123456789abcdefABCDEF" for c in segment)
 
     # Check for even length numeric or hex
-    return (N % 2 == 0 and chunk.isdigit()) or (
-        N % 2 == 0 and all(c in "0123456789abcdefABCDEF" for c in chunk)
+    return (N % 2 == 0 and segment.isdigit()) or (
+        N % 2 == 0 and all(c in "0123456789abcdefABCDEF" for c in segment)
     )
