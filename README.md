@@ -6,10 +6,10 @@ Ideal for a sane development lifecycle of microservice-oriented architectures.
 
 Highlights include:
 
-* Multiple strategies for handling requests such as Jinja2 template files with intelligent URL request-to-template routing, proxy strategy, and mixed strategies.
-* Observability via OpenTelemetry integration. Get detailed traces of your sessions instantly reported to backends such as Grafana, Jaeger, Zipkin, etc.
-* Configurability via `pydantic-settings` supports customizing behaviour via environment variables and a `.env` file.
-* Comprehensive unit-tests, linting and formatting coverage and automation to ensure stability and a high-quality codebase for production-grade use.
+* :game_die: Multiple strategies for handling requests such as Jinja2 template files with intelligent URL request-to-template routing, proxy strategy, and mixed strategies.
+* :eyes: Observability via OpenTelemetry integration. Get detailed traces of your sessions instantly reported to backends such as Grafana, Jaeger, Zipkin, etc.
+* :flags: Configurability via `pydantic-settings` supports customizing behaviour via environment variables and a `.env` file.
+* :+1: Comprehensive unit-tests, linting and formatting coverage and automation to ensure stability and a high-quality codebase for production-grade use.
 
 
 ## Installation
