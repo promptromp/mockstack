@@ -11,7 +11,7 @@ Highlights include:
 * Multiple strategies for handling requests such as Jinja2 template files with intelligent URL request-to-template routing, proxy strategy, and mixed strategies. :game_die:
 * Observability via OpenTelemetry integration. Get detailed traces of your sessions instantly reported to backends such as Grafana, Jaeger, Zipkin, etc. :eyes:
 * Configurability via `pydantic-settings` supports customizing behaviour via environment variables and a `.env` file. :flags:
-* Comprehensive unit-tests, linting and formatting coverage and automation to ensure stability and a high-quality codebase for production-grade use. :+1:
+* Comprehensive unit-tests, linting and formatting coverage as well as vulnerabilities and security scanning with full CI automation to ensure stability and a high-quality codebase for production-grade use. :+1:
 
 
 ## Installation
