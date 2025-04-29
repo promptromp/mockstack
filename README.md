@@ -1,8 +1,8 @@
 # mockstack
 
 [![CI](https://github.com/adamhadani/mockstack/actions/workflows/ci.yml/badge.svg)](https://github.com/adamhadani/mockstack/actions/workflows/ci.yml)
-![GitHub License](https://img.shields.io/github/license/adamhadani/mockstack)
-![PyPI - Version](https://img.shields.io/pypi/v/mockstack)
+[![GitHub License](https://img.shields.io/github/license/adamhadani/mockstack)](https://github.com/adamhadani/mockstack/blob/main/LICENSE)
+[![PyPI - Version](https://img.shields.io/pypi/v/mockstack)](https://pypi.org/project/mockstack/)
 
 An API mocking workhorse :racehorse:
 
@@ -69,8 +69,4 @@ Copy the included [.env.example](.env.example) file to `.env` and fill in config
 
 Run in development mode (for live-reload of changes when developing):
 
-    uv run fastapi dev mockstack/main.py
-
-Or, run in production mode:
-
-    uv run fastapi run mockstack/main.py
+    uv run uvicorn --factory mockstack.main:create_app --reload
