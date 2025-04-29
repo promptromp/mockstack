@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools"]
+requires = ["setuptools>=80", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,7 +7,8 @@ name = "mockstack"
 version = "0.0.3"
 description = "An API mocking workhorse"
 readme = "README.md"
-license = { file = "LICENSE" }
+license = "MIT"
+license-files = ["LICEN[CS]E*"]
 keywords = ["mocking", "integration-testing", "testing", "microservices", "api"]
 requires-python = ">=3.11"
 dependencies = [
@@ -19,6 +20,10 @@ dependencies = [
     "pydantic>=2.11.3",
     "pydantic-settings>=2.9.1",
 ]
+
+[project.urls]
+Homepage = "https://github.com/adamhadani/mockstack"
+Issues = "https://github.com/adamhadani/mockstack/issues"
 
 [dependency-groups]
 dev = [
