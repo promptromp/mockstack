@@ -5,7 +5,7 @@ from opentelemetry import trace
 from opentelemetry.propagate import extract
 
 from mockstack.config import Settings
-from mockstack.opentelemetry import span_name_for
+from mockstack.telemetry import span_name_for
 
 
 def catchall_router_provider(app: FastAPI, settings: Settings) -> None:

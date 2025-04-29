@@ -477,8 +477,8 @@ wheels = [
 
 [[package]]
 name = "mockstack"
-version = "0.2.0"
-source = { virtual = "." }
+version = "0.0.5"
+source = { editable = "." }
 dependencies = [
     { name = "colorama" },
     { name = "fastapi", extra = ["standard"] },
@@ -487,6 +487,8 @@ dependencies = [
     { name = "opentelemetry-instrumentation-fastapi" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
+    { name = "typer" },
+    { name = "uvicorn" },
 ]
 
 [package.dev-dependencies]
@@ -506,6 +508,8 @@ requires-dist = [
     { name = "opentelemetry-instrumentation-fastapi", specifier = ">=0.53b1" },
     { name = "pydantic", specifier = ">=2.11.3" },
     { name = "pydantic-settings", specifier = ">=2.9.1" },
+    { name = "typer", specifier = ">=0.15.2" },
+    { name = "uvicorn", specifier = ">=0.34.2" },
 ]
 
 [package.metadata.requires-dev]
