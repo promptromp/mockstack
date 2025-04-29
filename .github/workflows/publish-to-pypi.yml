@@ -1,4 +1,4 @@
-name: Publish Python disttribution to TestPyPI
+name: Publish Python distribution to TestPyPI
 on: push
 jobs:
   build:
@@ -40,14 +40,14 @@ jobs:
       with:
         name: python-package-distributions
         path: dist/
-    - name: Publish distribution 📦 to PyPI
+    - name: Publish distribution to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1
       with:
         verbose: true
 
   github-release:
     name: >-
-      Sign the Python 🐍 distribution 📦 with Sigstore and upload them to GitHub Release
+      Sign the Python distribution with Sigstore and upload them to GitHub Release
     needs:
       - publish-to-pypi
     runs-on: ubuntu-latest
