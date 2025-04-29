@@ -29,7 +29,7 @@ or install into a persistent environment and add it to the PATH with:
 
 ## Usage
 
-Available configuration options are [here](./mockstack/config.py). Setting individual options can be done with env. variables as in the following example:
+Available configuration options are [here](https://github.com/adamhadani/mockstack/blob/main/mockstack/config.py). Setting individual options can be done with env. variables as in the following example:
 
 ```shell
     export MOCKSTACK__OPENTELEMETRY__ENABLED=true
@@ -69,7 +69,7 @@ If you are contributing to development, you will want to clone this project, and
     uv sync
     uv pip install -e .
 
-Copy the included [.env.example](.env.example) file to `.env` and fill in configuration as needed based on the given examples.
+Copy the included [.env.example](https://github.com/adamhadani/mockstack/blob/main/.env.example) file to `.env` and fill in configuration as needed based on the given examples.
 
 Run in development mode (for live-reload of changes when developing):
 
