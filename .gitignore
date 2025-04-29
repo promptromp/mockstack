@@ -74,6 +74,9 @@ instance/
 # Sphinx documentation
 docs/_build/
 
+# Do not check in README.md under docs/ - it gets copied there by build-docs CI workflow.
+docs/README.md
+
 # PyBuilder
 .pybuilder/
 target/
