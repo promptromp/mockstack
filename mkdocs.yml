@@ -1,5 +1,7 @@
 site_name: mockstack
 site_url: https://adamhadani.github.io/mockstack
+repo_name: mockstack
+repo_url: https://github.com/adamhadani/mockstack
 
 theme:
   name: material
@@ -8,17 +10,14 @@ theme:
   font:
     text: Merriweather Sans
     code: Red Hat Mono
-  features:
-    - navigation.footer
   palette:
     # Dark Mode
     - scheme: slate
       toggle:
         icon: material/weather-sunny
         name: Dark mode
-      primary: green
+      primary: blue grey
       accent: deep purple
-
     # Light Mode
     - scheme: default
       toggle:
@@ -26,7 +25,9 @@ theme:
         name: Light mode
       primary: blue
       accent: deep orange
-
+  features:
+    - content.code.copy
+    - navigation.footer
 markdown_extensions:
   - admonition
   - attr_list

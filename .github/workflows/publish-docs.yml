@@ -29,4 +29,7 @@ jobs:
           restore-keys: |
             mkdocs-material-
       - run: pip install mkdocs-material
+      - name: copy README.md to docs/
+        run: |
+          cp README.md docs/
       - run: mkdocs gh-deploy --force

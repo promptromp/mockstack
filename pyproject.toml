@@ -37,6 +37,10 @@ dev = [
     "pytest-asyncio>=0.26.0",
     "pytest-cov>=6.1.1",
 ]
+docs = [
+    "mkdocs",
+    "mkdocstrings[python]>=0.18",
+]
 
 [tool.setuptools_scm]
 # can be empty if no extra settings are needed, presence enables setuptools-scm
