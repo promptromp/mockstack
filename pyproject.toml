@@ -25,6 +25,9 @@ dependencies = [
 Homepage = "https://github.com/adamhadani/mockstack"
 Issues = "https://github.com/adamhadani/mockstack/issues"
 
+[project.scripts]
+mockstack = "main:cli"
+
 [dependency-groups]
 dev = [
     "mypy>=1.15.0",
