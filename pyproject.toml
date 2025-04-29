@@ -1,6 +1,14 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "mockstack"
 version = "0.0.3"
+description = "An API mocking workhorse"
+readme = "README.md"
+license = { file = "LICENSE" }
+keywords = ["mocking", "integration-testing", "testing", "microservices", "api"]
 requires-python = ">=3.11"
 dependencies = [
     "colorama>=0.4.6",
