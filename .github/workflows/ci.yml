@@ -43,5 +43,7 @@ jobs:
       run: |
         ruff check
         ruff format
+    - name: Run mypy
+      run: uv run mypy mockstack
     - name: Run tests
       run: uv run pytest

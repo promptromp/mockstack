@@ -19,6 +19,8 @@ dependencies = [
     "opentelemetry-instrumentation-fastapi>=0.53b1",
     "pydantic>=2.11.3",
     "pydantic-settings>=2.9.1",
+    "typer>=0.15.2",
+    "uvicorn>=0.34.2",
 ]
 
 [project.urls]
@@ -26,7 +28,7 @@ Homepage = "https://github.com/adamhadani/mockstack"
 Issues = "https://github.com/adamhadani/mockstack/issues"
 
 [project.scripts]
-mockstack = "main:cli"
+mockstack = "mockstack.main:cli"
 
 [dependency-groups]
 dev = [
