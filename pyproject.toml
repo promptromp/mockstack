@@ -4,7 +4,6 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mockstack"
-version = "0.1.0"
 description = "An API mocking workhorse"
 readme = "README.md"
 license = "MIT"
@@ -22,6 +21,7 @@ dependencies = [
     "typer>=0.15.2",
     "uvicorn>=0.34.2",
 ]
+dynamic = ["version"]
 
 [project.urls]
 Homepage = "https://github.com/adamhadani/mockstack"
@@ -37,6 +37,9 @@ dev = [
     "pytest-asyncio>=0.26.0",
     "pytest-cov>=6.1.1",
 ]
+
+[tool.setuptools_scm]
+# can be empty if no extra settings are needed, presence enables setuptools-scm
 
 [tool.mypy]
 namespace_packages = true
