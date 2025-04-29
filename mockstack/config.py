@@ -35,10 +35,10 @@ class Settings(BaseSettings):
     opentelemetry: OpenTelemetrySettings = OpenTelemetrySettings()
 
     # strategy to use for handling requests
-    strategy: Literal["filefixtures", "chaosmonkey"] = "filefixtures"
+    strategy: Literal["filefixtures", "proxyrules"] = "filefixtures"
 
     # base directory for templates used by strategies
-    templates_dir: DirectoryPath = "./templates"
+    templates_dir: DirectoryPath = "./templates"  # type: ignore[assignment]
 
     # metadata fields to inject into created resources.
     # A few template fields are available. See documentation for more details.
