@@ -477,8 +477,8 @@ wheels = [
 
 [[package]]
 name = "mockstack"
-version = "0.2.0"
-source = { virtual = "." }
+version = "0.0.5"
+source = { editable = "." }
 dependencies = [
     { name = "colorama" },
     { name = "fastapi", extra = ["standard"] },
