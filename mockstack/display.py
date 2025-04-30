@@ -2,6 +2,8 @@
 
 import logging
 
+from fastapi import FastAPI
+
 from mockstack.config import Settings
 
 
@@ -17,7 +19,7 @@ class ANSIColors:
     UNDERLINE = "\033[4m"
 
 
-def announce(settings: Settings):
+def announce(app: FastAPI, settings: Settings):
     """Log the startup message with the active settings."""
     HIGHLIGHT = ANSIColors.HEADER
     ENDC = ANSIColors.ENDC
@@ -26,9 +28,8 @@ def announce(settings: Settings):
     logger.info(
         f"{HIGHLIGHT}mockstack{ENDC} ready to roll. "
         f"Using strategy: {HIGHLIGHT}{settings.strategy}{ENDC}, "
-        f"templates_dir: {HIGHLIGHT}{settings.templates_dir}{ENDC}. "
-        f"proxyrules_rules_filename: {HIGHLIGHT}{settings.proxyrules_rules_filename}{ENDC}"
     )
+    logger.info(str(app.state.strategy))
     logger.info(
         f"OpenTelemetry enabled: {HIGHLIGHT}{settings.opentelemetry.enabled}{ENDC}, "
         f"endpoint: {HIGHLIGHT}{settings.opentelemetry.endpoint}{ENDC}, "

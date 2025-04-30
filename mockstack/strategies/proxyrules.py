@@ -14,6 +14,7 @@ from starlette.datastructures import Headers
 
 from mockstack.config import Settings
 from mockstack.constants import ProxyRulesRedirectVia
+from mockstack.display import ANSIColors
 from mockstack.strategies.base import BaseStrategy
 
 
@@ -58,6 +59,14 @@ class ProxyRulesStrategy(BaseStrategy):
         super().__init__(settings, *args, **kwargs)
         self.rules_filename = settings.proxyrules_rules_filename
         self.proxyrules_redirect_via = settings.proxyrules_redirect_via
+
+    def __str__(self) -> str:
+        HIGHLIGHT = ANSIColors.HEADER
+        ENDC = ANSIColors.ENDC
+        return (
+            f"rules_filename: {HIGHLIGHT}{self.rules_filename}{ENDC}. "
+            f"redirect_via: {HIGHLIGHT}{self.proxyrules_redirect_via}{ENDC}"
+        )
 
     @cached_property
     def rules(self) -> list[Rule]:

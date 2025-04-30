@@ -7,12 +7,15 @@ from fastapi import FastAPI
 
 from mockstack.config import OpenTelemetrySettings, Settings
 from mockstack.constants import ProxyRulesRedirectVia
+from mockstack.strategies.filefixtures import FileFixturesStrategy
 
 
 @pytest.fixture
-def app():
+def app(settings):
     """Create a FastAPI app for testing."""
-    return FastAPI()
+    app = FastAPI()
+    app.state.strategy = FileFixturesStrategy(settings)
+    return app
 
 
 @pytest.fixture

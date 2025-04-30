@@ -18,12 +18,12 @@ def test_ansicolors_constants():
     assert ANSIColors.UNDERLINE == "\033[4m"
 
 
-def test_announce(settings):
+def test_announce(app, settings):
     """Test the announce function logs the correct message."""
     with patch("mockstack.display.logging") as mock_logging:
         mock_logger = mock_logging.getLogger.return_value
 
-        announce(settings)
+        announce(app, settings)
 
         mock_logging.getLogger.assert_called_once_with("uvicorn")
         mock_logger.info.assert_called()
