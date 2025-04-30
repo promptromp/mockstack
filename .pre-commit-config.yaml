@@ -1,5 +1,14 @@
 fail_fast: true
 repos:
+-   repo: local
+    hooks:
+    # do not allow commits with files containing certain blacklisted strings
+    -   id: dontship
+        name: detect blacklisted strings
+        exclude: ^.pre-commit-config.yaml
+        entry: codeartifact
+        language: pygrep
+        types: [text]
 - repo: https://github.com/pre-commit/pre-commit-hooks
   rev: v5.0.0
   hooks:
@@ -34,12 +43,3 @@ repos:
     language: system
     types: [python]
     pass_filenames: false
--   repo: local
-    hooks:
-    # do not allow commits with files containing certain blacklisted strings
-    -   id: dontship
-        name: detect blacklisted strings
-        exclude: ^.pre-commit-config.yaml
-        entry: codeartifact
-        language: pygrep
-        types: [text]
