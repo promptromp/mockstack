@@ -82,7 +82,11 @@ class FileFixturesStrategy(BaseStrategy):
     def __str__(self) -> str:
         HIGHLIGHT = ANSIColors.HEADER
         ENDC = ANSIColors.ENDC
-        return f"templates_dir: {HIGHLIGHT}{self.templates_dir}{ENDC}. "
+
+        return (
+            f"{HIGHLIGHT}[filefixtures]{ENDC} "
+            f"templates_dir: {HIGHLIGHT}{self.templates_dir}{ENDC}. "
+        )
 
     async def apply(self, request: Request) -> Response:
         match request.method:

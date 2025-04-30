@@ -63,7 +63,9 @@ class ProxyRulesStrategy(BaseStrategy):
     def __str__(self) -> str:
         HIGHLIGHT = ANSIColors.HEADER
         ENDC = ANSIColors.ENDC
+
         return (
+            f"{HIGHLIGHT}[proxyrules]{ENDC} "
             f"rules_filename: {HIGHLIGHT}{self.rules_filename}{ENDC}. "
             f"redirect_via: {HIGHLIGHT}{self.proxyrules_redirect_via}{ENDC}"
         )
@@ -118,10 +120,14 @@ class ProxyRulesStrategy(BaseStrategy):
     async def reverse_proxy(self, request: Request, url: str) -> Response:
         """Reverse proxy the request to the target URL."""
         async with httpx.AsyncClient() as client:
+            method = request.method
+            request_content = await request.body()
             req = client.build_request(
-                request.method,
+                method,
                 url,
+                content=request_content,
                 headers=self.reverse_proxy_headers(request.headers, url=url),
+                params=request.url.query,
             )
 
             resp = await client.send(req, stream=False)
