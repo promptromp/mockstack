@@ -6,7 +6,7 @@ repo_url: https://github.com/adamhadani/mockstack
 theme:
   name: material
   logo: assets/logo.png
-  # favicon: assets/favicon.ico
+  favicon: assets/favicon.ico
   font:
     text: Merriweather Sans
     code: Red Hat Mono
