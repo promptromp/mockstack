@@ -45,7 +45,8 @@ class Settings(BaseSettings):
     # rules filename for proxyrules strategy
     proxyrules_rules_filename: FilePath | None = None  # type: ignore[assignment]
 
-    # whether to use HTTP 307 (temporary) redirects for proxyrules strategy
+    # controls behavior of proxying. Whether to use HTTP status code redirects
+    # or reverse proxy the request to the target URL "silently".
     proxyrules_redirect_via: ProxyRulesRedirectVia = ProxyRulesRedirectVia.REVERSE_PROXY
 
     # metadata fields to inject into created resources.
