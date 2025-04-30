@@ -41,11 +41,18 @@ def iter_possible_template_arguments(
     """
     path = request.url.path
 
-    name_segments, context = parse_template_name_segments_and_context(
+    name_segments, identifiers = parse_template_name_segments_and_identifiers(
         path,
         default_identifier_key=default_identifier_key,
     )
     media_type = request.headers.get("Content-Type", default_media_type)
+
+    # hydrate template context with additional request details such as query params.
+    context = dict(
+        query=dict(request.query_params),
+        headers=dict(request.headers),
+        **identifiers,
+    )
 
     template_name_kwargs = dict(
         template_file_separator=template_file_separator,
@@ -53,7 +60,7 @@ def iter_possible_template_arguments(
         default_template_name=default_template_name,
     )
     for name in iter_possible_template_filenames(
-        name_segments, context, **template_name_kwargs
+        name_segments, identifiers, **template_name_kwargs
     ):
         yield dict(
             name=name,
@@ -62,29 +69,29 @@ def iter_possible_template_arguments(
         )
 
 
-def parse_template_name_segments_and_context(
+def parse_template_name_segments_and_identifiers(
     path: str, *, default_identifier_key: str
 ) -> tuple[list[str], dict[str, str]]:
     """Infer the template name segments and the template context for a given URI path."""
     name_segments: list[str] = []
-    context: OrderedDict[str, str] = OrderedDict()
+    identifiers: OrderedDict[str, str] = OrderedDict()
     for segment in (s for s in path.split("/") if s):
         if looks_like_id(segment):
             if name_segments:
                 # this is a nested identifier, use the last name segment as the key
-                context[name_segments[-1]] = segment
+                identifiers[name_segments[-1]] = segment
             else:
                 # this identifier is unscoped, use our default identifier key
-                context[default_identifier_key] = segment
+                identifiers[default_identifier_key] = segment
         else:
             name_segments.append(segment)
 
-    return name_segments, context
+    return name_segments, identifiers
 
 
 def iter_possible_template_filenames(
     name_segments: list[str],
-    context: dict[str, str],
+    identifiers: dict[str, str],
     *,
     template_file_separator: str,
     template_file_extension: str,
@@ -103,8 +110,8 @@ def iter_possible_template_filenames(
 
     """
     if name_segments:
-        if context:
-            for prefix in prefixes(context.values(), reverse=True):
+        if identifiers:
+            for prefix in prefixes(identifiers.values(), reverse=True):
                 yield (
                     f"{template_file_separator.join(name_segments)}.{'.'.join(prefix)}{template_file_extension}"
                 )
