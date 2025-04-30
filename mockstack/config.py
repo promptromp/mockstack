@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     # base directory for templates used by strategies
     templates_dir: DirectoryPath = "./templates"  # type: ignore[assignment]
 
+    proxy_rules: list[dict[str, Any]] = []
     # metadata fields to inject into created resources.
     # A few template fields are available. See documentation for more details.
     created_resource_metadata: dict[str, Any] = {

@@ -67,7 +67,7 @@ class FileFixturesStrategy(BaseStrategy):
     logger = logging.getLogger("FileFixturesStrategy")
 
     def __init__(self, settings: Settings, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        super().__init__(settings, *args, **kwargs)
         self.templates_dir = Path(settings.templates_dir)
         self.created_resource_metadata = settings.created_resource_metadata
         self.missing_resource_fields = settings.missing_resource_fields

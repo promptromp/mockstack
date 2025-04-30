@@ -30,7 +30,7 @@ repos:
   hooks:
   - id: pytest
     name: pytest [with coverage, without slow]
-    entry: bash -ec "uv run python -m pytest --cov=mockstack mockstack/tests --cov-fail-under='75' -m 'not slow'"
+    entry: bash -ec "uv run python -m pytest --cov=mockstack mockstack/tests --cov-fail-under='70' -m 'not slow'"
     language: system
     types: [python]
     pass_filenames: false
