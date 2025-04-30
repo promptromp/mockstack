@@ -89,16 +89,22 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_strategy_parameters(self) -> Self:
+        """Validate the strategy parameters."""
+
         # TODO: make this validation dynamic based on the strategy classes themselves.
+
         if self.strategy == "proxyrules":
             if self.proxyrules_rules_filename is None:
                 raise ValueError(
                     "proxyrules_rules_filename is required when strategy is proxyrules"
                 )
+
+        elif self.strategy == "filefixtures":
             if self.templates_dir is None:
                 raise ValueError(
                     "templates_dir is required when strategy is proxyrules"
                 )
+
         return self
 
 
