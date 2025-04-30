@@ -1,4 +1,4 @@
-![mockstack logo](https://github.com/adamhadani/mockstack/raw/main/docs/assets/logo.png)
+![mockstack logo](https://github.com/adamhadani/mockstack/raw/main/docs/assets/logo-wide-sm.png)
 
 --------------------------------------------------------------------------------
 
