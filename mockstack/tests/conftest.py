@@ -36,3 +36,14 @@ def settings(templates_dir, proxyrules_rules_filename):
         proxyrules_redirect_via=ProxyRulesRedirectVia.HTTP_TEMPORARY_REDIRECT,
         opentelemetry=OpenTelemetrySettings(enabled=False),
     )
+
+
+@pytest.fixture
+def settings_reverse_proxy(templates_dir, proxyrules_rules_filename):
+    """Return a Settings object for testing with reverse proxy enabled."""
+    return Settings(
+        templates_dir=templates_dir,
+        proxyrules_rules_filename=proxyrules_rules_filename,
+        proxyrules_redirect_via=ProxyRulesRedirectVia.REVERSE_PROXY,
+        opentelemetry=OpenTelemetrySettings(enabled=False),
+    )
