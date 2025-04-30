@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Any, Literal
 
-from pydantic import DirectoryPath
+from pydantic import DirectoryPath, FilePath
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -40,7 +40,9 @@ class Settings(BaseSettings):
     # base directory for templates used by strategies
     templates_dir: DirectoryPath = "./templates"  # type: ignore[assignment]
 
-    proxy_rules: list[dict[str, Any]] = []
+    # rules filename for proxyrules strategy
+    proxyrules_rules_filename: FilePath = "proxyrules.yml"
+
     # metadata fields to inject into created resources.
     # A few template fields are available. See documentation for more details.
     created_resource_metadata: dict[str, Any] = {

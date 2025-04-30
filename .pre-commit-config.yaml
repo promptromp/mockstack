@@ -26,6 +26,7 @@ repos:
   rev: v1.15.0
   hooks:
     - id: mypy
+      additional_dependencies: [types-pyyaml>=6.0.12]
 - repo: local
   hooks:
   - id: pytest
