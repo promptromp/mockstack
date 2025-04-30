@@ -1,4 +1,4 @@
-![mockstack logo](https://github.com/adamhadani/mockstack/raw/feature/ah-strategy-proxyrules/docs/assets/mockstack.png)
+![mockstack logo](https://github.com/adamhadani/mockstack/raw/main/docs/assets/mockstack.png)
 
 --------------------------------------------------------------------------------
 
