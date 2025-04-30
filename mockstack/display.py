@@ -27,6 +27,7 @@ def announce(settings: Settings):
         f"{HIGHLIGHT}mockstack{ENDC} ready to roll. "
         f"Using strategy: {HIGHLIGHT}{settings.strategy}{ENDC}, "
         f"templates_dir: {HIGHLIGHT}{settings.templates_dir}{ENDC}. "
+        f"proxyrules_rules_filename: {HIGHLIGHT}{settings.proxyrules_rules_filename}{ENDC}"
     )
     logger.info(
         f"OpenTelemetry enabled: {HIGHLIGHT}{settings.opentelemetry.enabled}{ENDC}, "
