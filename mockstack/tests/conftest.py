@@ -6,12 +6,16 @@ import pytest
 from fastapi import FastAPI
 
 from mockstack.config import OpenTelemetrySettings, Settings
+from mockstack.constants import ProxyRulesRedirectVia
+from mockstack.strategies.filefixtures import FileFixturesStrategy
 
 
 @pytest.fixture
-def app():
+def app(settings):
     """Create a FastAPI app for testing."""
-    return FastAPI()
+    app = FastAPI()
+    app.state.strategy = FileFixturesStrategy(settings)
+    return app
 
 
 @pytest.fixture
@@ -32,5 +36,17 @@ def settings(templates_dir, proxyrules_rules_filename):
     return Settings(
         templates_dir=templates_dir,
         proxyrules_rules_filename=proxyrules_rules_filename,
+        proxyrules_redirect_via=ProxyRulesRedirectVia.HTTP_TEMPORARY_REDIRECT,
+        opentelemetry=OpenTelemetrySettings(enabled=False),
+    )
+
+
+@pytest.fixture
+def settings_reverse_proxy(templates_dir, proxyrules_rules_filename):
+    """Return a Settings object for testing with reverse proxy enabled."""
+    return Settings(
+        templates_dir=templates_dir,
+        proxyrules_rules_filename=proxyrules_rules_filename,
+        proxyrules_redirect_via=ProxyRulesRedirectVia.REVERSE_PROXY,
         opentelemetry=OpenTelemetrySettings(enabled=False),
     )

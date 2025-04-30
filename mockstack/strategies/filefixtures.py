@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 from jinja2 import Environment, FileSystemLoader
 
 from mockstack.config import Settings
+from mockstack.display import ANSIColors
 from mockstack.strategies.base import BaseStrategy
 from mockstack.templating import (
     iter_possible_template_arguments,
@@ -77,6 +78,15 @@ class FileFixturesStrategy(BaseStrategy):
         self.missing_resource_fields = settings.missing_resource_fields
 
         self.env = Environment(loader=FileSystemLoader(self.templates_dir))
+
+    def __str__(self) -> str:
+        HIGHLIGHT = ANSIColors.HEADER
+        ENDC = ANSIColors.ENDC
+
+        return (
+            f"{HIGHLIGHT}[filefixtures]{ENDC} "
+            f"templates_dir: {HIGHLIGHT}{self.templates_dir}{ENDC}. "
+        )
 
     async def apply(self, request: Request) -> Response:
         match request.method:

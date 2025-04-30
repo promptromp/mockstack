@@ -2,13 +2,19 @@
 
 import logging
 import re
+from functools import cached_property
 from typing import Self
+from urllib.parse import urlparse
 
+import httpx
 import yaml
 from fastapi import Request, Response, status
 from fastapi.responses import RedirectResponse
+from starlette.datastructures import Headers
 
 from mockstack.config import Settings
+from mockstack.constants import ProxyRulesRedirectVia
+from mockstack.display import ANSIColors
 from mockstack.strategies.base import BaseStrategy
 
 
@@ -36,10 +42,9 @@ class Rule:
 
         return re.match(self.pattern, request.url.path) is not None
 
-    def apply(self, request: Request) -> Response:
+    def apply(self, request: Request) -> str:
         """Apply the rule to the request."""
-        url = self._url_for(request.url.path)
-        return RedirectResponse(url=url)
+        return self._url_for(request.url.path)
 
     def _url_for(self, path: str) -> str:
         return re.sub(self.pattern, self.replacement, path)
@@ -53,12 +58,21 @@ class ProxyRulesStrategy(BaseStrategy):
     def __init__(self, settings: Settings, *args, **kwargs):
         super().__init__(settings, *args, **kwargs)
         self.rules_filename = settings.proxyrules_rules_filename
+        self.proxyrules_redirect_via = settings.proxyrules_redirect_via
 
-    @property
+    def __str__(self) -> str:
+        HIGHLIGHT = ANSIColors.HEADER
+        ENDC = ANSIColors.ENDC
+
+        return (
+            f"{HIGHLIGHT}[proxyrules]{ENDC} "
+            f"rules_filename: {HIGHLIGHT}{self.rules_filename}{ENDC}. "
+            f"redirect_via: {HIGHLIGHT}{self.proxyrules_redirect_via}{ENDC}"
+        )
+
+    @cached_property
     def rules(self) -> list[Rule]:
-        if not hasattr(self, "_rules"):
-            self._rules = self.load_rules()
-        return self._rules
+        return self.load_rules()
 
     def load_rules(self) -> list[Rule]:
         if self.rules_filename is None:
@@ -80,4 +94,57 @@ class ProxyRulesStrategy(BaseStrategy):
             self.logger.warning(f"No rule found for request: {request.url.path=}")
             return Response(status_code=status.HTTP_404_NOT_FOUND)
 
-        return rule.apply(request)
+        url = rule.apply(request)
+        self.logger.info(f"Redirecting to: {url}")
+
+        match self.proxyrules_redirect_via:
+            case ProxyRulesRedirectVia.HTTP_TEMPORARY_REDIRECT:
+                return RedirectResponse(
+                    url=url, status_code=status.HTTP_307_TEMPORARY_REDIRECT
+                )
+
+            case ProxyRulesRedirectVia.HTTP_PERMANENT_REDIRECT:
+                return RedirectResponse(
+                    url=url, status_code=status.HTTP_301_MOVED_PERMANENTLY
+                )
+
+            case ProxyRulesRedirectVia.REVERSE_PROXY:
+                response = await self.reverse_proxy(request, url)
+                return response
+
+            case _:
+                raise ValueError(
+                    f"Invalid redirect via: {self.proxyrules_redirect_via}"
+                )
+
+    async def reverse_proxy(self, request: Request, url: str) -> Response:
+        """Reverse proxy the request to the target URL."""
+        async with httpx.AsyncClient() as client:
+            method = request.method
+            request_content = await request.body()
+            req = client.build_request(
+                method,
+                url,
+                content=request_content,
+                headers=self.reverse_proxy_headers(request.headers, url=url),
+                params=request.url.query,
+            )
+
+            resp = await client.send(req, stream=False)
+            content = resp.read()
+
+            return Response(
+                content=content,
+                status_code=resp.status_code,
+                headers=resp.headers,
+                media_type=resp.headers.get("content-type"),
+            )
+
+    def reverse_proxy_headers(self, headers: Headers, url: str) -> Headers:
+        """Mutate the request headers for the reverse proxy mode."""
+        _headers = headers.mutablecopy()
+
+        # When reverse proxying, we must alter the Host header to the target URL.
+        _headers["host"] = urlparse(url).netloc
+
+        return _headers

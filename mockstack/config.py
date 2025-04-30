@@ -4,6 +4,8 @@ from typing import Any, Literal, Self
 from pydantic import DirectoryPath, FilePath, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from mockstack.constants import ProxyRulesRedirectVia
+
 
 class OpenTelemetrySettings(BaseSettings):
     """Settings for OpenTelemetry."""
@@ -42,6 +44,10 @@ class Settings(BaseSettings):
 
     # rules filename for proxyrules strategy
     proxyrules_rules_filename: FilePath | None = None  # type: ignore[assignment]
+
+    # controls behavior of proxying. Whether to use HTTP status code redirects
+    # or reverse proxy the request to the target URL "silently".
+    proxyrules_redirect_via: ProxyRulesRedirectVia = ProxyRulesRedirectVia.REVERSE_PROXY
 
     # metadata fields to inject into created resources.
     # A few template fields are available. See documentation for more details.
