@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     templates_dir: DirectoryPath = "./templates"  # type: ignore[assignment]
 
     # rules filename for proxyrules strategy
-    proxyrules_rules_filename: FilePath = "proxyrules.yml"
+    proxyrules_rules_filename: FilePath = "proxyrules.yml"  # type: ignore[assignment]
 
     # metadata fields to inject into created resources.
     # A few template fields are available. See documentation for more details.
