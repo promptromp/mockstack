@@ -108,9 +108,9 @@ def test_rule_apply(pattern, replacement, path, expected_url):
             "headers": [],
         }
     )
-    response = rule.apply(request)
-    assert isinstance(response, RedirectResponse)
-    assert response.headers["location"] == expected_url
+    url = rule.apply(request)
+    assert isinstance(url, str)
+    assert url == expected_url
 
 
 def test_proxy_rules_strategy_load_rules(settings):

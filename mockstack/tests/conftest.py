@@ -6,6 +6,7 @@ import pytest
 from fastapi import FastAPI
 
 from mockstack.config import OpenTelemetrySettings, Settings
+from mockstack.constants import ProxyRulesRedirectVia
 
 
 @pytest.fixture
@@ -32,5 +33,6 @@ def settings(templates_dir, proxyrules_rules_filename):
     return Settings(
         templates_dir=templates_dir,
         proxyrules_rules_filename=proxyrules_rules_filename,
+        proxyrules_redirect_via=ProxyRulesRedirectVia.HTTP_TEMPORARY_REDIRECT,
         opentelemetry=OpenTelemetrySettings(enabled=False),
     )
