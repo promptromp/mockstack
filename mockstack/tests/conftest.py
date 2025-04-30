@@ -21,9 +21,16 @@ def templates_dir():
 
 
 @pytest.fixture
-def settings(templates_dir):
+def proxyrules_rules_filename():
+    """Return the path to the test proxyrules rules file."""
+    return os.path.join(os.path.dirname(__file__), "fixtures", "proxyrules.yml")
+
+
+@pytest.fixture
+def settings(templates_dir, proxyrules_rules_filename):
     """Return a Settings object for testing."""
     return Settings(
         templates_dir=templates_dir,
+        proxyrules_rules_filename=proxyrules_rules_filename,
         opentelemetry=OpenTelemetrySettings(enabled=False),
     )

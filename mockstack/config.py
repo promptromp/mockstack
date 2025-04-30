@@ -1,7 +1,7 @@
 from functools import lru_cache
-from typing import Any, Literal
+from typing import Any, Literal, Self
 
-from pydantic import DirectoryPath
+from pydantic import DirectoryPath, FilePath, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -38,7 +38,10 @@ class Settings(BaseSettings):
     strategy: Literal["filefixtures", "proxyrules"] = "filefixtures"
 
     # base directory for templates used by strategies
-    templates_dir: DirectoryPath = "./templates"  # type: ignore[assignment]
+    templates_dir: DirectoryPath | None = None  # type: ignore[assignment]
+
+    # rules filename for proxyrules strategy
+    proxyrules_rules_filename: FilePath | None = None  # type: ignore[assignment]
 
     # metadata fields to inject into created resources.
     # A few template fields are available. See documentation for more details.
@@ -83,6 +86,26 @@ class Settings(BaseSettings):
             },
         },
     }
+
+    @model_validator(mode="after")
+    def validate_strategy_parameters(self) -> Self:
+        """Validate the strategy parameters."""
+
+        # TODO: make this validation dynamic based on the strategy classes themselves.
+
+        if self.strategy == "proxyrules":
+            if self.proxyrules_rules_filename is None:
+                raise ValueError(
+                    "proxyrules_rules_filename is required when strategy is proxyrules"
+                )
+
+        elif self.strategy == "filefixtures":
+            if self.templates_dir is None:
+                raise ValueError(
+                    "templates_dir is required when strategy is proxyrules"
+                )
+
+        return self
 
 
 @lru_cache

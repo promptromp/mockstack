@@ -44,6 +44,8 @@ jobs:
         ruff check
         ruff format
     - name: Run mypy
-      run: uv run mypy mockstack
+      run: |
+        uv pip install types-pyyaml
+        uv run mypy mockstack
     - name: Run tests
       run: uv run pytest

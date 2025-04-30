@@ -1,0 +1,8 @@
+rules:
+  - pattern: "/api/v1/projects/(\\d+)"
+    replacement: "/projects/\\1"
+    method: "GET"
+  - pattern: "/api/v1/users/([^/]+)"
+    replacement: "/users/\\1"
+  - pattern: "/api/v1/items"
+    replacement: "/items"
