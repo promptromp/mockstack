@@ -61,6 +61,9 @@ class ProxyRulesStrategy(BaseStrategy):
         return self._rules
 
     def load_rules(self) -> list[Rule]:
+        if self.rules_filename is None:
+            raise ValueError("rules_filename is not set")
+
         with open(self.rules_filename, "r") as file:
             data = yaml.safe_load(file)
             return [Rule.from_dict(rule) for rule in data["rules"]]
