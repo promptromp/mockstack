@@ -35,6 +35,7 @@ or install into a persistent environment and add it to the PATH with:
 Available configuration options are [here](https://github.com/adamhadani/mockstack/blob/main/mockstack/config.py). Setting individual options can be done with env. variables as in the following example:
 
 ```shell
+    export MOCKSTACK__TEMPLATES_DIR=~/mockstack-templates/
     export MOCKSTACK__OPENTELEMETRY__ENABLED=true
     export MOCKSTACK__OPENTELEMETRY__CAPTURE_RESPONSE_BODY=true
     uv run
