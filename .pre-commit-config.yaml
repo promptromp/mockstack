@@ -38,7 +38,7 @@ repos:
     hooks:
     # do not allow commits with files containing certain blacklisted strings
     -   id: dontship
-        name: DONTSHIP check
+        name: detect blacklisted strings
         exclude: ^.pre-commit-config.yaml
         entry: codeartifact
         language: pygrep
