@@ -1,7 +1,7 @@
 """FastAPI application lifecycle management."""
 
 from contextlib import asynccontextmanager
-from logging import config
+from logging import DEBUG, config
 from typing import Callable
 
 from fastapi import FastAPI
@@ -21,7 +21,12 @@ def lifespan_provider(
 
         This is the context manager that FastAPI will use to manage the lifecycle of the application.
         """
+        if settings.debug:
+            # Enable verbose debug logging if debug mode is set.
+            settings.logging["handlers"]["console"]["level"] = DEBUG
+
         config.dictConfig(settings.logging)
+
         announce(app, settings)
 
         yield

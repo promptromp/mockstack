@@ -104,7 +104,7 @@ class Settings(BaseSettings):
         "handlers": {
             "console": {
                 "class": "logging.StreamHandler",
-                "level": "DEBUG",
+                "level": "INFO",
                 "formatter": "standard",
                 "stream": "ext://sys.stdout",
             },
@@ -112,23 +112,23 @@ class Settings(BaseSettings):
         "loggers": {
             "uvicorn": {
                 "handlers": ["console"],
-                "level": "INFO",
+                "level": "DEBUG",
                 "propagate": False,
             },
             "FileFixturesStrategy": {
                 "handlers": ["console"],
-                "level": "INFO",
+                "level": "DEBUG",
                 "propagate": False,
             },
             "ProxyRulesStrategy": {
                 "handlers": ["console"],
-                "level": "INFO",
+                "level": "DEBUG",
                 "propagate": False,
             },
         },
         "root": {
             "handlers": ["console"],
-            "level": "INFO",
+            "level": "DEBUG",
             "propagate": False,
         },
     }

@@ -13,7 +13,7 @@ from mockstack.telemetry import opentelemetry_provider
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
-    """Create the FastAPI app."""
+    """Create the fastapi app and bootstrap all dependencies."""
     settings = settings or settings_provider()
 
     app = FastAPI(lifespan=lifespan_provider(settings))
@@ -39,7 +39,7 @@ def run():
 
     app = create_app(settings=settings)
 
-    uvicorn.run(app, host=settings.host, port=settings.port, reload=settings.debug)
+    uvicorn.run(app, host=settings.host, port=settings.port)
 
 
 def version():

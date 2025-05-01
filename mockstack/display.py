@@ -27,7 +27,8 @@ def announce(app: FastAPI, settings: Settings):
     logger = logging.getLogger("uvicorn")
     logger.info(
         f"{HIGHLIGHT}mockstack{ENDC} ready to roll. "
-        f"Using strategy: {HIGHLIGHT}{settings.strategy}{ENDC}, "
+        f"debug: {HIGHLIGHT}{settings.debug}{ENDC}. "
+        f"strategy: {HIGHLIGHT}{settings.strategy}{ENDC}. "
     )
     logger.info(str(app.state.strategy))
     logger.info(
