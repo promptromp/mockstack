@@ -129,6 +129,7 @@ class FileFixturesStrategy(BaseStrategy, CreateMixin):
                 continue
 
             self.logger.debug("Found template filename: %s", filename)
+            self.update_opentelemetry(request, template_args)
             template = self.env.get_template(template_args["name"])
 
             return Response(
@@ -149,3 +150,11 @@ class FileFixturesStrategy(BaseStrategy, CreateMixin):
             status_code=status.HTTP_404_NOT_FOUND,
         )
         """
+
+    def update_opentelemetry(self, request: Request, template_args: dict) -> None:
+        """Update the opentelemetry span with the file fixtures details."""
+        span = request.state.span
+
+        span.set_attribute(
+            "mockstack.filefixtures.template_name", template_args["name"]
+        )

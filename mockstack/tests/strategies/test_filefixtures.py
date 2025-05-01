@@ -18,7 +18,7 @@ def test_filefixtures_strategy_init(settings):
 
 
 @pytest.mark.asyncio
-async def test_filefixtures_strategy_apply(settings):
+async def test_filefixtures_strategy_apply(settings, span):
     """Test the FileFixturesStrategy apply method."""
     strategy = FileFixturesStrategy(settings)
     request = Request(
@@ -30,6 +30,7 @@ async def test_filefixtures_strategy_apply(settings):
             "headers": [],
         }
     )
+    request.state.span = span
 
     with pytest.raises(HTTPException) as exc_info:
         await strategy.apply(request)
@@ -38,7 +39,7 @@ async def test_filefixtures_strategy_apply(settings):
 
 
 @pytest.mark.asyncio
-async def test_file_fixtures_strategy_apply_success(settings):
+async def test_file_fixtures_strategy_apply_success(settings, span):
     """Test the FileFixturesStrategy apply method when template exists."""
     # Setup
     strategy = FileFixturesStrategy(settings)
@@ -61,6 +62,7 @@ async def test_file_fixtures_strategy_apply_success(settings):
                 "headers": [],
             }
         )
+        request.state.span = span
 
         # Execute
         response = await strategy.apply(request)
@@ -72,7 +74,7 @@ async def test_file_fixtures_strategy_apply_success(settings):
 
 
 @pytest.mark.asyncio
-async def test_file_fixtures_strategy_apply_template_not_found(settings):
+async def test_file_fixtures_strategy_apply_template_not_found(settings, span):
     """Test the FileFixturesStrategy apply method when template doesn't exist."""
     # Setup
     strategy = FileFixturesStrategy(settings)
@@ -88,6 +90,7 @@ async def test_file_fixtures_strategy_apply_template_not_found(settings):
                 "headers": [],
             }
         )
+        request.state.span = span
 
         # Execute and Assert
         with pytest.raises(HTTPException) as exc_info:
