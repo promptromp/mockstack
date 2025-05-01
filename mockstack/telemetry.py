@@ -27,7 +27,8 @@ def with_request_attributes(
     span.set_attribute("http.method", request.method)
     span.set_attribute("http.url", str(request.url))
     span.set_attribute("http.scheme", request.url.scheme)
-    span.set_attribute("http.host", request.url.hostname)
+    if request.url.hostname:
+        span.set_attribute("http.host", request.url.hostname)
     span.set_attribute("http.target", request.url.path)
     if request.url.port:
         span.set_attribute("http.server_port", request.url.port)
@@ -75,7 +76,7 @@ def with_response_attributes(
 
 async def with_response_body(
     response: StreamingResponse, span: Span
-) -> Tuple[StreamingResponse, Span]:
+) -> Tuple[Response, Span]:
     """Add the response body to the span."""
     body = await extract_body(response)
 
@@ -85,14 +86,14 @@ async def with_response_body(
 
     # recreate response with the same body since when consuming it to log it above
     # we effectively "deplete" the iterator.
-    response = Response(
+    _response = Response(
         content=body,
         status_code=response.status_code,
         headers=dict(response.headers),
         media_type=response.media_type,
     )
 
-    return response, span
+    return _response, span
 
 
 async def extract_body(response: StreamingResponse) -> str:
