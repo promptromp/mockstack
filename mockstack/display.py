@@ -7,32 +7,21 @@ from fastapi import FastAPI
 from mockstack.config import Settings
 
 
-class ANSIColors:
-    HEADER = "\033[95m"
-    OKBLUE = "\033[94m"
-    OKCYAN = "\033[96m"
-    OKGREEN = "\033[92m"
-    WARNING = "\033[93m"
-    FAIL = "\033[91m"
-    ENDC = "\033[0m"
-    BOLD = "\033[1m"
-    UNDERLINE = "\033[4m"
-
-
 def announce(app: FastAPI, settings: Settings):
     """Log the startup message with the active settings."""
-    HIGHLIGHT = ANSIColors.HEADER
-    ENDC = ANSIColors.ENDC
-
     logger = logging.getLogger("uvicorn")
+    extra = {"markup": True}
+
     logger.info(
-        f"{HIGHLIGHT}mockstack{ENDC} ready to roll. "
-        f"debug: {HIGHLIGHT}{settings.debug}{ENDC}. "
-        f"strategy: {HIGHLIGHT}{settings.strategy}{ENDC}. "
+        f"[bold medium_purple]mockstack[/bold medium_purple] ready to roll. "
+        f"debug: [medium_purple]{settings.debug}[/medium_purple]. "
+        f"strategy: [medium_purple]{settings.strategy}[/medium_purple]. ",
+        extra=extra,
     )
-    logger.info(str(app.state.strategy))
+    logger.info(str(app.state.strategy), extra=extra)
     logger.info(
-        f"OpenTelemetry enabled: {HIGHLIGHT}{settings.opentelemetry.enabled}{ENDC}, "
-        f"endpoint: {HIGHLIGHT}{settings.opentelemetry.endpoint}{ENDC}, "
-        f"capture_response_body: {HIGHLIGHT}{settings.opentelemetry.capture_response_body}{ENDC}"
+        f"OpenTelemetry enabled: [medium_purple]{settings.opentelemetry.enabled}[/medium_purple], "
+        f"endpoint: [medium_purple]{settings.opentelemetry.endpoint}[/medium_purple], "
+        f"capture_response_body: [medium_purple]{settings.opentelemetry.capture_response_body}[/medium_purple]",
+        extra=extra,
     )

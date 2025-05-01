@@ -15,7 +15,7 @@ from starlette.datastructures import Headers
 
 from mockstack.config import Settings
 from mockstack.constants import ProxyRulesRedirectVia
-from mockstack.display import ANSIColors
+from mockstack.intent import looks_like_a_create
 from mockstack.strategies.base import BaseStrategy
 from mockstack.strategies.create_mixin import CreateMixin
 
@@ -69,14 +69,11 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         self.env = Environment()
 
     def __str__(self) -> str:
-        HIGHLIGHT = ANSIColors.HEADER
-        ENDC = ANSIColors.ENDC
-
         return (
-            f"{HIGHLIGHT}[proxyrules]{ENDC} "
-            f"rules_filename: {HIGHLIGHT}{self.rules_filename}{ENDC}. "
-            f"redirect_via: {HIGHLIGHT}{self.proxyrules_redirect_via}{ENDC}. "
-            f"simulate_create_on_missing: {HIGHLIGHT}{self.proxyrules_simulate_create_on_missing}{ENDC}"
+            f"[medium_purple]proxyrules[/medium_purple] "
+            f"rules_filename: [medium_purple]{self.rules_filename}[/medium_purple]. "
+            f"redirect_via: [medium_purple]{self.proxyrules_redirect_via}[/medium_purple]. "
+            f"simulate_create_on_missing: [medium_purple]{self.proxyrules_simulate_create_on_missing}[/medium_purple]"
         )
 
     @cached_property
@@ -103,9 +100,12 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             self.logger.warning(
                 f"No rule found for request: {request.method} {request.url.path}"
             )
-            if self.proxyrules_simulate_create_on_missing:
+
+            if self.proxyrules_simulate_create_on_missing and looks_like_a_create(
+                request
+            ):
                 self.logger.info(
-                    "Simulating resource creation for missing rule for {request.method} {request.url.path}"
+                    f"Simulating resource creation for missing rule for {request.method} {request.url.path}"
                 )
                 return await self._create(
                     request,
@@ -113,6 +113,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
                     created_resource_metadata=self.created_resource_metadata,
                 )
             else:
+                # no rule found and we are not simulating resource creation
                 return Response(status_code=status.HTTP_404_NOT_FOUND)
 
         url = rule.apply(request)
@@ -141,13 +142,13 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
     async def reverse_proxy(self, request: Request, url: str) -> Response:
         """Reverse proxy the request to the target URL."""
         async with httpx.AsyncClient() as client:
-            method = request.method
             request_content = await request.body()
+            request_headers = self.reverse_proxy_headers(request.headers, url=url)
             req = client.build_request(
-                method,
+                request.method,
                 url,
                 content=request_content,
-                headers=self.reverse_proxy_headers(request.headers, url=url),
+                headers=request_headers,
                 params=request.url.query,
             )
 
