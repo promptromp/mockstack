@@ -68,6 +68,9 @@ class Settings(BaseSettings):
     # or reverse proxy the request to the target URL "silently".
     proxyrules_redirect_via: ProxyRulesRedirectVia = ProxyRulesRedirectVia.REVERSE_PROXY
 
+    # Default timeout for reverse proxy requests. given in seconds. None disables timeouts.
+    proxyrules_reverse_proxy_timeout: float | None = 10.0
+
     # controls behavior of proxying. Whether to simulate creation of resources
     # when a POST request is made to a resource that doesn't match any rules..
     proxyrules_simulate_create_on_missing: CliImplicitFlag[bool] = False

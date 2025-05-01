@@ -60,10 +60,9 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
     def __init__(self, settings: Settings, *args, **kwargs):
         super().__init__(settings, *args, **kwargs)
         self.rules_filename = settings.proxyrules_rules_filename
-        self.proxyrules_redirect_via = settings.proxyrules_redirect_via
-        self.proxyrules_simulate_create_on_missing = (
-            settings.proxyrules_simulate_create_on_missing
-        )
+        self.redirect_via = settings.proxyrules_redirect_via
+        self.reverse_proxy_timeout = settings.proxyrules_reverse_proxy_timeout
+        self.simulate_create_on_missing = settings.proxyrules_simulate_create_on_missing
         self.created_resource_metadata = settings.created_resource_metadata
 
         self.env = Environment()
@@ -72,8 +71,8 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         return (
             f"[medium_purple]proxyrules[/medium_purple] "
             f"rules_filename: [medium_purple]{self.rules_filename}[/medium_purple]. "
-            f"redirect_via: [medium_purple]{self.proxyrules_redirect_via}[/medium_purple]. "
-            f"simulate_create_on_missing: [medium_purple]{self.proxyrules_simulate_create_on_missing}[/medium_purple]"
+            f"redirect_via: [medium_purple]{self.redirect_via}[/medium_purple]. "
+            f"simulate_create_on_missing: [medium_purple]{self.simulate_create_on_missing}[/medium_purple]"
         )
 
     @cached_property
@@ -101,9 +100,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
                 f"No rule found for request: {request.method} {request.url.path}"
             )
 
-            if self.proxyrules_simulate_create_on_missing and looks_like_a_create(
-                request
-            ):
+            if self.simulate_create_on_missing and looks_like_a_create(request):
                 self.logger.info(
                     f"Simulating resource creation for missing rule for {request.method} {request.url.path}"
                 )
@@ -119,7 +116,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         url = rule.apply(request)
         self.logger.info(f"Redirecting to: {url}")
 
-        match self.proxyrules_redirect_via:
+        match self.redirect_via:
             case ProxyRulesRedirectVia.HTTP_TEMPORARY_REDIRECT:
                 return RedirectResponse(
                     url=url, status_code=status.HTTP_307_TEMPORARY_REDIRECT
@@ -135,13 +132,11 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
                 return response
 
             case _:
-                raise ValueError(
-                    f"Invalid redirect via value: {self.proxyrules_redirect_via=}"
-                )
+                raise ValueError(f"Invalid redirect via value: {self.redirect_via=}")
 
     async def reverse_proxy(self, request: Request, url: str) -> Response:
         """Reverse proxy the request to the target URL."""
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=self.reverse_proxy_timeout) as client:
             request_content = await request.body()
             request_headers = self.reverse_proxy_headers(request.headers, url=url)
             req = client.build_request(
