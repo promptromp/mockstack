@@ -1,9 +1,9 @@
 """Application entrypoints."""
 
 from fastapi import FastAPI
-from typer import Typer
+from pydantic_settings import CliApp, CliSettingsSource
 
-from mockstack.config import settings_provider
+from mockstack.config import Settings, settings_provider
 from mockstack.lifespan import lifespan_provider
 from mockstack.middleware import middleware_provider
 from mockstack.routers.catchall import catchall_router_provider
@@ -11,12 +11,10 @@ from mockstack.routers.homepage import homepage_router_provider
 from mockstack.strategies.factory import strategy_provider
 from mockstack.telemetry import opentelemetry_provider
 
-cli = Typer()
 
-
-def create_app() -> FastAPI:
+def create_app(settings: Settings | None = None) -> FastAPI:
     """Create the FastAPI app."""
-    settings = settings_provider()
+    settings = settings or settings_provider()
 
     app = FastAPI(lifespan=lifespan_provider(settings))
 
@@ -30,23 +28,23 @@ def create_app() -> FastAPI:
     return app
 
 
-@cli.command()
-def run(host: str = "0.0.0.0", port: int = 8000):
-    """mockstack run CLI entrypoint."""
+def run():
+    """run the mockstack server."""
+    import argparse
     import uvicorn
 
-    app = create_app()
-    uvicorn.run(app, host=host, port=port)
+    parser = argparse.ArgumentParser()
+    cli_settings = CliSettingsSource(Settings, root_parser=parser)
+    settings = CliApp.run(Settings, cli_settings_source=cli_settings)
+
+    app = create_app(settings=settings)
+
+    uvicorn.run(app, host=settings.host, port=settings.port, reload=settings.debug)
 
 
-@cli.command()
 def version():
-    """mockstack version CLI entrypoint."""
+    """display mockstack version."""
     from importlib.metadata import version
 
     pkg_version = version("mockstack")
     print(f"mockstack {pkg_version}")
-
-
-if __name__ == "__main__":
-    cli()

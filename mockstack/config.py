@@ -2,7 +2,7 @@ from functools import lru_cache
 from typing import Any, Literal, Self
 
 from pydantic import DirectoryPath, FilePath, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, CliSuppress, SettingsConfigDict
 
 from mockstack.constants import ProxyRulesRedirectVia
 
@@ -19,7 +19,13 @@ class OpenTelemetrySettings(BaseSettings):
     capture_response_body: bool = False
 
 
-class Settings(BaseSettings):
+class Settings(
+    BaseSettings,
+    # cli_parse_args=True,  # type: ignore[call-arg]
+    cli_kebab_case=True,  # type: ignore[call-arg]
+    cli_hide_none_type=True,  # type: ignore[call-arg]
+    cli_avoid_json=True,  # type: ignore[call-arg]
+):
     """Settings for mockstack.
 
     Default values are defined below and can be overwritten using an .env file
@@ -32,6 +38,15 @@ class Settings(BaseSettings):
         env_file=".env",
         env_nested_delimiter="__",
     )
+
+    # whether to run in debug mode
+    debug: bool = False
+
+    # host to run the server on
+    host: str = "0.0.0.0"
+
+    # port to run the server on
+    port: int = 8000
 
     # OpenTelemetry configuration
     opentelemetry: OpenTelemetrySettings = OpenTelemetrySettings()
@@ -55,7 +70,7 @@ class Settings(BaseSettings):
 
     # metadata fields to inject into created resources.
     # A few template fields are available. See documentation for more details.
-    created_resource_metadata: dict[str, Any] = {
+    created_resource_metadata: CliSuppress[dict[str, Any]] = {
         "id": "{{ uuid4() }}",
         "createdAt": "{{ utcnow().isoformat() }}",
         "updatedAt": "{{ utcnow().isoformat() }}",
@@ -65,7 +80,7 @@ class Settings(BaseSettings):
 
     # fields to inject into missing resources response json.
     # some services may require such additional fields to be present in the response.
-    missing_resource_fields: dict[str, Any] = dict(
+    missing_resource_fields: CliSuppress[dict[str, Any]] = dict(
         code=404,
         message="mockstack: resource not found",
         retryable=False,
@@ -73,7 +88,7 @@ class Settings(BaseSettings):
 
     # logging configuration. schema is based on the logging configuration schema:
     # https://docs.python.org/3/library/logging.config.html#logging-config-dictschema
-    logging: dict[str, Any] = {
+    logging: CliSuppress[dict[str, Any]] = {
         "version": 1,
         "disable_existing_loggers": False,
         "formatters": {
