@@ -2,7 +2,7 @@
 
 from importlib import metadata
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.resources import Resource
@@ -15,6 +15,21 @@ from mockstack.config import Settings
 def span_name_for(request: Request) -> str:
     """Get the span name for a request."""
     return f"{request.method.upper()} {request.url.path}"
+
+
+async def extract_body(response: Response) -> str:
+    """Extract the body of a response."""
+
+    async def read_response_body(response: Response) -> bytes:
+        """Helper function to read response body asynchronously into memory."""
+        body = b""
+        async for chunk in response.body_iterator:
+            body += chunk
+        return body
+
+    body = await read_response_body(response)
+
+    return body.decode()
 
 
 def opentelemetry_provider(app: FastAPI, settings: Settings) -> None:
