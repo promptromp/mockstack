@@ -2,7 +2,12 @@ from functools import lru_cache
 from typing import Any, Literal, Self
 
 from pydantic import DirectoryPath, FilePath, model_validator
-from pydantic_settings import BaseSettings, CliSuppress, SettingsConfigDict
+from pydantic_settings import (
+    BaseSettings,
+    CliImplicitFlag,
+    CliSuppress,
+    SettingsConfigDict,
+)
 
 from mockstack.constants import ProxyRulesRedirectVia
 
@@ -19,13 +24,7 @@ class OpenTelemetrySettings(BaseSettings):
     capture_response_body: bool = False
 
 
-class Settings(
-    BaseSettings,
-    # cli_parse_args=True,  # type: ignore[call-arg]
-    cli_kebab_case=True,  # type: ignore[call-arg]
-    cli_hide_none_type=True,  # type: ignore[call-arg]
-    cli_avoid_json=True,  # type: ignore[call-arg]
-):
+class Settings(BaseSettings):
     """Settings for mockstack.
 
     Default values are defined below and can be overwritten using an .env file
@@ -40,7 +39,7 @@ class Settings(
     )
 
     # whether to run in debug mode
-    debug: bool = False
+    debug: CliImplicitFlag[bool] = False
 
     # host to run the server on
     host: str = "0.0.0.0"
@@ -66,7 +65,7 @@ class Settings(
 
     # controls behavior of proxying. Whether to simulate creation of resources
     # when a POST request is made to a resource that doesn't match any rules..
-    proxyrules_simulate_create_on_missing: bool = False
+    proxyrules_simulate_create_on_missing: CliImplicitFlag[bool] = False
 
     # metadata fields to inject into created resources.
     # A few template fields are available. See documentation for more details.
@@ -148,6 +147,20 @@ class Settings(
                 )
 
         return self
+
+
+class SettingsForCli(Settings):
+    """Settings for mockstack CLI."""
+
+    model_config = SettingsConfigDict(
+        env_prefix="mockstack__",
+        env_file=".env",
+        env_nested_delimiter="__",
+        cli_parse_args=True,
+        cli_kebab_case=True,
+        cli_hide_none_type=True,
+        cli_avoid_json=True,
+    )
 
 
 @lru_cache

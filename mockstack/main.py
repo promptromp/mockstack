@@ -3,7 +3,7 @@
 from fastapi import FastAPI
 from pydantic_settings import CliApp, CliSettingsSource
 
-from mockstack.config import Settings, settings_provider
+from mockstack.config import Settings, SettingsForCli, settings_provider
 from mockstack.lifespan import lifespan_provider
 from mockstack.middleware import middleware_provider
 from mockstack.routers.catchall import catchall_router_provider
@@ -34,8 +34,8 @@ def run():
     import uvicorn
 
     parser = argparse.ArgumentParser()
-    cli_settings = CliSettingsSource(Settings, root_parser=parser)
-    settings = CliApp.run(Settings, cli_settings_source=cli_settings)
+    cli_settings = CliSettingsSource(SettingsForCli, root_parser=parser)
+    settings = CliApp.run(SettingsForCli, cli_settings_source=cli_settings)
 
     app = create_app(settings=settings)
 
