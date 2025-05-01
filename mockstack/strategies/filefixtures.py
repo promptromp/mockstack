@@ -81,6 +81,7 @@ class FileFixturesStrategy(BaseStrategy, CreateMixin):
                 request, status_code=status.HTTP_201_CREATED
             )
         else:
+            # simulate resource creation:
             return await self._create(
                 request,
                 env=self.env,

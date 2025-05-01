@@ -51,3 +51,18 @@ def looks_like_a_command(request: Request) -> bool:
             request.url.path.endswith("/execute"),
         )
     )
+
+
+def looks_like_a_create(request: Request) -> bool:
+    """Check if the request looks like a create.
+
+    This is a heuristic to try and identify cases where a POST
+    request is used for creating a new resource.
+
+    """
+    return any(
+        (
+            request.method == "POST",
+            request.url.path.endswith("/create"),
+        ),
+    )

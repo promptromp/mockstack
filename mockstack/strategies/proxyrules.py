@@ -15,6 +15,7 @@ from starlette.datastructures import Headers
 
 from mockstack.config import Settings
 from mockstack.constants import ProxyRulesRedirectVia
+from mockstack.intent import looks_like_a_create
 from mockstack.strategies.base import BaseStrategy
 from mockstack.strategies.create_mixin import CreateMixin
 
@@ -99,7 +100,9 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             self.logger.warning(
                 f"No rule found for request: {request.method} {request.url.path}"
             )
-            if self.proxyrules_simulate_create_on_missing:
+            if self.proxyrules_simulate_create_on_missing and looks_like_a_create(
+                request
+            ):
                 self.logger.info(
                     f"Simulating resource creation for missing rule for {request.method} {request.url.path}"
                 )
