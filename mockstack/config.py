@@ -78,7 +78,8 @@ class Settings(BaseSettings):
         "disable_existing_loggers": False,
         "formatters": {
             "standard": {
-                "format": "%(levelname)-10s%(message)s",
+                "()": "uvicorn.logging.DefaultFormatter",
+                "fmt": "%(levelprefix)s %(message)s",
             },
         },
         "handlers": {
