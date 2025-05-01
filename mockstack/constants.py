@@ -20,3 +20,6 @@ class ProxyRulesRedirectVia(StrEnum):
     HTTP_TEMPORARY_REDIRECT = "http_307_temporary"
     HTTP_PERMANENT_REDIRECT = "http_301_permanent"
     REVERSE_PROXY = "reverse_proxy"
+
+
+SENSITIVE_HEADERS = ["authorization", "cookie", "set-cookie"]
