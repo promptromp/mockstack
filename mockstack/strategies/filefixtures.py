@@ -158,4 +158,3 @@ class FileFixturesStrategy(BaseStrategy, CreateMixin):
         span.set_attribute(
             "mockstack.filefixtures.template_name", template_args["name"]
         )
-        span.set_attribute("mockstack.filefixtures.template_args", template_args)
