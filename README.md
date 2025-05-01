@@ -23,7 +23,7 @@ Highlights include:
 
 Install using [uv](https://docs.astral.sh/uv/). This package conforms the concept of a [tool](https://docs.astral.sh/uv/concepts/tools/) and hence can simply install / run with `uvx`:
 
-    uvx mockstack
+    uvx mockstack --help
 
 or install into a persistent environment and add it to the PATH with:
 
@@ -32,14 +32,19 @@ or install into a persistent environment and add it to the PATH with:
 
 ## Usage
 
-Available configuration options are [here](https://github.com/adamhadani/mockstack/blob/main/mockstack/config.py). Setting individual options can be done with env. variables as in the following example:
+Available configuration options are [here](https://github.com/adamhadani/mockstack/blob/main/mockstack/config.py).
+
+Setting individual options can be done either through an `.env` file, individual environment variables, or command-line arguments. For example:
 
 ```shell
+    export MOCKSTACK__STRATEGY=filefixtures
     export MOCKSTACK__TEMPLATES_DIR=~/mockstack-templates/
     export MOCKSTACK__OPENTELEMETRY__ENABLED=true
     export MOCKSTACK__OPENTELEMETRY__CAPTURE_RESPONSE_BODY=true
-    uv run
+    uvx mockstack
 ```
+
+See also the included [.env.example](https://github.com/adamhadani/mockstack/blob/main/.env.example) for more examples. You can copy that file to `.env` and fill in configuration as needed based on the given examples.
 
 Out of the box, you get the following behavior when using the default `filefixtures` strategy:
 
@@ -73,8 +78,6 @@ If you are contributing to development, you will want to clone this project, and
     uv sync
     uv pip install -e .
 
-Copy the included [.env.example](https://github.com/adamhadani/mockstack/blob/main/.env.example) file to `.env` and fill in configuration as needed based on the given examples.
-
 Run in development mode (for live-reload of changes when developing):
 
-    uv run uvicorn --factory mockstack.main:create_app --reload
+    uv run -- mockstack --debug

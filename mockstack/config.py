@@ -2,9 +2,19 @@ from functools import lru_cache
 from typing import Any, Literal, Self
 
 from pydantic import DirectoryPath, FilePath, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import (
+    BaseSettings,
+    CliImplicitFlag,
+    CliSuppress,
+    SettingsConfigDict,
+)
 
-from mockstack.constants import ProxyRulesRedirectVia
+from mockstack.constants import (
+    ENV_FILE,
+    ENV_NESTED_DELIMITER,
+    ENV_PREFIX,
+    ProxyRulesRedirectVia,
+)
 
 
 class OpenTelemetrySettings(BaseSettings):
@@ -28,10 +38,19 @@ class Settings(BaseSettings):
     """
 
     model_config = SettingsConfigDict(
-        env_prefix="mockstack__",
-        env_file=".env",
-        env_nested_delimiter="__",
+        env_prefix=ENV_PREFIX,
+        env_file=ENV_FILE,
+        env_nested_delimiter=ENV_NESTED_DELIMITER,
     )
+
+    # whether to run in debug mode
+    debug: CliImplicitFlag[bool] = False
+
+    # host to run the server on
+    host: str = "0.0.0.0"
+
+    # port to run the server on
+    port: int = 8000
 
     # OpenTelemetry configuration
     opentelemetry: OpenTelemetrySettings = OpenTelemetrySettings()
@@ -51,11 +70,11 @@ class Settings(BaseSettings):
 
     # controls behavior of proxying. Whether to simulate creation of resources
     # when a POST request is made to a resource that doesn't match any rules..
-    proxyrules_simulate_create_on_missing: bool = False
+    proxyrules_simulate_create_on_missing: CliImplicitFlag[bool] = False
 
     # metadata fields to inject into created resources.
     # A few template fields are available. See documentation for more details.
-    created_resource_metadata: dict[str, Any] = {
+    created_resource_metadata: CliSuppress[dict[str, Any]] = {
         "id": "{{ uuid4() }}",
         "createdAt": "{{ utcnow().isoformat() }}",
         "updatedAt": "{{ utcnow().isoformat() }}",
@@ -65,7 +84,7 @@ class Settings(BaseSettings):
 
     # fields to inject into missing resources response json.
     # some services may require such additional fields to be present in the response.
-    missing_resource_fields: dict[str, Any] = dict(
+    missing_resource_fields: CliSuppress[dict[str, Any]] = dict(
         code=404,
         message="mockstack: resource not found",
         retryable=False,
@@ -73,7 +92,7 @@ class Settings(BaseSettings):
 
     # logging configuration. schema is based on the logging configuration schema:
     # https://docs.python.org/3/library/logging.config.html#logging-config-dictschema
-    logging: dict[str, Any] = {
+    logging: CliSuppress[dict[str, Any]] = {
         "version": 1,
         "disable_existing_loggers": False,
         "formatters": {
@@ -85,7 +104,7 @@ class Settings(BaseSettings):
         "handlers": {
             "console": {
                 "class": "logging.StreamHandler",
-                "level": "DEBUG",
+                "level": "INFO",
                 "formatter": "standard",
                 "stream": "ext://sys.stdout",
             },
@@ -93,23 +112,23 @@ class Settings(BaseSettings):
         "loggers": {
             "uvicorn": {
                 "handlers": ["console"],
-                "level": "INFO",
+                "level": "DEBUG",
                 "propagate": False,
             },
             "FileFixturesStrategy": {
                 "handlers": ["console"],
-                "level": "INFO",
+                "level": "DEBUG",
                 "propagate": False,
             },
             "ProxyRulesStrategy": {
                 "handlers": ["console"],
-                "level": "INFO",
+                "level": "DEBUG",
                 "propagate": False,
             },
         },
         "root": {
             "handlers": ["console"],
-            "level": "INFO",
+            "level": "DEBUG",
             "propagate": False,
         },
     }
@@ -133,6 +152,24 @@ class Settings(BaseSettings):
                 )
 
         return self
+
+
+# Nb. We separate the Cli-specific parameters since currently breaks pytest
+# when running via pre-commit hooks. Can remove once fixed by pytest / pre-commit.
+
+
+class CliSettings(Settings):
+    """Settings for mockstack CLI."""
+
+    model_config = SettingsConfigDict(
+        env_prefix=ENV_PREFIX,
+        env_file=ENV_FILE,
+        env_nested_delimiter=ENV_NESTED_DELIMITER,
+        cli_parse_args=True,
+        cli_kebab_case=True,
+        cli_hide_none_type=True,
+        cli_avoid_json=True,
+    )
 
 
 @lru_cache

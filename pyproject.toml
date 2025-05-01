@@ -30,7 +30,7 @@ Homepage = "https://github.com/adamhadani/mockstack"
 Issues = "https://github.com/adamhadani/mockstack/issues"
 
 [project.scripts]
-mockstack = "mockstack.main:cli"
+mockstack = "mockstack.main:run"
 
 [dependency-groups]
 dev = [
