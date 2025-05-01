@@ -124,7 +124,7 @@ def test_proxy_rules_strategy_load_rules(settings):
     assert all(isinstance(rule, Rule) for rule in rules)
 
 
-def test_proxy_rules_strategy_rule_for(settings):
+def test_proxy_rules_strategy_rule_for(settings, span):
     """Test finding a matching rule for a request."""
     strategy = ProxyRulesStrategy(settings)
     request = Request(
@@ -136,12 +136,13 @@ def test_proxy_rules_strategy_rule_for(settings):
             "headers": [],
         }
     )
+    request.state.span = span
     rule = strategy.rule_for(request)
     assert rule is not None
     assert isinstance(rule, Rule)
 
 
-def test_proxy_rules_strategy_rule_for_no_match(settings):
+def test_proxy_rules_strategy_rule_for_no_match(settings, span):
     """Test when no rule matches a request."""
     strategy = ProxyRulesStrategy(settings)
     request = Request(
@@ -153,12 +154,13 @@ def test_proxy_rules_strategy_rule_for_no_match(settings):
             "headers": [],
         }
     )
+    request.state.span = span
     rule = strategy.rule_for(request)
     assert rule is None
 
 
 @pytest.mark.asyncio
-async def test_proxy_rules_strategy_apply(settings):
+async def test_proxy_rules_strategy_apply(settings, span):
     """Test applying a rule to a request."""
     strategy = ProxyRulesStrategy(settings)
     request = Request(
@@ -170,13 +172,14 @@ async def test_proxy_rules_strategy_apply(settings):
             "headers": [],
         }
     )
+    request.state.span = span
     response = await strategy.apply(request)
     assert isinstance(response, RedirectResponse)
     assert response.headers["location"] == "/projects/123"
 
 
 @pytest.mark.asyncio
-async def test_proxy_rules_strategy_apply_no_match(settings):
+async def test_proxy_rules_strategy_apply_no_match(settings, span):
     """Test applying strategy when no rule matches."""
     strategy = ProxyRulesStrategy(settings)
     request = Request(
@@ -188,13 +191,14 @@ async def test_proxy_rules_strategy_apply_no_match(settings):
             "headers": [],
         }
     )
+    request.state.span = span
     response = await strategy.apply(request)
     assert response.status_code == 404
 
 
 @pytest.mark.asyncio
 @pytest.mark.skip(reason="TODO: Fix this test")
-async def test_proxy_rules_strategy_apply_reverse_proxy(settings_reverse_proxy):
+async def test_proxy_rules_strategy_apply_reverse_proxy(settings_reverse_proxy, span):
     """Test applying a rule to a request with reverse proxy enabled."""
     # Mock the httpx.AsyncClient to avoid making real HTTP requests
     mock_response = MagicMock()  # Use MagicMock for response to avoid async attributes
@@ -218,6 +222,7 @@ async def test_proxy_rules_strategy_apply_reverse_proxy(settings_reverse_proxy):
                 "headers": [("host", "example.com")],
             }
         )
+        request.state.span = span
         response = await strategy.apply(request)
 
         # Verify the response

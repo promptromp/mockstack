@@ -23,10 +23,17 @@ from mockstack.strategies.create_mixin import CreateMixin
 class Rule:
     """A rule for the proxy rules strategy."""
 
-    def __init__(self, pattern: str, replacement: str, method: str | None = None):
+    def __init__(
+        self,
+        pattern: str,
+        replacement: str,
+        method: str | None = None,
+        name: str | None = None,
+    ):
         self.pattern = pattern
         self.replacement = replacement
         self.method = method
+        self.name = name
 
     @classmethod
     def from_dict(cls, data: dict[str, str]) -> Self:
@@ -34,6 +41,7 @@ class Rule:
             pattern=data["pattern"],
             replacement=data["replacement"],
             method=data.get("method", None),
+            name=data.get("name", None),
         )
 
     def matches(self, request: Request) -> bool:
@@ -115,6 +123,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
 
         url = rule.apply(request)
         self.logger.info(f"Redirecting to: {url}")
+        self.update_opentelemetry(request, rule, url)
 
         match self.redirect_via:
             case ProxyRulesRedirectVia.HTTP_TEMPORARY_REDIRECT:
@@ -165,3 +174,15 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         _headers["host"] = urlparse(url).netloc
 
         return _headers
+
+    def update_opentelemetry(self, request: Request, rule: Rule, url: str) -> None:
+        """Update the opentelemetry span with the proxy rules rule details."""
+        span = request.state.span
+        if rule.name is not None:
+            span.set_attribute("mockstack.proxyrules.rule_name", rule.name)
+        if rule.method is not None:
+            span.set_attribute("mockstack.proxyrules.rule_method", rule.method)
+
+        span.set_attribute("mockstack.proxyrules.rule_pattern", rule.pattern)
+        span.set_attribute("mockstack.proxyrules.rule_replacement", rule.replacement)
+        span.set_attribute("mockstack.proxyrules.rewritten_url", url)

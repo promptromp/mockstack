@@ -1,6 +1,7 @@
 """Shared fixtures for the unit-tests."""
 
 import os
+from unittest.mock import MagicMock
 
 import pytest
 from fastapi import FastAPI
@@ -11,10 +12,19 @@ from mockstack.strategies.filefixtures import FileFixturesStrategy
 
 
 @pytest.fixture
-def app(settings):
+def span():
+    """Create a mock span object for testing."""
+    span = MagicMock()
+    span.set_attribute = MagicMock()
+    return span
+
+
+@pytest.fixture
+def app(settings, span):
     """Create a FastAPI app for testing."""
     app = FastAPI()
     app.state.strategy = FileFixturesStrategy(settings)
+    app.state.span = span
     return app
 
 

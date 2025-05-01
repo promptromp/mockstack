@@ -36,6 +36,11 @@ def middleware_provider(app: FastAPI, settings: Settings) -> None:
                 request, span, sensitive_headers=SENSITIVE_HEADERS
             )
 
+            # Make the current opentelemetry span available to the request.
+            # This is useful for strategies that need to add custom attributes
+            # to the span associated with the request.
+            request.state.span = span
+
             response = await call_next(request)
 
             span = with_response_attributes(
