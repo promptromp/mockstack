@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 from uuid import uuid4
+import json
 
 from fastapi import Request, Response, status
 from fastapi.responses import JSONResponse
@@ -16,6 +17,9 @@ class CreateMixin:
     async def _create(
         self, request: Request, *, env: Environment, created_resource_metadata: dict
     ) -> Response:
+        """Simulate creation of a resource."""
+        self._create_mixin_update_opentelemetry(request, created_resource_metadata)
+
         if wants_json(request):
             # We return a 201 CREATED response with the resource as the body,
             # potentially injecting the resource ID into the response.
@@ -79,3 +83,13 @@ class CreateMixin:
             "uuid4": uuid4,
             "request": request,
         }
+
+    def _create_mixin_update_opentelemetry(
+        self, request: Request, created_resource_metadata: dict
+    ) -> None:
+        """Update the opentelemetry span with the create mixin details."""
+        span = request.state.span
+        span.set_attribute(
+            "mockstack.create_mixin.created_resource_metadata",
+            json.dumps(created_resource_metadata),
+        )
