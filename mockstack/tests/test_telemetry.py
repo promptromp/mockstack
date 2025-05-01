@@ -157,11 +157,12 @@ async def test_extract_body():
     assert body == "part1part2part3"
 
 
-def test_opentelemetry_provider_disabled():
+def test_opentelemetry_provider_disabled(templates_dir):
     """Test OpenTelemetry provider when disabled."""
     app = FastAPI()
     settings = Settings(
-        strategy="proxyrules",
+        strategy="filefixtures",
+        templates_dir=templates_dir,
         opentelemetry=OpenTelemetrySettings(enabled=False),
     )
 
@@ -180,11 +181,13 @@ def test_opentelemetry_provider_enabled(
     mock_tracer_provider,
     mock_batch_processor,
     mock_otlp_exporter,
+    templates_dir,
 ):
     """Test OpenTelemetry provider when enabled."""
     app = FastAPI()
     settings = Settings(
-        strategy="proxyrules",
+        strategy="filefixtures",
+        templates_dir=templates_dir,
         opentelemetry=OpenTelemetrySettings(
             enabled=True,
             endpoint="http://localhost:4317",
