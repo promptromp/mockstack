@@ -100,6 +100,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             self.logger.warning(
                 f"No rule found for request: {request.method} {request.url.path}"
             )
+
             if self.proxyrules_simulate_create_on_missing and looks_like_a_create(
                 request
             ):
@@ -112,6 +113,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
                     created_resource_metadata=self.created_resource_metadata,
                 )
             else:
+                # no rule found and we are not simulating resource creation
                 return Response(status_code=status.HTTP_404_NOT_FOUND)
 
         url = rule.apply(request)
@@ -140,13 +142,13 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
     async def reverse_proxy(self, request: Request, url: str) -> Response:
         """Reverse proxy the request to the target URL."""
         async with httpx.AsyncClient() as client:
-            method = request.method
             request_content = await request.body()
+            request_headers = self.reverse_proxy_headers(request.headers, url=url)
             req = client.build_request(
-                method,
+                request.method,
                 url,
                 content=request_content,
-                headers=self.reverse_proxy_headers(request.headers, url=url),
+                headers=request_headers,
                 params=request.url.query,
             )
 
