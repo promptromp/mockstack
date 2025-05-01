@@ -9,7 +9,17 @@
 
 An API mocking workhorse :racehorse:
 
-Enabling a sane development lifecycle for microservice-oriented architectures.
+Enabling a sane development lifecycle for microservice-oriented architectures and LLM-driven tool chains.
+
+Use mockstack for:
+
+* **Development** :pencil2:. Simulating HTTP-based interactions between a particular component you're developing or debugging locally and multiple other components it depends on during execution of a particular flow. You can create template-based mock responses, simulate creation of resources in a realistic way, as well as proxy to other services using a rich rules DSL. Full request and response metadata and payloads can be observed via OpenTelemetry integration.
+
+* **Integration Testing** :ok_hand:. Creating a consistent environment for running integration tests on a single component, using fixture responses.
+
+* **LLM-powered Workflows** :alien:. Speeding up development of LLM-based workflows and tools for use with frameworks such as [LangChain](https://python.langchain.com/docs/introduction/), [LangGraph](https://www.langchain.com/langgraph) and others. When developing LLM-driven execution graphs, you often want to have a consistent response from a tool while you're tuning prompts or debugging other aspects of a particular trace. `mockstack` can give you a solid foundation for this.
+
+* **Chaos Engineering** :boom:. mockstack can simulate various real-world runtime error scenarios such as timeouts, http error codes, and invalid response payloads. This can be a great way to do some upfront "chaos monkey" type of testing on software components.
 
 Highlights include:
 
