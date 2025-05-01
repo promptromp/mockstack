@@ -51,7 +51,7 @@ class Settings(BaseSettings):
 
     # controls behavior of proxying. Whether to simulate creation of resources
     # when a POST request is made to a resource that doesn't match any rules..
-    proxyrules_simulate_create_when_missing: bool = False
+    proxyrules_simulate_create_on_missing: bool = False
 
     # metadata fields to inject into created resources.
     # A few template fields are available. See documentation for more details.

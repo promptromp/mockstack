@@ -61,8 +61,8 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         super().__init__(settings, *args, **kwargs)
         self.rules_filename = settings.proxyrules_rules_filename
         self.proxyrules_redirect_via = settings.proxyrules_redirect_via
-        self.proxyrules_simulate_create_when_missing = (
-            settings.proxyrules_simulate_create_when_missing
+        self.proxyrules_simulate_create_on_missing = (
+            settings.proxyrules_simulate_create_on_missing
         )
         self.created_resource_metadata = settings.created_resource_metadata
 
@@ -76,7 +76,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             f"{HIGHLIGHT}[proxyrules]{ENDC} "
             f"rules_filename: {HIGHLIGHT}{self.rules_filename}{ENDC}. "
             f"redirect_via: {HIGHLIGHT}{self.proxyrules_redirect_via}{ENDC}. "
-            f"simulate_create_when_missing: {HIGHLIGHT}{self.proxyrules_simulate_create_when_missing}{ENDC}"
+            f"simulate_create_on_missing: {HIGHLIGHT}{self.proxyrules_simulate_create_on_missing}{ENDC}"
         )
 
     @cached_property
@@ -103,7 +103,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             self.logger.warning(
                 f"No rule found for request: {request.method} {request.url.path}"
             )
-            if self.proxyrules_simulate_create_when_missing:
+            if self.proxyrules_simulate_create_on_missing:
                 self.logger.info(
                     "Simulating resource creation for missing rule for {request.method} {request.url.path}"
                 )
