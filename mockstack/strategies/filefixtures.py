@@ -2,12 +2,9 @@
 
 import logging
 import os
-from datetime import datetime, timezone
 from pathlib import Path
-from uuid import uuid4
 
 from fastapi import HTTPException, Request, Response, status
-from fastapi.responses import JSONResponse
 from jinja2 import Environment, FileSystemLoader
 
 from mockstack.config import Settings
@@ -15,7 +12,6 @@ from mockstack.display import ANSIColors
 from mockstack.intent import (
     looks_like_a_command,
     looks_like_a_search,
-    wants_json,
 )
 from mockstack.strategies.base import BaseStrategy
 from mockstack.strategies.create_mixin import CreateMixin

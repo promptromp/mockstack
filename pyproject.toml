@@ -53,4 +53,3 @@ ignore_missing_imports = true
 asyncio_default_fixture_loop_scope = "function"
 
 [tool.ruff.lint]
-select = ["I"]
