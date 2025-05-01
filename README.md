@@ -42,6 +42,8 @@ or install into a persistent environment and add it to the PATH with:
 
 ## Usage
 
+See the [examples](https://github.com/adamhadani/mockstack/blob/main/examples/) directory for complete examples with documentation.
+
 Available configuration options are [here](https://github.com/adamhadani/mockstack/blob/main/mockstack/config.py).
 
 Setting individual options can be done either through an `.env` file, individual environment variables, or command-line arguments. For example:

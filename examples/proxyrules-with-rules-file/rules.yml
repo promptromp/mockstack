@@ -1,0 +1,13 @@
+rules:
+  - name: someservice-get
+    method: GET
+    pattern: ^/someservice/(.*)
+    replacement: https://someservice.development.mycoolstartup.io/\1
+  - name: someservice-items-search
+    method: POST
+    pattern: ^/someservice/api/v1/items_search
+    replacement: https://someservice.development.mycoolstartup.io/api/v1/items_search
+  - name: someotherservice-get
+    method: GET
+    pattern: ^/someotherservice/(.*)
+    replacement: https://someotherservice.development.mycoolstartup.io/\1
