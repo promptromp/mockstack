@@ -20,8 +20,8 @@ def announce(app: FastAPI, settings: Settings):
     )
     logger.info(str(app.state.strategy), extra=extra)
     logger.info(
-        f"OpenTelemetry enabled: [medium_purple]{settings.opentelemetry.enabled}[/medium_purple], "
-        f"endpoint: [medium_purple]{settings.opentelemetry.endpoint}[/medium_purple], "
+        f"[medium_purple]OpenTelemetry[/medium_purple] enabled: [medium_purple]{settings.opentelemetry.enabled}[/medium_purple],\n "
+        f"endpoint: [medium_purple]{settings.opentelemetry.endpoint}[/medium_purple],\n "
         f"capture_response_body: [medium_purple]{settings.opentelemetry.capture_response_body}[/medium_purple]",
         extra=extra,
     )

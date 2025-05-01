@@ -39,7 +39,7 @@ class FileFixturesStrategy(BaseStrategy, CreateMixin):
 
     def __str__(self) -> str:
         return (
-            f"[medium_purple]filefixtures[/medium_purple] "
+            f"[medium_purple]filefixtures[/medium_purple]\n "
             f"templates_dir: [medium_purple]{self.templates_dir}[/medium_purple]. "
         )
 

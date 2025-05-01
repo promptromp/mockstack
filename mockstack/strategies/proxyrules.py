@@ -77,10 +77,11 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
 
     def __str__(self) -> str:
         return (
-            f"[medium_purple]proxyrules[/medium_purple] "
-            f"rules_filename: [medium_purple]{self.rules_filename}[/medium_purple]. "
-            f"redirect_via: [medium_purple]{self.redirect_via}[/medium_purple]. "
-            f"simulate_create_on_missing: [medium_purple]{self.simulate_create_on_missing}[/medium_purple]"
+            f"[medium_purple]proxyrules[/medium_purple]\n "
+            f"rules_filename: {self.rules_filename}.\n "
+            f"redirect_via: [medium_purple]{self.redirect_via}[/medium_purple].\n "
+            f"simulate_create_on_missing: {self.simulate_create_on_missing}.\n "
+            f"reverse_proxy_timeout: {self.reverse_proxy_timeout}"
         )
 
     @cached_property
