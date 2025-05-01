@@ -9,7 +9,12 @@ from pydantic_settings import (
     SettingsConfigDict,
 )
 
-from mockstack.constants import ProxyRulesRedirectVia
+from mockstack.constants import (
+    ENV_FILE,
+    ENV_NESTED_DELIMITER,
+    ENV_PREFIX,
+    ProxyRulesRedirectVia,
+)
 
 
 class OpenTelemetrySettings(BaseSettings):
@@ -33,9 +38,9 @@ class Settings(BaseSettings):
     """
 
     model_config = SettingsConfigDict(
-        env_prefix="mockstack__",
-        env_file=".env",
-        env_nested_delimiter="__",
+        env_prefix=ENV_PREFIX,
+        env_file=ENV_FILE,
+        env_nested_delimiter=ENV_NESTED_DELIMITER,
     )
 
     # whether to run in debug mode
@@ -149,13 +154,17 @@ class Settings(BaseSettings):
         return self
 
 
-class SettingsForCli(Settings):
+# Nb. We separate the Cli-specific parameters since currently breaks pytest
+# when running via pre-commit hooks. Can remove once fixed by pytest / pre-commit.
+
+
+class CliSettings(Settings):
     """Settings for mockstack CLI."""
 
     model_config = SettingsConfigDict(
-        env_prefix="mockstack__",
-        env_file=".env",
-        env_nested_delimiter="__",
+        env_prefix=ENV_PREFIX,
+        env_file=ENV_FILE,
+        env_nested_delimiter=ENV_NESTED_DELIMITER,
         cli_parse_args=True,
         cli_kebab_case=True,
         cli_hide_none_type=True,

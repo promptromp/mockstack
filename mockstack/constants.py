@@ -2,7 +2,10 @@
 
 from enum import StrEnum
 
-# proxyrules strategy constants
+
+ENV_PREFIX = "mockstack__"
+ENV_FILE = ".env"
+ENV_NESTED_DELIMITER = "__"
 
 
 class ProxyRulesRedirectVia(StrEnum):
