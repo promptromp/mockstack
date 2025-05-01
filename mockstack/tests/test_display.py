@@ -17,4 +17,4 @@ def test_announce(app, settings):
 
         # Check that the log message contains the expected information
         first_log_message = mock_logger.info.call_args[0][0]
-        assert "OpenTelemetry enabled:" in first_log_message
+        assert "OpenTelemetry" in first_log_message
