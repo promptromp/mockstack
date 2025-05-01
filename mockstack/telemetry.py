@@ -2,12 +2,13 @@
 
 from importlib import metadata
 
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from starlette.responses import StreamingResponse
 
 from mockstack.config import Settings
 
@@ -17,14 +18,17 @@ def span_name_for(request: Request) -> str:
     return f"{request.method.upper()} {request.url.path}"
 
 
-async def extract_body(response: Response) -> str:
+async def extract_body(response: StreamingResponse) -> str:
     """Extract the body of a response."""
 
-    async def read_response_body(response: Response) -> bytes:
+    async def read_response_body(response: StreamingResponse) -> bytes:
         """Helper function to read response body asynchronously into memory."""
         body = b""
         async for chunk in response.body_iterator:
-            body += chunk
+            if isinstance(chunk, str):
+                body += chunk.encode()
+            else:
+                body += chunk
         return body
 
     body = await read_response_body(response)
