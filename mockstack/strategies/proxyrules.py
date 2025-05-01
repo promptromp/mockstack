@@ -10,12 +10,14 @@ import httpx
 import yaml
 from fastapi import Request, Response, status
 from fastapi.responses import RedirectResponse
+from jinja2 import Environment
 from starlette.datastructures import Headers
 
 from mockstack.config import Settings
 from mockstack.constants import ProxyRulesRedirectVia
 from mockstack.display import ANSIColors
 from mockstack.strategies.base import BaseStrategy
+from mockstack.strategies.create_mixin import CreateMixin
 
 
 class Rule:
@@ -50,7 +52,7 @@ class Rule:
         return re.sub(self.pattern, self.replacement, path)
 
 
-class ProxyRulesStrategy(BaseStrategy):
+class ProxyRulesStrategy(BaseStrategy, CreateMixin):
     """Strategy for using proxy rules."""
 
     logger = logging.getLogger("ProxyRulesStrategy")
@@ -59,6 +61,12 @@ class ProxyRulesStrategy(BaseStrategy):
         super().__init__(settings, *args, **kwargs)
         self.rules_filename = settings.proxyrules_rules_filename
         self.proxyrules_redirect_via = settings.proxyrules_redirect_via
+        self.proxyrules_simulate_create_on_missing = (
+            settings.proxyrules_simulate_create_on_missing
+        )
+        self.created_resource_metadata = settings.created_resource_metadata
+
+        self.env = Environment()
 
     def __str__(self) -> str:
         HIGHLIGHT = ANSIColors.HEADER
@@ -67,7 +75,8 @@ class ProxyRulesStrategy(BaseStrategy):
         return (
             f"{HIGHLIGHT}[proxyrules]{ENDC} "
             f"rules_filename: {HIGHLIGHT}{self.rules_filename}{ENDC}. "
-            f"redirect_via: {HIGHLIGHT}{self.proxyrules_redirect_via}{ENDC}"
+            f"redirect_via: {HIGHLIGHT}{self.proxyrules_redirect_via}{ENDC}. "
+            f"simulate_create_on_missing: {HIGHLIGHT}{self.proxyrules_simulate_create_on_missing}{ENDC}"
         )
 
     @cached_property
@@ -91,8 +100,20 @@ class ProxyRulesStrategy(BaseStrategy):
     async def apply(self, request: Request) -> Response:
         rule = self.rule_for(request)
         if rule is None:
-            self.logger.warning(f"No rule found for request: {request.url.path=}")
-            return Response(status_code=status.HTTP_404_NOT_FOUND)
+            self.logger.warning(
+                f"No rule found for request: {request.method} {request.url.path}"
+            )
+            if self.proxyrules_simulate_create_on_missing:
+                self.logger.info(
+                    "Simulating resource creation for missing rule for {request.method} {request.url.path}"
+                )
+                return await self._create(
+                    request,
+                    env=self.env,
+                    created_resource_metadata=self.created_resource_metadata,
+                )
+            else:
+                return Response(status_code=status.HTTP_404_NOT_FOUND)
 
         url = rule.apply(request)
         self.logger.info(f"Redirecting to: {url}")
@@ -114,7 +135,7 @@ class ProxyRulesStrategy(BaseStrategy):
 
             case _:
                 raise ValueError(
-                    f"Invalid redirect via: {self.proxyrules_redirect_via}"
+                    f"Invalid redirect via value: {self.proxyrules_redirect_via=}"
                 )
 
     async def reverse_proxy(self, request: Request, url: str) -> Response:

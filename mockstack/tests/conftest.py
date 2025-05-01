@@ -37,6 +37,7 @@ def settings(templates_dir, proxyrules_rules_filename):
         templates_dir=templates_dir,
         proxyrules_rules_filename=proxyrules_rules_filename,
         proxyrules_redirect_via=ProxyRulesRedirectVia.HTTP_TEMPORARY_REDIRECT,
+        proxyrules_simulate_create_on_missing=False,
         opentelemetry=OpenTelemetrySettings(enabled=False),
     )
 

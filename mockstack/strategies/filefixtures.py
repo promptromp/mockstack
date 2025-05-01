@@ -2,67 +2,26 @@
 
 import logging
 import os
-from datetime import datetime, timezone
 from pathlib import Path
-from uuid import uuid4
 
 from fastapi import HTTPException, Request, Response, status
-from fastapi.responses import JSONResponse
 from jinja2 import Environment, FileSystemLoader
 
 from mockstack.config import Settings
 from mockstack.display import ANSIColors
+from mockstack.intent import (
+    looks_like_a_command,
+    looks_like_a_search,
+)
 from mockstack.strategies.base import BaseStrategy
+from mockstack.strategies.create_mixin import CreateMixin
 from mockstack.templating import (
     iter_possible_template_arguments,
     missing_template_detail,
 )
 
 
-def is_json_media_type(media_type: str) -> bool:
-    """Check if the media type is JSON."""
-    return media_type in ("application/json", "text/json")
-
-
-def looks_like_a_search(request: Request) -> bool:
-    """Check if the request looks like a search.
-
-    This is a heuristic to try and identify cases where a POST
-    request is used for issuing a search rather than for creating
-    a new resource.
-
-    """
-    return any(
-        (
-            request.url.path.endswith("_search"),
-            request.url.path.endswith("/search"),
-            request.url.path.endswith("_query"),
-        )
-    )
-
-
-def looks_like_a_command(request: Request) -> bool:
-    """Check if the request looks like a command.
-
-    This is a heuristic to try and identify cases where a POST
-    request is used for issuing a command rather than for creating
-    a new resource.
-    """
-    return any(
-        (
-            request.url.path.endswith("_command"),
-            request.url.path.endswith("/command"),
-            request.url.path.endswith("_request"),
-            request.url.path.endswith("/request"),
-            request.url.path.endswith("_run"),
-            request.url.path.endswith("/run"),
-            request.url.path.endswith("_execute"),
-            request.url.path.endswith("/execute"),
-        )
-    )
-
-
-class FileFixturesStrategy(BaseStrategy):
+class FileFixturesStrategy(BaseStrategy, CreateMixin):
     """Strategy for using file-based fixtures."""
 
     logger = logging.getLogger("FileFixturesStrategy")
@@ -126,24 +85,11 @@ class FileFixturesStrategy(BaseStrategy):
                 request, status_code=status.HTTP_201_CREATED
             )
         else:
-            # Creating a new resource.
-            media_type = request.headers.get("Content-Type", "application/json")
-
-            if is_json_media_type(media_type):
-                # We return a 201 CREATED response with the resource as the body,
-                # potentially injecting the resource ID into the response.
-                resource = await request.json()
-
-                return JSONResponse(
-                    status_code=status.HTTP_201_CREATED,
-                    content=self._created(resource, request=request),
-                )
-            else:
-                # We return a 201 CREATEDresponse with an empty body.
-                return Response(
-                    status_code=status.HTTP_201_CREATED,
-                    content=None,
-                )
+            return await self._create(
+                request,
+                env=self.env,
+                created_resource_metadata=self.created_resource_metadata,
+            )
 
     async def _get(self, request: Request) -> Response:
         """Apply the strategy for GET requests.
@@ -175,42 +121,6 @@ class FileFixturesStrategy(BaseStrategy):
     async def _put(self, request: Request) -> Response:
         """Apply the strategy for PUT requests."""
         return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-    def _created(self, resource: dict, *, request: Request) -> dict:
-        """Create a new resource given a request resource.
-
-        We use the request resource as the basis for the new resource.
-        We then inject an identifier into the resource if it doesn't already have one,
-        as well as any other metadata fields that are configured for the strategy.
-
-        """
-
-        def with_metadata(resource: dict, copy=True) -> dict:
-            """Inject metadata fields into the resource."""
-            _resource = resource.copy() if copy else resource
-            for key, value in self.created_resource_metadata.items():
-                if isinstance(value, str):
-                    _resource[key] = self.env.from_string(value).render(
-                        self._metadata_context(request)
-                    )
-                else:
-                    _resource[key] = value
-            return _resource
-
-        return with_metadata(resource)
-
-    def _metadata_context(self, request: Request) -> dict:
-        """Context for injecting metadata fields into resources.
-
-        Some care is needed to ensure that we only expose the minimum amount
-        of information here since templates are user-defined.
-
-        """
-        return {
-            "utcnow": lambda: datetime.now(timezone.utc),
-            "uuid4": uuid4,
-            "request": request,
-        }
 
     def _response_from_template(
         self, request: Request, status_code: int = status.HTTP_200_OK

@@ -49,6 +49,10 @@ class Settings(BaseSettings):
     # or reverse proxy the request to the target URL "silently".
     proxyrules_redirect_via: ProxyRulesRedirectVia = ProxyRulesRedirectVia.REVERSE_PROXY
 
+    # controls behavior of proxying. Whether to simulate creation of resources
+    # when a POST request is made to a resource that doesn't match any rules..
+    proxyrules_simulate_create_on_missing: bool = False
+
     # metadata fields to inject into created resources.
     # A few template fields are available. See documentation for more details.
     created_resource_metadata: dict[str, Any] = {
@@ -74,7 +78,8 @@ class Settings(BaseSettings):
         "disable_existing_loggers": False,
         "formatters": {
             "standard": {
-                "format": "     %(levelname)s   [%(name)s] %(message)s",
+                "()": "uvicorn.logging.DefaultFormatter",
+                "fmt": "%(levelprefix)s %(message)s",
             },
         },
         "handlers": {
@@ -86,10 +91,26 @@ class Settings(BaseSettings):
             },
         },
         "loggers": {
+            "uvicorn": {
+                "handlers": ["console"],
+                "level": "INFO",
+                "propagate": False,
+            },
             "FileFixturesStrategy": {
                 "handlers": ["console"],
                 "level": "INFO",
+                "propagate": False,
             },
+            "ProxyRulesStrategy": {
+                "handlers": ["console"],
+                "level": "INFO",
+                "propagate": False,
+            },
+        },
+        "root": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
         },
     }
 
