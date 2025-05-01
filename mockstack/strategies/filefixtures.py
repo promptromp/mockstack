@@ -8,7 +8,6 @@ from fastapi import HTTPException, Request, Response, status
 from jinja2 import Environment, FileSystemLoader
 
 from mockstack.config import Settings
-from mockstack.display import ANSIColors
 from mockstack.intent import (
     looks_like_a_command,
     looks_like_a_search,
@@ -39,12 +38,9 @@ class FileFixturesStrategy(BaseStrategy, CreateMixin):
         self.env = Environment(loader=FileSystemLoader(self.templates_dir))
 
     def __str__(self) -> str:
-        HIGHLIGHT = ANSIColors.HEADER
-        ENDC = ANSIColors.ENDC
-
         return (
-            f"{HIGHLIGHT}[filefixtures]{ENDC} "
-            f"templates_dir: {HIGHLIGHT}{self.templates_dir}{ENDC}. "
+            f"[medium_purple]filefixtures[/medium_purple] "
+            f"templates_dir: [medium_purple]{self.templates_dir}[/medium_purple]. "
         )
 
     async def apply(self, request: Request) -> Response:

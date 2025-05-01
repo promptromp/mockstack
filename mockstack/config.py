@@ -103,10 +103,8 @@ class Settings(BaseSettings):
         },
         "handlers": {
             "console": {
-                "class": "logging.StreamHandler",
+                "class": "rich.logging.RichHandler",
                 "level": "INFO",
-                "formatter": "standard",
-                "stream": "ext://sys.stdout",
             },
         },
         "loggers": {
@@ -128,7 +126,7 @@ class Settings(BaseSettings):
         },
         "root": {
             "handlers": ["console"],
-            "level": "DEBUG",
+            "level": "NOTSET",
             "propagate": False,
         },
     }

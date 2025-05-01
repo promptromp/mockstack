@@ -15,7 +15,6 @@ from starlette.datastructures import Headers
 
 from mockstack.config import Settings
 from mockstack.constants import ProxyRulesRedirectVia
-from mockstack.display import ANSIColors
 from mockstack.strategies.base import BaseStrategy
 from mockstack.strategies.create_mixin import CreateMixin
 
@@ -69,14 +68,11 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         self.env = Environment()
 
     def __str__(self) -> str:
-        HIGHLIGHT = ANSIColors.HEADER
-        ENDC = ANSIColors.ENDC
-
         return (
-            f"{HIGHLIGHT}[proxyrules]{ENDC} "
-            f"rules_filename: {HIGHLIGHT}{self.rules_filename}{ENDC}. "
-            f"redirect_via: {HIGHLIGHT}{self.proxyrules_redirect_via}{ENDC}. "
-            f"simulate_create_on_missing: {HIGHLIGHT}{self.proxyrules_simulate_create_on_missing}{ENDC}"
+            f"[medium_purple]proxyrules[/medium_purple] "
+            f"rules_filename: [medium_purple]{self.rules_filename}[/medium_purple]. "
+            f"redirect_via: [medium_purple]{self.proxyrules_redirect_via}[/medium_purple]. "
+            f"simulate_create_on_missing: [medium_purple]{self.proxyrules_simulate_create_on_missing}[/medium_purple]"
         )
 
     @cached_property
@@ -105,7 +101,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             )
             if self.proxyrules_simulate_create_on_missing:
                 self.logger.info(
-                    "Simulating resource creation for missing rule for {request.method} {request.url.path}"
+                    f"Simulating resource creation for missing rule for {request.method} {request.url.path}"
                 )
                 return await self._create(
                     request,

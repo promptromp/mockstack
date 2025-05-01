@@ -2,20 +2,7 @@
 
 from unittest.mock import patch
 
-from mockstack.display import ANSIColors, announce
-
-
-def test_ansicolors_constants():
-    """Test that ANSIColors constants are defined correctly."""
-    assert ANSIColors.HEADER == "\033[95m"
-    assert ANSIColors.OKBLUE == "\033[94m"
-    assert ANSIColors.OKCYAN == "\033[96m"
-    assert ANSIColors.OKGREEN == "\033[92m"
-    assert ANSIColors.WARNING == "\033[93m"
-    assert ANSIColors.FAIL == "\033[91m"
-    assert ANSIColors.ENDC == "\033[0m"
-    assert ANSIColors.BOLD == "\033[1m"
-    assert ANSIColors.UNDERLINE == "\033[4m"
+from mockstack.display import announce
 
 
 def test_announce(app, settings):

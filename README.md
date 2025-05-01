@@ -80,4 +80,6 @@ If you are contributing to development, you will want to clone this project, and
 
 Run in development mode (for live-reload of changes when developing):
 
-    uv run -- mockstack --debug
+    uv run uvicorn --factory mockstack.main:create_app --reload
+
+Note that when you run using the uvicorn CLI, you will need to set any configuration via `.env` file or environment variables.
