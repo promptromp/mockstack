@@ -6,6 +6,8 @@
 [![CI](https://github.com/adamhadani/mockstack/actions/workflows/ci.yml/badge.svg)](https://github.com/adamhadani/mockstack/actions/workflows/ci.yml)
 [![GitHub License](https://img.shields.io/github/license/adamhadani/mockstack)](https://github.com/adamhadani/mockstack/blob/main/LICENSE)
 [![PyPI - Version](https://img.shields.io/pypi/v/mockstack)](https://pypi.org/project/mockstack/)
+[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/mockstack)](https://pypi.org/project/mockstack/)
+
 
 An API mocking workhorse :racehorse:
 
