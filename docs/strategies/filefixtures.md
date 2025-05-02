@@ -71,7 +71,8 @@ The strategy requires the following configuration:
 ```python
 settings = Settings(
     strategy="filefixtures",
-    templates_dir="/path/to/templates"
+    templates_dir="/path/to/templates",
+    filefixtures_enable_templates_for_post=True  # Optional: Enables template-based responses for POST requests
 )
 ```
 
