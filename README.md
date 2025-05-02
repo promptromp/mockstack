@@ -25,7 +25,7 @@ Use mockstack for:
 
 Highlights include:
 
-* Multiple strategies for handling requests such as Jinja2 template files with intelligent URL request-to-template routing, proxy strategy, and mixed strategies. :game_die:
+* Multiple strategies for handling requests such as [Jinja](https://jinja.palletsprojects.com/en/stable/) template files with intelligent URL request-to-template routing, proxy strategy, and mixed strategies. :game_die:
 * Observability via [OpenTelemetry](https://opentelemetry.io/) integration. Get detailed traces of your sessions instantly reported to backends such as [Grafana](https://grafana.com/), [Jaeger](https://www.jaegertracing.io/), [Zipkin](https://zipkin.io/), etc. :eyes:
 * Configurability via [pydantic-settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/) supports customizing behaviour via environment variables and a `.env` file. :flags:
 * Comprehensive unit-tests, linting and formatting coverage as well as vulnerabilities and security scanning with full CI automation to ensure stability and a high-quality codebase for production-grade use. :+1:
@@ -33,7 +33,7 @@ Highlights include:
 
 ## Installation
 
-Install using [uv](https://docs.astral.sh/uv/). This package conforms the concept of a [tool](https://docs.astral.sh/uv/concepts/tools/) and hence can simply install / run with `uvx`:
+Install using [uv](https://docs.astral.sh/uv/). This package conforms the concept of a [tool](https://docs.astral.sh/uv/concepts/tools/) and hence can simply install / run with [uvx](https://docs.astral.sh/uv/guides/tools/):
 
     uvx mockstack --help
 
