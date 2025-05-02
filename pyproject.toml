@@ -9,6 +9,14 @@ readme = "README.md"
 license = "MIT"
 license-files = ["LICEN[CS]E*"]
 keywords = ["mocking", "integration-testing", "testing", "microservices", "api"]
+authors = [{ name = "Adam Ever-Hadani", email = "mockstack.contact@gmail.com" }]
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+]
 requires-python = ">=3.11"
 dependencies = [
     "colorama>=0.4.6",
