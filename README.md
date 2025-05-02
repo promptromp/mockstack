@@ -19,7 +19,7 @@ Use mockstack for:
 
 * **Integration Testing** :ok_hand:. Creating a consistent environment for running integration tests on a single component, using fixture responses.
 
-* **LLM-powered Workflows** :alien:. Speeding up development of LLM-based workflows and tools for use with frameworks such as [LangChain](https://python.langchain.com/docs/introduction/), [LangGraph](https://www.langchain.com/langgraph) and others. When developing LLM-driven execution graphs, you often want to have a consistent response from a tool while you're tuning prompts or debugging other aspects of a particular trace. `mockstack` can give you a solid foundation for this.
+* **LLM-powered Workflows** :alien:. Speeding up development of LLM-based workflows and tools for use with frameworks such as [LangChain](https://python.langchain.com/docs/introduction/), [LangGraph](https://www.langchain.com/langgraph) and others. When developing LLM-driven execution graphs, you often want to have a consistent response from a tool while you're tuning prompts or debugging other aspects of a particular trace. **mockstack** can give you a solid foundation for this.
 
 * **Chaos Engineering** :boom:. mockstack can simulate various real-world runtime error scenarios such as timeouts, http error codes, and invalid response payloads. This can be a great way to do some upfront [Chaos Monkey](https://github.com/Netflix/chaosmonkey) type of testing on software components.
 
@@ -27,7 +27,7 @@ Highlights include:
 
 * Multiple strategies for handling requests such as Jinja2 template files with intelligent URL request-to-template routing, proxy strategy, and mixed strategies. :game_die:
 * Observability via [OpenTelemetry](https://opentelemetry.io/) integration. Get detailed traces of your sessions instantly reported to backends such as [Grafana](https://grafana.com/), [Jaeger](https://www.jaegertracing.io/), [Zipkin](https://zipkin.io/), etc. :eyes:
-* Configurability via `pydantic-settings` supports customizing behaviour via environment variables and a `.env` file. :flags:
+* Configurability via [pydantic-settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/) supports customizing behaviour via environment variables and a `.env` file. :flags:
 * Comprehensive unit-tests, linting and formatting coverage as well as vulnerabilities and security scanning with full CI automation to ensure stability and a high-quality codebase for production-grade use. :+1:
 
 
