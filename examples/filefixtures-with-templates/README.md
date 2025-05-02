@@ -14,3 +14,4 @@ We have a few example templates showcasing some of the capabilities of template-
 * Another template shows the naming convention for templates that depend on an identifier embedded in the request URL, e.g. `GET
     /someservice/api/v1/item/ae420979-33f3-4c99-bc42-9d7cdee5259e` would get routed to the template file `someservice-api-v1-item.ae420979-33f3-4c99-bc42-9d7cdee5259e.j2`.
 * Multiple identifiers in the path are also supported and would appear in filenames separated by dots, according to the order in which they appear in the URL.
+* A configuration value in controllable via `.env` / environment variables lets you also decide whether to allow using templates for POST requests or try to simulate a createion. When templates are allowed, mockstaack will first try to find a suitable template for the request based on the URL, and if it fails will fallback to the create simulation behavior.

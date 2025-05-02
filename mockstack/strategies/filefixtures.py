@@ -32,6 +32,8 @@ class FileFixturesStrategy(BaseStrategy, CreateMixin):
             raise ValueError("templates_dir is not set")
 
         self.templates_dir = Path(settings.templates_dir)
+        self.enable_templates_for_post = settings.filefixtures_enable_templates_for_post
+
         self.created_resource_metadata = settings.created_resource_metadata
         self.missing_resource_fields = settings.missing_resource_fields
 
@@ -40,7 +42,8 @@ class FileFixturesStrategy(BaseStrategy, CreateMixin):
     def __str__(self) -> str:
         return (
             f"[medium_purple]filefixtures[/medium_purple]\n "
-            f"templates_dir: [medium_purple]{self.templates_dir}[/medium_purple]. "
+            f"templates_dir: [medium_purple]{self.templates_dir}[/medium_purple].\n "
+            f"enable_templates_for_post: [medium_purple]{self.enable_templates_for_post}[/medium_purple]. "
         )
 
     async def apply(self, request: Request) -> Response:
@@ -71,6 +74,16 @@ class FileFixturesStrategy(BaseStrategy, CreateMixin):
         We also allow a configuration to specify a default intent.
 
         """
+        if self.enable_templates_for_post:
+            try:
+                return self._response_from_template(request)
+            except HTTPException as e:
+                if e.status_code == status.HTTP_404_NOT_FOUND:
+                    # If the template is not found, we try to create the resource with logic below.
+                    pass
+                else:
+                    raise e
+
         if looks_like_a_search(request):
             # Searching for resources with a complex query that cannot be expressed in a URI.
             return self._response_from_template(request)

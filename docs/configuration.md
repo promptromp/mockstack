@@ -33,6 +33,7 @@ All configuration options are prefixed with `MOCKSTACK__` when using environment
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `templates_dir` | string | - | Base directory for templates used by the strategy |
+| `filefixtures_enable_templates_for_post` | boolean | `false` | Whether to enable template-based responses for POST requests |
 
 ### ProxyRules Strategy
 

@@ -61,6 +61,13 @@ class Settings(BaseSettings):
     # base directory for templates used by strategies
     templates_dir: DirectoryPath | None = None  # type: ignore[assignment]
 
+    # whether to enable templates for POST requests.
+    # By default, templates are not used for POSTs, and instead we try to
+    # simulate a create (or search) operation. If turned on, we will first
+    # try to materialize a template for the response, and if that fails
+    # with a 404, we will then try to simulate creation of the resource.
+    filefixtures_enable_templates_for_post: CliImplicitFlag[bool] = True
+
     # rules filename for proxyrules strategy
     proxyrules_rules_filename: FilePath | None = None  # type: ignore[assignment]
 

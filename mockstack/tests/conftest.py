@@ -46,6 +46,7 @@ def settings(templates_dir, proxyrules_rules_filename):
     return Settings(
         strategy="proxyrules",
         templates_dir=templates_dir,
+        filefixtures_enable_templates_for_post=False,
         proxyrules_rules_filename=proxyrules_rules_filename,
         proxyrules_redirect_via=ProxyRulesRedirectVia.HTTP_TEMPORARY_REDIRECT,
         proxyrules_simulate_create_on_missing=False,
@@ -59,6 +60,7 @@ def settings_reverse_proxy(templates_dir, proxyrules_rules_filename):
     return Settings(
         strategy="proxyrules",
         templates_dir=templates_dir,
+        filefixtures_enable_templates_for_post=False,
         proxyrules_rules_filename=proxyrules_rules_filename,
         proxyrules_redirect_via=ProxyRulesRedirectVia.REVERSE_PROXY,
         opentelemetry=OpenTelemetrySettings(enabled=False),
@@ -71,5 +73,6 @@ def settings_filefixtures(templates_dir):
     return Settings(
         strategy="filefixtures",
         templates_dir=templates_dir,
+        filefixtures_enable_templates_for_post=False,
         opentelemetry=OpenTelemetrySettings(enabled=False),
     )
