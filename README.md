@@ -6,6 +6,8 @@
 [![CI](https://github.com/adamhadani/mockstack/actions/workflows/ci.yml/badge.svg)](https://github.com/adamhadani/mockstack/actions/workflows/ci.yml)
 [![GitHub License](https://img.shields.io/github/license/adamhadani/mockstack)](https://github.com/adamhadani/mockstack/blob/main/LICENSE)
 [![PyPI - Version](https://img.shields.io/pypi/v/mockstack)](https://pypi.org/project/mockstack/)
+[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/mockstack)](https://pypi.org/project/mockstack/)
+
 
 An API mocking workhorse :racehorse:
 
@@ -17,21 +19,21 @@ Use mockstack for:
 
 * **Integration Testing** :ok_hand:. Creating a consistent environment for running integration tests on a single component, using fixture responses.
 
-* **LLM-powered Workflows** :alien:. Speeding up development of LLM-based workflows and tools for use with frameworks such as [LangChain](https://python.langchain.com/docs/introduction/), [LangGraph](https://www.langchain.com/langgraph) and others. When developing LLM-driven execution graphs, you often want to have a consistent response from a tool while you're tuning prompts or debugging other aspects of a particular trace. `mockstack` can give you a solid foundation for this.
+* **LLM-powered Workflows** :alien:. Speeding up development of LLM-based workflows and tools for use with frameworks such as [LangChain](https://python.langchain.com/docs/introduction/), [LangGraph](https://www.langchain.com/langgraph) and others. When developing LLM-driven execution graphs, you often want to have a consistent response from a tool while you're tuning prompts or debugging other aspects of a particular trace. **mockstack** can give you a solid foundation for this.
 
-* **Chaos Engineering** :boom:. mockstack can simulate various real-world runtime error scenarios such as timeouts, http error codes, and invalid response payloads. This can be a great way to do some upfront "chaos monkey" type of testing on software components.
+* **Chaos Engineering** :boom:. mockstack can simulate various real-world runtime error scenarios such as timeouts, http error codes, and invalid response payloads. This can be a great way to do some upfront [Chaos Monkey](https://github.com/Netflix/chaosmonkey) type of testing on software components.
 
 Highlights include:
 
-* Multiple strategies for handling requests such as Jinja2 template files with intelligent URL request-to-template routing, proxy strategy, and mixed strategies. :game_die:
-* Observability via OpenTelemetry integration. Get detailed traces of your sessions instantly reported to backends such as Grafana, Jaeger, Zipkin, etc. :eyes:
-* Configurability via `pydantic-settings` supports customizing behaviour via environment variables and a `.env` file. :flags:
+* Multiple strategies for handling requests such as [Jinja](https://jinja.palletsprojects.com/en/stable/) template files with intelligent URL request-to-template routing, proxy strategy, and mixed strategies. :game_die:
+* Observability via [OpenTelemetry](https://opentelemetry.io/) integration. Get detailed traces of your sessions instantly reported to backends such as [Grafana](https://grafana.com/), [Jaeger](https://www.jaegertracing.io/), [Zipkin](https://zipkin.io/), etc. :eyes:
+* Configurability via [pydantic-settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/) supports customizing behaviour via environment variables and a `.env` file. :flags:
 * Comprehensive unit-tests, linting and formatting coverage as well as vulnerabilities and security scanning with full CI automation to ensure stability and a high-quality codebase for production-grade use. :+1:
 
 
 ## Installation
 
-Install using [uv](https://docs.astral.sh/uv/). This package conforms the concept of a [tool](https://docs.astral.sh/uv/concepts/tools/) and hence can simply install / run with `uvx`:
+Install using [uv](https://docs.astral.sh/uv/). This package conforms the concept of a [tool](https://docs.astral.sh/uv/concepts/tools/) and hence can simply install / run with [uvx](https://docs.astral.sh/uv/guides/tools/):
 
     uvx mockstack --help
 
