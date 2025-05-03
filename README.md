@@ -19,7 +19,7 @@ Use mockstack for:
 
 * **Integration Testing** :ok_hand:. Creating a consistent environment for running integration tests on a single component, using fixture responses.
 
-* **LLM-powered Workflows** :alien:. Speeding up development of LLM-based workflows and tools for use with frameworks such as [LangChain](https://python.langchain.com/docs/introduction/), [LangGraph](https://www.langchain.com/langgraph) and others. When developing LLM-driven execution graphs, you often want to have a consistent response from a tool while you're tuning prompts or debugging other aspects of a particular trace. **mockstack** can give you a solid foundation for this.
+* **LLM-powered Workflows** :alien:. Speeding up development and reducing per-token costs of LLM-based workflows and tools for use with frameworks such as [LangChain](https://python.langchain.com/docs/introduction/), [LangGraph](https://www.langchain.com/langgraph) and others. When developing LLM-driven execution graphs. Optional [Ollama](https://ollama.com/) integration allows for realistic mocking of 3rd party LLMs without changing a line of code in your project. In addition, when you want to have a consistent response from a tool while you're tuning prompts or debugging other aspects of a particular trace you can create various fixture responses with varying levels of dynamic content that is template-driven. **mockstack** can give you a solid foundation for this.
 
 * **Chaos Engineering** :boom:. mockstack can simulate various real-world runtime error scenarios such as timeouts, http error codes, and invalid response payloads. This can be a great way to do some upfront [Chaos Monkey](https://github.com/Netflix/chaosmonkey) type of testing on software components.
 
