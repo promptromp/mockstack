@@ -1,4 +1,10 @@
+# Build a docker image and publish it to DockerHub
+
 name: Publish Docker image to DockerHub
+
+permissions:
+  contents: read
+  pull-requests: write
 
 on:
   release:
