@@ -1,12 +1,11 @@
-# Use Python 3.13 as base image
-########################################################
-# Base
-########################################################
-
-FROM python:3.13.3-slim AS base
+# ---------------------------- Build Time Arguments ----------------------------
 
 # Define build argument for version
 ARG MOCKSTACK_VERSION=0.1.0
+
+# ---------------------------- Base Image --------------------------------
+
+FROM python:3.13.3-slim AS base
 
 # Install system dependencies
 RUN apt-get update && apt-get install --no-install-recommends -y \
@@ -19,11 +18,15 @@ ENV PATH="/root/.local/bin:${PATH}"
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
-########################################################
-# Builder
-########################################################
+# ---------------------------- Builder --------------------------------
 
 FROM base AS builder
+
+# Required Args ( inherited from start of file, or passed at build )
+ARG MOCKSTACK_VERSION=0.1.0
+
+# Maintainer label
+LABEL maintainer="mockstack.contact@gmail.com"
 
 # Set working directory
 WORKDIR /app
@@ -47,9 +50,7 @@ RUN uv venv && \
 
 RUN uv pip install -e .
 
-########################################################
-# Runner
-########################################################
+# ---------------------------- Runner --------------------------------
 
 FROM builder AS runner
 
