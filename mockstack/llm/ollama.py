@@ -22,15 +22,11 @@ if IS_OLLAMA_AVAILABLE:
             messages: List[Dict[str, str]],
             max_tokens: int = 4096,
             temperature: float = 0.7,
-            *args,
-            **kwargs,
         ) -> str:
             response: ChatResponse = chat(
                 model=self.model,
                 messages=messages,
                 options={"num_ctx": max_tokens, "temperature": temperature},
-                *args,
-                **kwargs,
             )
 
             return content(response)
