@@ -1,11 +1,12 @@
 # ---------------------------- Build Time Arguments ----------------------------
 
 # Define build argument for version
+ARG PYTHON_IMAGE_VERSION=3.13.3-slim
 ARG MOCKSTACK_VERSION=0.1.0
 
 # ---------------------------- Base Image --------------------------------
 
-FROM python:3.13.3-slim AS base
+FROM python:${PYTHON_IMAGE_VERSION} AS base
 
 # Install system dependencies
 RUN apt-get update && apt-get install --no-install-recommends -y \
@@ -22,8 +23,7 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
 FROM base AS builder
 
-# Required Args ( inherited from start of file, or passed at build )
-ARG MOCKSTACK_VERSION=0.1.0
+ARG MOCKSTACK_VERSION
 
 # Maintainer label
 LABEL maintainer="mockstack.contact@gmail.com"
@@ -55,7 +55,7 @@ RUN uv pip install -e .
 FROM builder AS runner
 
 # Set required environment variables for virtualenv
-ENV VIRTUAL_ENV=/app/.venv
+ENV VIRTUAL_ENV="/app/.venv"
 ENV PATH="/app/.venv/bin:$PATH"
 
 # Set default
