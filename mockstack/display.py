@@ -1,6 +1,7 @@
 """Display and logging functionality."""
 
 import logging
+from importlib import metadata
 
 from fastapi import FastAPI
 
@@ -12,8 +13,10 @@ def announce(app: FastAPI, settings: Settings):
     logger = logging.getLogger("uvicorn")
     extra = {"markup": True}
 
+    version = metadata.version("mockstack")
+
     logger.info(
-        f"[bold medium_purple]mockstack[/bold medium_purple] ready to roll. "
+        f"[bold medium_purple]mockstack[/bold medium_purple] ready to roll. version: [medium_purple]{version}[/medium_purple]. "
         f"debug: [medium_purple]{settings.debug}[/medium_purple]. "
         f"strategy: [medium_purple]{settings.strategy}[/medium_purple]. ",
         extra=extra,
