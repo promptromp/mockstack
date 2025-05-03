@@ -18,6 +18,7 @@ from mockstack.constants import ProxyRulesRedirectVia
 from mockstack.intent import looks_like_a_create
 from mockstack.strategies.base import BaseStrategy
 from mockstack.strategies.create_mixin import CreateMixin
+from mockstack.templating import templates_env_provider
 
 
 class Rule:
@@ -73,8 +74,6 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         self.simulate_create_on_missing = settings.proxyrules_simulate_create_on_missing
         self.created_resource_metadata = settings.created_resource_metadata
 
-        self.env = Environment()
-
     def __str__(self) -> str:
         return (
             f"[medium_purple]proxyrules[/medium_purple]\n "
@@ -83,6 +82,11 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             f"simulate_create_on_missing: {self.simulate_create_on_missing}.\n "
             f"reverse_proxy_timeout: {self.reverse_proxy_timeout}"
         )
+
+    @cached_property
+    def env(self) -> Environment:
+        """Jinja2 environment for the proxy rules strategy."""
+        return templates_env_provider()
 
     @cached_property
     def rules(self) -> list[Rule]:

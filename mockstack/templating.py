@@ -1,12 +1,37 @@
 """Templates related functionality."""
 
 from collections import OrderedDict
+from functools import partial
 from pathlib import Path
 from typing import Generator
 
 from fastapi import Request
+from jinja2 import Environment, FileSystemLoader
 
+from mockstack.exceptions import raise_for_missing
 from mockstack.identifiers import looks_like_id, prefixes
+
+
+def templates_env_provider(templates_dir: Path | str | None = None) -> Environment:
+    """Provide a Jinja2 environment for the templates."""
+    # TODO refactor a bit to be more generic for optional dependencies.
+    from mockstack.llm import ollama
+
+    loader = FileSystemLoader(templates_dir) if templates_dir else None
+
+    env = Environment(loader=loader)
+
+    env.filters["json_escape"] = json_escape
+
+    if ollama.IS_OLLAMA_AVAILABLE:
+        env.globals["ollama"] = ollama.ollama
+    else:
+        env.globals["ollama"] = partial(
+            raise_for_missing,
+            "Ollama is not available. Install with optional dependency mockstack[llm] to use it.",
+        )
+
+    return env
 
 
 def missing_template_detail(request: Request, *, templates_dir: Path) -> str:
@@ -21,6 +46,8 @@ def missing_template_detail(request: Request, *, templates_dir: Path) -> str:
 
 def iter_possible_template_arguments(
     request: Request,
+    *,
+    request_json: dict | None = None,
     default_identifier_key: str = "id",
     default_media_type: str = "application/json",
     default_template_name: str = "index.j2",
@@ -47,9 +74,9 @@ def iter_possible_template_arguments(
     )
     media_type = request.headers.get("Content-Type", default_media_type)
 
-    # hydrate template context with additional request details such as query params.
     context = dict(
         query=dict(request.query_params),
+        request_json=request_json,
         headers=dict(request.headers),
         **identifiers,
     )
@@ -119,3 +146,19 @@ def iter_possible_template_filenames(
         yield template_file_separator.join(name_segments) + template_file_extension
 
     yield default_template_name
+
+
+def json_escape(text: str) -> str:
+    """Escape quotes, newlines, tabs, etc. in a string.
+
+    Used as a filter in templates to make the output JSON-compliant.
+
+    """
+    return (
+        text.replace('"', '\\"')
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+        .replace("\t", "\\t")
+        .replace("\f", "\\f")
+        .replace("\v", "\\v")
+    )
