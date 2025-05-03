@@ -48,6 +48,8 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
+          build-args: |
+            MOCKSTACK_VERSION=${{ github.ref_name }}
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
