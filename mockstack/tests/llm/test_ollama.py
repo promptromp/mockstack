@@ -61,7 +61,11 @@ class TestOllamaAvailable:
             llm = OllamaLLM()
             response = llm(mock_messages)
 
-            mock_chat.assert_called_once_with(model="llama3.2", messages=mock_messages)
+            mock_chat.assert_called_once_with(
+                model="llama3.2",
+                messages=mock_messages,
+                options={"num_ctx": 4096, "temperature": 0.7},
+            )
             assert response == "This is a test response"
 
     @patch("mockstack.llm.ollama.IS_OLLAMA_AVAILABLE", True)
@@ -83,5 +87,9 @@ class TestOllamaAvailable:
         with patch("mockstack.llm.ollama.chat", mock_chat):
             response = ollama(mock_messages)
 
-            mock_chat.assert_called_once_with(model="llama3.2", messages=mock_messages)
+            mock_chat.assert_called_once_with(
+                model="llama3.2",
+                messages=mock_messages,
+                options={"num_ctx": 4096, "temperature": 0.7},
+            )
             assert response == "This is a test response"

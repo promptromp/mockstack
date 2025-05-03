@@ -49,6 +49,14 @@ markdown_extensions:
   - pymdownx.tabbed:
       alternate_style: true
 
+nav:
+  - Home: README.md
+  - Configuration: configuration.md
+  - Strategies:
+    - Overview: strategies/index.md
+    - FileFixtures: strategies/filefixtures.md
+  - LLM Integrations:
+    - Ollama: ollama.md
 
 extra:
   social:

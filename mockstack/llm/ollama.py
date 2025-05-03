@@ -17,8 +17,21 @@ if IS_OLLAMA_AVAILABLE:
         def __init__(self, model: str = "llama3.2"):
             self.model = model
 
-        def __call__(self, messages: List[Dict[str, str]]) -> str:
-            response: ChatResponse = chat(model=self.model, messages=messages)
+        def __call__(
+            self,
+            messages: List[Dict[str, str]],
+            max_tokens: int = 4096,
+            temperature: float = 0.7,
+            *args,
+            **kwargs,
+        ) -> str:
+            response: ChatResponse = chat(
+                model=self.model,
+                messages=messages,
+                options={"num_ctx": max_tokens, "temperature": temperature},
+                *args,
+                **kwargs,
+            )
 
             return content(response)
 
@@ -26,7 +39,16 @@ if IS_OLLAMA_AVAILABLE:
         """Extract the message content from the LLM response."""
         return response["message"]["content"]
 
-    def ollama(messages: List[Dict[str, str]], model: str = "llama3.2") -> str:
+    def ollama(
+        messages: List[Dict[str, str]],
+        model: str = "llama3.2",
+        *args,
+        **kwargs,
+    ) -> str:
         """Fluent interface for Ollama to be used in templates."""
 
-        return OllamaLLM(model)(messages)
+        return OllamaLLM(model)(
+            messages,
+            *args,
+            **kwargs,
+        )
