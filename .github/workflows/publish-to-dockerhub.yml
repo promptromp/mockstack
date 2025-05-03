@@ -18,11 +18,6 @@ jobs:
   docker:
     runs-on: ubuntu-latest
     steps:
-      - name: Set short git commit SHA
-        id: vars
-        run: |
-          calculatedSha=$(git rev-parse --short ${{ github.sha }})
-          echo "COMMIT_SHORT_SHA=$calculatedSha" >> $GITHUB_ENV
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v5
@@ -56,7 +51,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           build-args: |
-            MOCKSTACK_VERSION=${{ github.event_name == 'release' && github.ref_name || format('0.0.0+dev.{0}', env.COMMIT_SHORT_SHA) }}
+            MOCKSTACK_VERSION=${{ github.event_name == 'release' && github.ref_name || format('0.0.0+dev.{0}', github.sha) }}
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name == 'release' }}
           tags: ${{ steps.meta.outputs.tags }}
