@@ -16,6 +16,7 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
 
 # Install uv and add it to PATH
 ENV PATH="/root/.local/bin:${PATH}"
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
 ########################################################
