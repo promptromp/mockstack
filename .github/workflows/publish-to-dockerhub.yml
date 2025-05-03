@@ -51,7 +51,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           build-args: |
-            MOCKSTACK_VERSION=${{ github.event_name == 'release' && github.ref_name || '0.0.0+dev' }}
+            MOCKSTACK_VERSION=${{ github.event_name == 'release' && github.ref_name || format('0.0.0+dev.{0}', github.sha) }}
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name == 'release' }}
           tags: ${{ steps.meta.outputs.tags }}
