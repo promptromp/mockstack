@@ -7,11 +7,13 @@ from typing import Generator
 from fastapi import Request
 from jinja2 import Environment, FileSystemLoader
 
+from mockstack.exceptions import raise_for_missing
 from mockstack.identifiers import looks_like_id, prefixes
 
 
 def templates_env_provider(templates_dir: Path | str | None = None) -> Environment:
     """Provide a Jinja2 environment for the templates."""
+    # TODO refactor a bit to be more generic for optional dependencies.
     from mockstack.llm import ollama
 
     loader = FileSystemLoader(templates_dir) if templates_dir else None
@@ -22,6 +24,10 @@ def templates_env_provider(templates_dir: Path | str | None = None) -> Environme
 
     if ollama.IS_OLLAMA_AVAILABLE:
         env.globals["ollama"] = ollama.ollama
+    else:
+        env.globals["ollama"] = raise_for_missing(
+            "Ollama is not available. Install with optional dependency mockstack[llm] to use it."
+        )
 
     return env
 
