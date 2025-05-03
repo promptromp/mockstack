@@ -12,6 +12,7 @@ mockstack/tests
 !pyproject.toml
 !conftest.py
 !uv.lock
+!docker-entrypoint.sh
 
 **/*.pyc
 **/*~

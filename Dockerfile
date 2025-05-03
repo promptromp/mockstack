@@ -1,49 +1,70 @@
 # Use Python 3.13 as base image
-FROM python:3.13.3-slim
+########################################################
+# Base
+########################################################
+
+FROM python:3.13.3-slim AS base
 
 # Define build argument for version
 ARG MOCKSTACK_VERSION=0.1.0
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install --no-install-recommends -y \
     curl \
     git \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv and add it to PATH
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
-    echo 'export PATH="/root/.cargo/bin:$PATH"' >> /root/.bashrc && \
-    . /root/.bashrc
+ENV PATH="/root/.local/bin:${PATH}"
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+
+########################################################
+# Builder
+########################################################
+
+FROM base AS builder
 
 # Set working directory
 WORKDIR /app
 
 # Create package structure
-RUN mkdir -p /app/src/mockstack /app/templates
+RUN mkdir -p /app/src/mockstack /usr/local/share/mockstack/templates
 
 # Copy package files
 COPY mockstack /app/src/mockstack/
-COPY pyproject.toml setup.* README.md /app/
+COPY docker-entrypoint.sh pyproject.toml setup.* README.md /app/
 
-# Set version using build argument
+WORKDIR /app
+
+# Set version using build argument. Needs to happen before
+# we install the package with `pip install -e` below.
 ENV SETUPTOOLS_SCM_PRETEND_VERSION=${MOCKSTACK_VERSION}
 
 # Create and activate virtual environment, then install dependencies
-RUN . /root/.bashrc && \
-    uv venv && \
-    . .venv/bin/activate && \
-    cd /app && \
-    uv pip install -e .
+RUN uv venv && \
+    . .venv/bin/activate
 
-# Set required environment variables
-ENV MOCKSTACK__TEMPLATES_DIR=/app/templates
-ENV MOCKSTACK__FILEFIXTURES_ENABLE_TEMPLATES_FOR_POST=true
+RUN uv pip install -e .
 
-# Create a sample template file for testing
-RUN echo '{"message": "Hello from mockstack!"}' > /app/templates/index.j2
+########################################################
+# Runner
+########################################################
+
+FROM builder AS runner
+
+# Set required environment variables for virtualenv
+ENV VIRTUAL_ENV=/app/.venv
+ENV PATH="/app/.venv/bin:$PATH"
+
+# Set default
+ENV MOCKSTACK__TEMPLATES_DIR=/usr/local/share/mockstack/templates
+
+# Create a sample template file for default running of mockstack
+RUN echo '{"message": "Hello from mockstack!"}' > /usr/local/share/mockstack/templates/index.j2
 
 # Expose the default port
 EXPOSE 8000
 
 # Set the entrypoint to run the mockstack service
-ENTRYPOINT ["/bin/bash", "-c", "source /root/.bashrc && . .venv/bin/activate && cd /app && uv run mockstack"]
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
+CMD ["uv", "run", "mockstack"]
