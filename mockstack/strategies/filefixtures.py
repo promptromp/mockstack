@@ -2,21 +2,24 @@
 
 import logging
 import os
+from functools import cached_property
 from pathlib import Path
 
 from fastapi import HTTPException, Request, Response, status
-from jinja2 import Environment, FileSystemLoader
+from jinja2 import Environment
 
 from mockstack.config import Settings
 from mockstack.intent import (
     looks_like_a_command,
     looks_like_a_search,
+    wants_json,
 )
 from mockstack.strategies.base import BaseStrategy
 from mockstack.strategies.create_mixin import CreateMixin
 from mockstack.templating import (
     iter_possible_template_arguments,
     missing_template_detail,
+    templates_env_provider,
 )
 
 
@@ -37,14 +40,17 @@ class FileFixturesStrategy(BaseStrategy, CreateMixin):
         self.created_resource_metadata = settings.created_resource_metadata
         self.missing_resource_fields = settings.missing_resource_fields
 
-        self.env = Environment(loader=FileSystemLoader(self.templates_dir))
-
     def __str__(self) -> str:
         return (
             f"[medium_purple]filefixtures[/medium_purple]\n "
             f"templates_dir: [medium_purple]{self.templates_dir}[/medium_purple].\n "
             f"enable_templates_for_post: [medium_purple]{self.enable_templates_for_post}[/medium_purple]. "
         )
+
+    @cached_property
+    def env(self) -> Environment:
+        """Jinja2 environment for the filefixtures strategy."""
+        return templates_env_provider(self.templates_dir)
 
     async def apply(self, request: Request) -> Response:
         match request.method:
@@ -74,9 +80,10 @@ class FileFixturesStrategy(BaseStrategy, CreateMixin):
         We also allow a configuration to specify a default intent.
 
         """
+        request_json = (await request.json()) if wants_json(request) else None
         if self.enable_templates_for_post:
             try:
-                return self._response_from_template(request)
+                return self._response_from_template(request, request_json=request_json)
             except HTTPException as e:
                 if e.status_code == status.HTTP_404_NOT_FOUND:
                     # If the template is not found, we try to create the resource with logic below.
@@ -86,12 +93,12 @@ class FileFixturesStrategy(BaseStrategy, CreateMixin):
 
         if looks_like_a_search(request):
             # Searching for resources with a complex query that cannot be expressed in a URI.
-            return self._response_from_template(request)
+            return self._response_from_template(request, request_json=request_json)
         elif looks_like_a_command(request):
             # Executing a 'command' of some sort, like a workflow or a batch job.
             # We return a 201 CREATED status code with response from template.
             return self._response_from_template(
-                request, status_code=status.HTTP_201_CREATED
+                request, request_json=request_json, status_code=status.HTTP_201_CREATED
             )
         else:
             # simulate resource creation:
@@ -133,9 +140,15 @@ class FileFixturesStrategy(BaseStrategy, CreateMixin):
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     def _response_from_template(
-        self, request: Request, status_code: int = status.HTTP_200_OK
+        self,
+        request: Request,
+        *,
+        request_json: dict | None = None,
+        status_code: int = status.HTTP_200_OK,
     ) -> Response:
-        for template_args in iter_possible_template_arguments(request):
+        for template_args in iter_possible_template_arguments(
+            request, request_json=request_json
+        ):
             filename = self.templates_dir / template_args["name"]
             self.logger.debug("Looking for template filename: %s", filename)
             if not os.path.exists(filename):

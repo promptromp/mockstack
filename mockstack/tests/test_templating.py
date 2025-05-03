@@ -18,17 +18,32 @@ from mockstack.templating import (
             [
                 {
                     "name": "api-v1-projects.1234.j2",
-                    "context": {"projects": "1234", "query": {}, "headers": {}},
+                    "context": {
+                        "projects": "1234",
+                        "query": {},
+                        "headers": {},
+                        "request_json": None,
+                    },
                     "media_type": "application/json",
                 },
                 {
                     "name": "api-v1-projects.j2",
-                    "context": {"projects": "1234", "query": {}, "headers": {}},
+                    "context": {
+                        "projects": "1234",
+                        "query": {},
+                        "headers": {},
+                        "request_json": None,
+                    },
                     "media_type": "application/json",
                 },
                 {
                     "name": "index.j2",
-                    "context": {"projects": "1234", "query": {}, "headers": {}},
+                    "context": {
+                        "projects": "1234",
+                        "query": {},
+                        "headers": {},
+                        "request_json": None,
+                    },
                     "media_type": "application/json",
                 },
             ],
@@ -42,6 +57,7 @@ from mockstack.templating import (
                         "users": "3a4e5ad9-17ee-41af-972f-864dfccd4856",
                         "query": {},
                         "headers": {},
+                        "request_json": None,
                     },
                     "media_type": "application/json",
                 },
@@ -51,6 +67,7 @@ from mockstack.templating import (
                         "users": "3a4e5ad9-17ee-41af-972f-864dfccd4856",
                         "query": {},
                         "headers": {},
+                        "request_json": None,
                     },
                     "media_type": "application/json",
                 },
@@ -60,6 +77,7 @@ from mockstack.templating import (
                         "users": "3a4e5ad9-17ee-41af-972f-864dfccd4856",
                         "query": {},
                         "headers": {},
+                        "request_json": None,
                     },
                     "media_type": "application/json",
                 },
@@ -70,12 +88,12 @@ from mockstack.templating import (
             [
                 {
                     "name": "api-v1-projects.j2",
-                    "context": {"query": {}, "headers": {}},
+                    "context": {"query": {}, "headers": {}, "request_json": None},
                     "media_type": "application/json",
                 },
                 {
                     "name": "index.j2",
-                    "context": {"query": {}, "headers": {}},
+                    "context": {"query": {}, "headers": {}, "request_json": None},
                     "media_type": "application/json",
                 },
             ],
@@ -85,7 +103,12 @@ from mockstack.templating import (
             [
                 {
                     "name": "index.j2",
-                    "context": {"id": "1234", "query": {}, "headers": {}},
+                    "context": {
+                        "id": "1234",
+                        "query": {},
+                        "headers": {},
+                        "request_json": None,
+                    },
                     "media_type": "application/json",
                 },
             ],
