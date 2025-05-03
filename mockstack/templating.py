@@ -1,6 +1,7 @@
 """Templates related functionality."""
 
 from collections import OrderedDict
+from functools import partial
 from pathlib import Path
 from typing import Generator
 
@@ -25,8 +26,9 @@ def templates_env_provider(templates_dir: Path | str | None = None) -> Environme
     if ollama.IS_OLLAMA_AVAILABLE:
         env.globals["ollama"] = ollama.ollama
     else:
-        env.globals["ollama"] = raise_for_missing(
-            "Ollama is not available. Install with optional dependency mockstack[llm] to use it."
+        env.globals["ollama"] = partial(
+            raise_for_missing,
+            "Ollama is not available. Install with optional dependency mockstack[llm] to use it.",
         )
 
     return env
