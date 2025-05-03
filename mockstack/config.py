@@ -20,13 +20,13 @@ from mockstack.constants import (
 class OpenTelemetrySettings(BaseSettings):
     """Settings for OpenTelemetry."""
 
-    enabled: bool = False
+    enabled: CliImplicitFlag[bool] = False
 
     endpoint: str = "http://localhost:4317/"
 
     # whether to capture the response body.
     # this can be heavy, sensitive (PII) and/or not needed depending on the use case.
-    capture_response_body: bool = False
+    capture_response_body: CliImplicitFlag[bool] = False
 
 
 class Settings(BaseSettings):
