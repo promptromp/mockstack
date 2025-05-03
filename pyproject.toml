@@ -41,6 +41,11 @@ Issues = "https://github.com/adamhadani/mockstack/issues"
 [project.scripts]
 mockstack = "mockstack.main:run"
 
+[project.optional-dependencies]
+llm = [
+    "ollama>=0.4.8",
+]
+
 [dependency-groups]
 dev = [
     "mypy>=1.15.0",
