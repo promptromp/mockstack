@@ -1,3 +1,4 @@
+{% set ollama_response = ollama(request_json.messages, 'llama3.2') | json_escape %}
  {
    "id": "chatcmpl-B9MBs8CjcvOU2jLn4n570S5qMJKcT",
    "object": "chat.completion",
@@ -8,7 +9,7 @@
        "index": 0,
        "message": {
          "role": "assistant",
-         "content": "{{ ollama(request_json.messages, 'llama3.2') | json_escape }}",
+         "content": "{{ ollama_response }}",
          "refusal": null,
          "annotations": []
        },
@@ -17,9 +18,9 @@
      }
    ],
    "usage": {
-     "prompt_tokens": 19,
-     "completion_tokens": 10,
-     "total_tokens": 29,
+     "prompt_tokens": {{ request_json.messages[-1].content | length }},
+     "completion_tokens": {{ ollama_response | length }},
+     "total_tokens": {{ request_json.messages[-1].content | length + ollama_response | length }},
      "prompt_tokens_details": {
        "cached_tokens": 0,
        "audio_tokens": 0
