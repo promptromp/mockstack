@@ -43,19 +43,20 @@ The Ollama integration works by routing requests to a template file that uses th
 
 ## Integration with Templates
 
-You can also use Ollama responses within your Jinja templates. This allows you to:
+You can use Ollama responses within your Jinja templates via the provided `ollama` template function. This allows you to:
 
 1. Mix static and dynamic content
 2. Apply transformations to the LLM responses
 3. Create conditional logic based on the responses
 
 Example template structure:
+
 ```jinja
 {
   "id": "chatcmpl-123",
   "object": "chat.completion",
   "created": 1677652288,
-  "model": "{{ model }}",
+  "model": "gpt-4.1",
   "choices": [{
     "index": 0,
     "message": {
