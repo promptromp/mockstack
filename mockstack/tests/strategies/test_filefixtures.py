@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException, Request, status
+import json
 
 from mockstack.strategies.filefixtures import FileFixturesStrategy
 
@@ -27,27 +28,6 @@ def test_filefixtures_strategy_str(settings):
     """Test string representation of FileFixturesStrategy."""
     strategy = FileFixturesStrategy(settings)
     assert str(settings.templates_dir) in str(strategy)
-
-
-@pytest.mark.asyncio
-async def test_filefixtures_strategy_apply(settings, span):
-    """Test the FileFixturesStrategy apply method."""
-    strategy = FileFixturesStrategy(settings)
-    request = Request(
-        scope={
-            "type": "http",
-            "method": "GET",
-            "path": "/api/v1/projects/1234",
-            "query_string": b"",
-            "headers": [],
-        }
-    )
-    request.state.span = span
-
-    with pytest.raises(HTTPException) as exc_info:
-        await strategy.apply(request)
-
-    assert exc_info.value.status_code == 404
 
 
 @pytest.mark.asyncio
@@ -104,12 +84,13 @@ async def test_file_fixtures_strategy_apply_template_not_found(settings, span):
         )
         request.state.span = span
 
-        # Execute and Assert
-        with pytest.raises(HTTPException) as exc_info:
-            await strategy.apply(request)
+        # Execute
+        response = await strategy.apply(request)
 
-        assert exc_info.value.status_code == 404
-        assert "Template not found" in str(exc_info.value.detail)
+        # Assert
+        assert response.status_code == 404
+        assert response.media_type == "application/json"
+        assert json.loads(response.body.decode()) == settings.missing_resource_fields
 
 
 @pytest.mark.asyncio

@@ -6,6 +6,7 @@ from functools import cached_property
 from pathlib import Path
 
 from fastapi import HTTPException, Request, Response, status
+from fastapi.responses import JSONResponse
 from jinja2 import Environment
 
 from mockstack.config import Settings
@@ -18,7 +19,6 @@ from mockstack.strategies.base import BaseStrategy
 from mockstack.strategies.create_mixin import CreateMixin
 from mockstack.templating import (
     iter_possible_template_arguments,
-    missing_template_detail,
     templates_env_provider,
 )
 
@@ -165,17 +165,11 @@ class FileFixturesStrategy(BaseStrategy, CreateMixin):
             )
 
         # if we get here, we have no template to render.
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=missing_template_detail(request, templates_dir=self.templates_dir),
-        )
-        """
         # TODO: return custom fields from settings
         return JSONResponse(
             content=self.missing_resource_fields,
             status_code=status.HTTP_404_NOT_FOUND,
         )
-        """
 
     def update_opentelemetry(self, request: Request, template_args: dict) -> None:
         """Update the opentelemetry span with the file fixtures details."""
