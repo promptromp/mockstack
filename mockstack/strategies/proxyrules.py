@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 import httpx
 import yaml
 from fastapi import Request, Response, status
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from jinja2 import Environment
 from starlette.datastructures import Headers
 
@@ -73,6 +73,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         self.reverse_proxy_timeout = settings.proxyrules_reverse_proxy_timeout
         self.simulate_create_on_missing = settings.proxyrules_simulate_create_on_missing
         self.created_resource_metadata = settings.created_resource_metadata
+        self.missing_resource_fields = settings.missing_resource_fields
 
     def __str__(self) -> str:
         return (
@@ -123,8 +124,10 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
                     created_resource_metadata=self.created_resource_metadata,
                 )
             else:
-                # no rule found and we are not simulating resource creation
-                return Response(status_code=status.HTTP_404_NOT_FOUND)
+                return JSONResponse(
+                    content=self.missing_resource_fields,
+                    status_code=status.HTTP_404_NOT_FOUND,
+                )
 
         url = rule.apply(request)
         self.logger.info(f"Redirecting to: {url}")
