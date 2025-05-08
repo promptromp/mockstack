@@ -62,6 +62,7 @@ Minimal example to get you started:
 ```
 
 You can then hit `http://localhost:8000/myservice/api/myresource/23faa8cf-5daa-4bcb-8c92-27018b712aa9` (or any other UUID).
+
 This is of course just the tip of the iceberg.
 
 See also the included [.env.example](https://github.com/promptromp/mockstack/blob/main/.env.example) for more settings you are likely to find useful. You can copy that file to `.env` and fill in configuration as needed based on the given examples.
