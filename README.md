@@ -1,10 +1,10 @@
-![mockstack logo](https://github.com/adamhadani/mockstack/raw/main/docs/assets/mockstack.png)
+![mockstack logo](https://github.com/promptromp/mockstack/raw/main/docs/assets/mockstack.png)
 
 --------------------------------------------------------------------------------
 
 
-[![CI](https://github.com/adamhadani/mockstack/actions/workflows/ci.yml/badge.svg)](https://github.com/adamhadani/mockstack/actions/workflows/ci.yml)
-[![GitHub License](https://img.shields.io/github/license/adamhadani/mockstack)](https://github.com/adamhadani/mockstack/blob/main/LICENSE)
+[![CI](https://github.com/promptromp/mockstack/actions/workflows/ci.yml/badge.svg)](https://github.com/promptromp/mockstack/actions/workflows/ci.yml)
+[![GitHub License](https://img.shields.io/github/license/promptromp/mockstack)](https://github.com/promptromp/mockstack/blob/main/LICENSE)
 [![PyPI - Version](https://img.shields.io/pypi/v/mockstack)](https://pypi.org/project/mockstack/)
 [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/mockstack)](https://pypi.org/project/mockstack/)
 
@@ -44,21 +44,28 @@ or install into a persistent environment and add it to the PATH with:
 
 ## Usage
 
-See the [examples](https://github.com/adamhadani/mockstack/blob/main/examples/) directory for complete examples with documentation.
+See the [examples](https://github.com/promptromp/mockstack/blob/main/examples/) directory for complete examples with documentation.
 
-Available configuration options are [here](https://github.com/adamhadani/mockstack/blob/main/mockstack/config.py).
+Available configuration options are [here](https://github.com/promptromp/mockstack/blob/main/mockstack/config.py).
 
-Setting individual options can be done either through an `.env` file, individual environment variables, or command-line arguments. For example:
+Setting individual options can be done either through an `.env` file, individual environment variables, or command-line arguments.
+
+
+Minimal example to get you started:
 
 ```shell
-    export MOCKSTACK__STRATEGY=filefixtures
+    mkdir -p ~/mockstack-templates
+    echo '{"message": "Hello from mockstack!"}' > ~/mockstack-templates/myservice-api-myresource.j2
+
     export MOCKSTACK__TEMPLATES_DIR=~/mockstack-templates/
-    export MOCKSTACK__OPENTELEMETRY__ENABLED=true
-    export MOCKSTACK__OPENTELEMETRY__CAPTURE_RESPONSE_BODY=true
     uvx mockstack
 ```
 
-See also the included [.env.example](https://github.com/adamhadani/mockstack/blob/main/.env.example) for more examples. You can copy that file to `.env` and fill in configuration as needed based on the given examples.
+You can then hit `http://localhost:8000/myservice/api/myresource/23faa8cf-5daa-4bcb-8c92-27018b712aa9` (or any other UUID).
+
+This is of course just the tip of the iceberg.
+
+See also the included [.env.example](https://github.com/promptromp/mockstack/blob/main/.env.example) for more settings you are likely to find useful. You can copy that file to `.env` and fill in configuration as needed based on the given examples.
 
 Out of the box, you get the following behavior when using the default `filefixtures` strategy:
 
@@ -87,7 +94,7 @@ Linting, formatting, static type checks etc. are all managed via [pre-commit](ht
 
 If you are contributing to development, you will want to clone this project, and can then install it locally with:
 
-    gh repo clone adamhadani/mockstack
+    gh repo clone promptromp/mockstack
     cd mockstack/
     uv sync
     uv pip install -e .
