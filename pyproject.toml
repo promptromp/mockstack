@@ -35,8 +35,8 @@ dependencies = [
 dynamic = ["version"]
 
 [project.urls]
-Homepage = "https://github.com/adamhadani/mockstack"
-Issues = "https://github.com/adamhadani/mockstack/issues"
+Homepage = "https://github.com/promptromp/mockstack"
+Issues = "https://github.com/promptromp/mockstack/issues"
 
 [project.scripts]
 mockstack = "mockstack.main:run"

@@ -11,4 +11,4 @@ We do not currently run any bug bounty programs.
 ## Vulnerability disclosures
 
 Critical vulnerabilities will be disclosed via GitHub's
-[security advisory](https://github.com/adamhadani/mockstack/security) system.
+[security advisory](https://github.com/promptromp/mockstack/security) system.
