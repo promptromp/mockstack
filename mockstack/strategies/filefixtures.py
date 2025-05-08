@@ -165,7 +165,6 @@ class FileFixturesStrategy(BaseStrategy, CreateMixin):
             )
 
         # if we get here, we have no template to render.
-        # TODO: return custom fields from settings
         return JSONResponse(
             content=self.missing_resource_fields,
             status_code=status.HTTP_404_NOT_FOUND,
