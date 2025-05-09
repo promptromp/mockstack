@@ -62,7 +62,13 @@ def looks_like_a_create(request: Request) -> bool:
     """
     return any(
         (
-            request.method == "POST",
+            request.method == "POST"
+            and not any(
+                (
+                    looks_like_a_search(request),
+                    looks_like_a_command(request),
+                )
+            ),
             request.url.path.endswith("/create"),
         ),
     )
