@@ -43,6 +43,8 @@ def looks_like_a_command(request: Request) -> bool:
         (
             request.url.path.endswith("_command"),
             request.url.path.endswith("/command"),
+            request.url.path.endswith("_cmd"),
+            request.url.path.endswith("/cmd"),
             request.url.path.endswith("_request"),
             request.url.path.endswith("/request"),
             request.url.path.endswith("_run"),
