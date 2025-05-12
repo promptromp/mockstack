@@ -28,6 +28,7 @@ def looks_like_a_search(request: Request) -> bool:
             request.url.path.endswith("_search"),
             request.url.path.endswith("/search"),
             request.url.path.endswith("_query"),
+            request.url.path.endswith("/query"),
         )
     )
 
