@@ -47,4 +47,4 @@ def version():
     from importlib.metadata import version
 
     pkg_version = version("mockstack")
-    print(f"mockstack {pkg_version}")
+    print(f"mockstack v{pkg_version}")
