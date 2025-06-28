@@ -36,11 +36,11 @@ repos:
   hooks:
     - id: mypy
       additional_dependencies: [types-pyyaml>=6.0.12]
-#- repo: local
-#  hooks:
-#  - id: pytest
-#    name: pytest [with coverage, without slow]
-#    entry: bash -ec "uv run python -m pytest --cov=mockstack mockstack/tests --cov-fail-under='85' -m 'not slow'"
-#    language: system
-#    types: [python]
-#    pass_filenames: false
+- repo: local
+  hooks:
+  - id: pytest
+    name: pytest [with coverage, without slow]
+    entry: bash -ec "uv run python -m pytest --cov=mockstack mockstack/tests --cov-fail-under='85' -m 'not slow'"
+    language: system
+    types: [python]
+    pass_filenames: false

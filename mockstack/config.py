@@ -90,6 +90,9 @@ class Settings(BaseSettings):
         "updatedAt": "{{ utcnow().isoformat() }}",
         "createdBy": "{{ request.headers.get('X-User-Id', uuid4()) }}",
         "status": dict(code="OK", error_code=None),
+        "code": 201,
+        "retryable": True,
+        "message": "nothing",
     }
 
     # fields to inject into missing resources response json.
