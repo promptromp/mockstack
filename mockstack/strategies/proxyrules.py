@@ -130,7 +130,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
                 )
 
         url = rule.apply(request)
-        self.logger.info(f"Redirecting to: {url}")
+        self.logger.info(f"[rule:{rule.name}] Redirecting to: {url}")
         self.update_opentelemetry(request, rule, url)
 
         match self.redirect_via:

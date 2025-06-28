@@ -68,8 +68,6 @@ def command_paths():
     return [
         "/api/_command",
         "/api/command",
-        "/api/_request",
-        "/api/request",
         "/api/_run",
         "/api/run",
         "/api/_execute",
