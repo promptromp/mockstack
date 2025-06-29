@@ -68,12 +68,13 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
 
     def __init__(self, settings: Settings, *args, **kwargs):
         super().__init__(settings, *args, **kwargs)
-        self.rules_filename = settings.proxyrules_rules_filename
-        self.redirect_via = settings.proxyrules_redirect_via
-        self.reverse_proxy_timeout = settings.proxyrules_reverse_proxy_timeout
-        self.simulate_create_on_missing = settings.proxyrules_simulate_create_on_missing
         self.created_resource_metadata = settings.created_resource_metadata
         self.missing_resource_fields = settings.missing_resource_fields
+        self.redirect_via = settings.proxyrules_redirect_via
+        self.reverse_proxy_timeout = settings.proxyrules_reverse_proxy_timeout
+        self.rules_filename = settings.proxyrules_rules_filename
+        self.simulate_create_on_missing = settings.proxyrules_simulate_create_on_missing
+        self.verify_ssl_certificates = settings.proxyrules_verify_ssl_certificates
 
     def __str__(self) -> str:
         return (
@@ -81,7 +82,8 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             f"rules_filename: {self.rules_filename}.\n "
             f"redirect_via: [medium_purple]{self.redirect_via}[/medium_purple].\n "
             f"simulate_create_on_missing: {self.simulate_create_on_missing}.\n "
-            f"reverse_proxy_timeout: {self.reverse_proxy_timeout}"
+            f"reverse_proxy_timeout: {self.reverse_proxy_timeout}\n "
+            f"verify_ssl_certificates: {self.verify_ssl_certificates}\n "
         )
 
     @cached_property
@@ -153,7 +155,9 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
 
     async def reverse_proxy(self, request: Request, url: str) -> Response:
         """Reverse proxy the request to the target URL."""
-        async with httpx.AsyncClient(timeout=self.reverse_proxy_timeout) as client:
+        async with httpx.AsyncClient(
+            timeout=self.reverse_proxy_timeout, verify=self.verify_ssl_certificates
+        ) as client:
             request_content = await request.body()
             request_headers = self.reverse_proxy_headers(request.headers, url=url)
             req = client.build_request(
