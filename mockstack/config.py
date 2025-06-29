@@ -75,12 +75,17 @@ class Settings(BaseSettings):
     # or reverse proxy the request to the target URL "silently".
     proxyrules_redirect_via: ProxyRulesRedirectVia = ProxyRulesRedirectVia.REVERSE_PROXY
 
-    # Default timeout for reverse proxy requests. given in seconds. None disables timeouts.
+    # default timeout for reverse proxy requests. given in seconds. None disables timeouts.
     proxyrules_reverse_proxy_timeout: float | None = 10.0
 
     # controls behavior of proxying. Whether to simulate creation of resources
     # when a POST request is made to a resource that doesn't match any rules..
     proxyrules_simulate_create_on_missing: CliImplicitFlag[bool] = False
+
+    # controls behavior of proxying. Whether to verify SSL certificates.
+    # this is useful for testing against services that use self-signed certificates.
+    # disable with caution!
+    proxyrules_verify_ssl_certificates: CliImplicitFlag[bool] = True
 
     # metadata fields to inject into created resources.
     # A few template fields are available. See documentation for more details.
