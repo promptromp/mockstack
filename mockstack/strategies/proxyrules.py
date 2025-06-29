@@ -82,7 +82,8 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             f"rules_filename: {self.rules_filename}.\n "
             f"redirect_via: [medium_purple]{self.redirect_via}[/medium_purple].\n "
             f"simulate_create_on_missing: {self.simulate_create_on_missing}.\n "
-            f"reverse_proxy_timeout: {self.reverse_proxy_timeout}"
+            f"reverse_proxy_timeout: {self.reverse_proxy_timeout}\n "
+            f"verify_ssl_certificates: {self.verify_ssl_certificates}\n "
         )
 
     @cached_property
