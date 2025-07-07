@@ -8,7 +8,7 @@ from starlette.responses import Response, StreamingResponse
 
 from mockstack.config import OpenTelemetrySettings, Settings
 from mockstack.telemetry import (
-    extract_body,
+    extract_response_body,
     opentelemetry_provider,
     span_name_for,
     with_request_attributes,
@@ -147,13 +147,13 @@ async def test_extract_body():
     # Test with bytes content
     bytes_content = [b"part1", b"part2", b"part3"]
     response = StreamingResponse(content=iter(bytes_content))
-    body = await extract_body(response)
+    body = await extract_response_body(response)
     assert body == "part1part2part3"
 
     # Test with string content
     str_content = ["part1", "part2", "part3"]
     response = StreamingResponse(content=iter(str_content))
-    body = await extract_body(response)
+    body = await extract_response_body(response)
     assert body == "part1part2part3"
 
 
