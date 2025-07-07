@@ -276,7 +276,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         except Exception as e:
             self.logger.error(f"Error rendering template {template_path}: {e}")
             return JSONResponse(
-                content={"error": f"Template rendering error: {str(e)}"},
+                content={"error": "An internal error occurred while rendering the template."},
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
