@@ -17,7 +17,7 @@ from jinja2 import Environment
 from starlette.datastructures import Headers
 
 from mockstack.config import Settings
-from mockstack.constants import ProxyRulesRedirectVia
+from mockstack.constants import PROXYRULES_FILE_TEMPLATE_PREFIX, ProxyRulesRedirectVia
 from mockstack.intent import looks_like_a_create
 from mockstack.strategies.base import BaseStrategy
 from mockstack.strategies.create_mixin import CreateMixin
@@ -95,9 +95,9 @@ class Rule:
         result = self._url_for(path)
 
         # Check if the replacement is a file template
-        if result.startswith("file:///"):
+        if result.startswith(PROXYRULES_FILE_TEMPLATE_PREFIX):
             # Extract the file path from the file:/// URL
-            file_path = result[7:]
+            file_path = result[len(PROXYRULES_FILE_TEMPLATE_PREFIX) - 1 :]
 
             # Create template context from request
             template_context = self._create_template_context(request)
@@ -276,7 +276,9 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         except Exception as e:
             self.logger.error(f"Error rendering template {template_path}: {e}")
             return JSONResponse(
-                content={"error": "An internal error occurred while rendering the template."},
+                content={
+                    "error": "An internal error occurred while rendering the template."
+                },
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
