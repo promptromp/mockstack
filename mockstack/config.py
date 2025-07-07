@@ -24,6 +24,8 @@ class OpenTelemetrySettings(BaseSettings):
 
     endpoint: str = "http://localhost:4317/"
 
+    capture_request_body: CliImplicitFlag[bool] = False
+
     # whether to capture the response body.
     # this can be heavy, sensitive (PII) and/or not needed depending on the use case.
     capture_response_body: CliImplicitFlag[bool] = False
@@ -95,6 +97,9 @@ class Settings(BaseSettings):
         "updatedAt": "{{ utcnow().isoformat() }}",
         "createdBy": "{{ request.headers.get('X-User-Id', uuid4()) }}",
         "status": dict(code="OK", error_code=None),
+        "code": 201,
+        "message": "OK",
+        "retryable": True,
     }
 
     # fields to inject into missing resources response json.

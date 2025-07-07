@@ -54,6 +54,17 @@ def with_request_attributes(
     return span
 
 
+async def with_request_body(request: Request, span: Span) -> Span:
+    """Add the request body to the span."""
+    body = await request.body()
+
+    # for semantics of payload attribute naming see:
+    # https://github.com/open-telemetry/oteps/pull/234
+    span.set_attribute("http.request.body", body)
+
+    return span
+
+
 def with_response_attributes(
     response: Response, span: Span, *, sensitive_headers: List[str] = []
 ) -> Span:
@@ -78,7 +89,7 @@ async def with_response_body(
     response: StreamingResponse, span: Span
 ) -> Tuple[Response, Span]:
     """Add the response body to the span."""
-    body = await extract_body(response)
+    body = await extract_response_body(response)
 
     # for semantics of payload attribute naming see:
     # https://github.com/open-telemetry/oteps/pull/234
@@ -96,7 +107,7 @@ async def with_response_body(
     return _response, span
 
 
-async def extract_body(response: StreamingResponse) -> str:
+async def extract_response_body(response: StreamingResponse) -> str:
     """Extract the body of a response."""
 
     async def read_response_body(response: StreamingResponse) -> bytes:
