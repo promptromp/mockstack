@@ -2,7 +2,10 @@
 
 import logging
 import re
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from functools import cached_property
+from pathlib import Path
 from typing import Self
 from urllib.parse import urlparse
 
@@ -14,11 +17,44 @@ from jinja2 import Environment
 from starlette.datastructures import Headers
 
 from mockstack.config import Settings
-from mockstack.constants import ProxyRulesRedirectVia
+from mockstack.constants import PROXYRULES_FILE_TEMPLATE_PREFIX, ProxyRulesRedirectVia
 from mockstack.intent import looks_like_a_create
 from mockstack.strategies.base import BaseStrategy
 from mockstack.strategies.create_mixin import CreateMixin
-from mockstack.templating import templates_env_provider
+from mockstack.templating import (
+    templates_env_provider,
+    parse_template_name_segments_and_identifiers,
+)
+
+
+class RuleResult(ABC):
+    """Base class for rule application results."""
+
+    @abstractmethod
+    def get_result_type(self) -> str:
+        """Return the type of result."""
+        pass
+
+
+@dataclass
+class URLRuleResult(RuleResult):
+    """Result for URL-based rules."""
+
+    url: str
+
+    def get_result_type(self) -> str:
+        return "url"
+
+
+@dataclass
+class TemplateRuleResult(RuleResult):
+    """Result for template-based rules."""
+
+    template_path: str
+    template_context: dict
+
+    def get_result_type(self) -> str:
+        return "template"
 
 
 class Rule:
@@ -53,12 +89,43 @@ class Rule:
 
         return re.match(self.pattern, request.url.path) is not None
 
-    def apply(self, request: Request) -> str:
+    def apply(self, request: Request) -> RuleResult:
         """Apply the rule to the request."""
-        return self._url_for(request.url.path)
+        path = request.url.path
+        result = self._url_for(path)
+
+        # Check if the replacement is a file template
+        if result.startswith(PROXYRULES_FILE_TEMPLATE_PREFIX):
+            # Extract the file path from the file:/// URL
+            file_path = result[len(PROXYRULES_FILE_TEMPLATE_PREFIX) - 1 :]
+
+            # Create template context from request
+            template_context = self._create_template_context(request)
+
+            return TemplateRuleResult(
+                template_path=file_path,
+                template_context=template_context,
+            )
+        else:
+            # Regular URL replacement
+            return URLRuleResult(url=result)
 
     def _url_for(self, path: str) -> str:
         return re.sub(self.pattern, self.replacement, path)
+
+    def _create_template_context(self, request: Request) -> dict:
+        """Create template context from the request, using the same logic as templating.py."""
+        path = request.url.path
+        name_segments, identifiers = parse_template_name_segments_and_identifiers(
+            path, default_identifier_key="id"
+        )
+        return {
+            "query": dict(request.query_params),
+            "headers": dict(request.headers),
+            "path": request.url.path,
+            "method": request.method,
+            **identifiers,
+        }
 
 
 class ProxyRulesStrategy(BaseStrategy, CreateMixin):
@@ -112,46 +179,108 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
     async def apply(self, request: Request) -> Response:
         rule = self.rule_for(request)
         if rule is None:
-            self.logger.warning(
-                f"No rule found for request: {request.method} {request.url.path}"
+            return await self.handle_missing_rule(request)
+
+        result = rule.apply(request)
+        self.logger.info(f"[rule:{rule.name}] Result: {result}")
+
+        # Handle template results
+        if isinstance(result, TemplateRuleResult):
+            return await self.handle_template_result(request, rule, result)
+        elif isinstance(result, URLRuleResult):
+            return await self.handle_url_result(request, rule, result)
+        else:
+            raise ValueError(f"Unknown result type: {type(result)}")
+
+    async def handle_missing_rule(self, request: Request) -> Response:
+        """Handle a missing rule."""
+        self.logger.warning(
+            f"No rule found for request: {request.method} {request.url.path}"
+        )
+
+        if self.simulate_create_on_missing and looks_like_a_create(request):
+            self.logger.info(
+                f"Simulating resource creation for missing rule for {request.method} {request.url.path}"
+            )
+            return await self._create(
+                request,
+                env=self.env,
+                created_resource_metadata=self.created_resource_metadata,
+            )
+        else:
+            return JSONResponse(
+                content=self.missing_resource_fields,
+                status_code=status.HTTP_404_NOT_FOUND,
             )
 
-            if self.simulate_create_on_missing and looks_like_a_create(request):
-                self.logger.info(
-                    f"Simulating resource creation for missing rule for {request.method} {request.url.path}"
-                )
-                return await self._create(
-                    request,
-                    env=self.env,
-                    created_resource_metadata=self.created_resource_metadata,
-                )
-            else:
-                return JSONResponse(
-                    content=self.missing_resource_fields,
-                    status_code=status.HTTP_404_NOT_FOUND,
-                )
-
-        url = rule.apply(request)
-        self.logger.info(f"[rule:{rule.name}] Redirecting to: {url}")
-        self.update_opentelemetry(request, rule, url)
+    async def handle_url_result(
+        self, request: Request, rule: Rule, result: URLRuleResult
+    ) -> Response:
+        """Handle URL results by redirecting to the target URL."""
+        self.update_opentelemetry(request, rule, result.url)
 
         match self.redirect_via:
             case ProxyRulesRedirectVia.HTTP_TEMPORARY_REDIRECT:
                 return RedirectResponse(
-                    url=url, status_code=status.HTTP_307_TEMPORARY_REDIRECT
+                    url=result.url, status_code=status.HTTP_307_TEMPORARY_REDIRECT
                 )
 
             case ProxyRulesRedirectVia.HTTP_PERMANENT_REDIRECT:
                 return RedirectResponse(
-                    url=url, status_code=status.HTTP_301_MOVED_PERMANENTLY
+                    url=result.url, status_code=status.HTTP_301_MOVED_PERMANENTLY
                 )
 
             case ProxyRulesRedirectVia.REVERSE_PROXY:
-                response = await self.reverse_proxy(request, url)
+                response = await self.reverse_proxy(request, result.url)
                 return response
 
             case _:
                 raise ValueError(f"Invalid redirect via value: {self.redirect_via=}")
+
+    async def handle_template_result(
+        self, request: Request, rule: Rule, result: TemplateRuleResult
+    ) -> Response:
+        """Handle template results by rendering the template file."""
+        template_path = Path(result.template_path)
+
+        if not template_path.exists():
+            self.logger.error(f"Template file not found: {template_path}")
+            return JSONResponse(
+                content={"error": f"Template file not found: {template_path}"},
+                status_code=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            # Read the template file content
+            with open(template_path, "r") as f:
+                template_content = f.read()
+
+            # Create a template from the content
+            template = self.env.from_string(template_content)
+
+            # Render the template with context
+            rendered_content = template.render(**result.template_context)
+
+            # Determine content type based on file extension
+            content_type = self._get_content_type(template_path)
+
+            # Update opentelemetry with template info
+            self.update_opentelemetry_template(request, rule, result)
+
+            return Response(
+                content=rendered_content,
+                media_type=content_type,
+                status_code=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            self.logger.error(f"Error rendering template {template_path}: {e}")
+            return JSONResponse(
+                content={
+                    "error": "An internal error occurred while rendering the template."
+                },
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
     async def reverse_proxy(self, request: Request, url: str) -> Response:
         """Reverse proxy the request to the target URL."""
@@ -186,6 +315,34 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         _headers["host"] = urlparse(url).netloc
 
         return _headers
+
+    def _get_content_type(self, template_path: Path) -> str:
+        """Determine content type based on file extension."""
+        suffix = template_path.suffix.lower()
+        content_types = {
+            ".json": "application/json",
+            ".xml": "application/xml",
+            ".html": "text/html",
+            ".txt": "text/plain",
+            ".yaml": "application/x-yaml",
+            ".yml": "application/x-yaml",
+        }
+        return content_types.get(suffix, "text/plain")
+
+    def update_opentelemetry_template(
+        self, request: Request, rule: Rule, result: TemplateRuleResult
+    ) -> None:
+        """Update the opentelemetry span with template-specific details."""
+        span = request.state.span
+        if rule.name is not None:
+            span.set_attribute("mockstack.proxyrules.rule_name", rule.name)
+        if rule.method is not None:
+            span.set_attribute("mockstack.proxyrules.rule_method", rule.method)
+
+        span.set_attribute("mockstack.proxyrules.rule_pattern", rule.pattern)
+        span.set_attribute("mockstack.proxyrules.rule_replacement", rule.replacement)
+        span.set_attribute("mockstack.proxyrules.template_path", result.template_path)
+        span.set_attribute("mockstack.proxyrules.result_type", "template")
 
     def update_opentelemetry(self, request: Request, rule: Rule, url: str) -> None:
         """Update the opentelemetry span with the proxy rules rule details."""

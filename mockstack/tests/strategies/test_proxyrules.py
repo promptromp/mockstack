@@ -1,5 +1,6 @@
 """Unit tests for the proxyrules module."""
 
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -9,7 +10,12 @@ from fastapi.responses import RedirectResponse
 from starlette.datastructures import Headers
 
 from mockstack.constants import ProxyRulesRedirectVia
-from mockstack.strategies.proxyrules import ProxyRulesStrategy, Rule
+from mockstack.strategies.proxyrules import (
+    ProxyRulesStrategy,
+    Rule,
+    URLRuleResult,
+    TemplateRuleResult,
+)
 
 
 def test_rule_from_dict():
@@ -113,9 +119,35 @@ def test_rule_apply(pattern, replacement, path, expected_url):
             "headers": [],
         }
     )
-    url = rule.apply(request)
-    assert isinstance(url, str)
-    assert url == expected_url
+    result = rule.apply(request)
+    assert isinstance(result, URLRuleResult)
+    assert result.get_result_type() == "url"
+    assert result.url == expected_url
+
+
+def test_rule_apply_template():
+    """Test the rule application logic for template files."""
+    rule = Rule(
+        pattern=r"/api/v1/projects/(\d+)",
+        replacement=r"file:///path/to/template.json",
+    )
+    request = Request(
+        scope={
+            "type": "http",
+            "method": "GET",
+            "path": "/api/v1/projects/1234",
+            "query_string": b"",
+            "headers": [],
+        }
+    )
+    result = rule.apply(request)
+    assert isinstance(result, TemplateRuleResult)
+    assert result.get_result_type() == "template"
+    assert result.template_path == "/path/to/template.json"
+    assert result.template_context is not None
+    # The context should contain the extracted project ID from the path
+    assert "projects" in result.template_context
+    assert result.template_context["projects"] == "1234"
 
 
 def test_proxy_rules_strategy_load_rules(settings):
@@ -196,6 +228,58 @@ async def test_proxy_rules_strategy_apply_no_match(settings, span):
     request.state.span = span
     response = await strategy.apply(request)
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_proxy_rules_strategy_apply_template(settings, span, tmp_path):
+    """Test applying strategy with template rendering."""
+    # Create a template file
+    template_file = tmp_path / "template.json"
+    template_file.write_text(
+        '{"projects": "{{ projects }}", "name": "Project {{ projects }}"}'
+    )
+
+    # Create a rule that points to the template file
+    rule_data = {
+        "pattern": r"/api/v1/projects/(\d+)",
+        "replacement": f"file:///{template_file}",
+        "name": "test_template_rule",
+    }
+
+    # Mock the rule_for method to return our test rule
+    strategy = ProxyRulesStrategy(settings)
+    test_rule = Rule.from_dict(rule_data)
+
+    with patch.object(strategy, "rule_for", return_value=test_rule):
+        request = Request(
+            scope={
+                "type": "http",
+                "method": "GET",
+                "path": "/api/v1/projects/1234",
+                "query_string": b"",
+                "headers": [],
+            }
+        )
+        request.state.span = span
+        response = await strategy.apply(request)
+
+        assert response.status_code == 200
+        assert response.media_type == "application/json"
+        assert response.body.decode() == '{"projects": "1234", "name": "Project 1234"}'
+
+
+def test_proxy_rules_strategy_get_content_type(settings):
+    """Test content type detection based on file extension."""
+    strategy = ProxyRulesStrategy(settings)
+
+    # Test various file extensions
+    assert strategy._get_content_type(Path("file.json")) == "application/json"
+    assert strategy._get_content_type(Path("file.xml")) == "application/xml"
+    assert strategy._get_content_type(Path("file.html")) == "text/html"
+    assert strategy._get_content_type(Path("file.txt")) == "text/plain"
+    assert strategy._get_content_type(Path("file.yaml")) == "application/x-yaml"
+    assert strategy._get_content_type(Path("file.yml")) == "application/x-yaml"
+    assert strategy._get_content_type(Path("file.unknown")) == "text/plain"
 
 
 @pytest.mark.asyncio
