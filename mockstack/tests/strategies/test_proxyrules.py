@@ -1,5 +1,6 @@
 """Unit tests for the proxyrules module."""
 
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -270,8 +271,6 @@ async def test_proxy_rules_strategy_apply_template(settings, span, tmp_path):
 def test_proxy_rules_strategy_get_content_type(settings):
     """Test content type detection based on file extension."""
     strategy = ProxyRulesStrategy(settings)
-
-    from pathlib import Path
 
     # Test various file extensions
     assert strategy._get_content_type(Path("file.json")) == "application/json"
