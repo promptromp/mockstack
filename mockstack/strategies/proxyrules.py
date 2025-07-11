@@ -1,12 +1,8 @@
 """Strategy for using proxy rules."""
 
 import logging
-import re
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
-from typing import Self
 from urllib.parse import urlparse
 
 import httpx
@@ -17,115 +13,26 @@ from jinja2 import Environment
 from starlette.datastructures import Headers
 
 from mockstack.config import Settings
-from mockstack.constants import PROXYRULES_FILE_TEMPLATE_PREFIX, ProxyRulesRedirectVia
+from mockstack.constants import CONTENT_ENCODING_COMPRESSED, ProxyRulesRedirectVia
 from mockstack.intent import looks_like_a_create
+from mockstack.rules import Rule, TemplateRuleResult, URLRuleResult
 from mockstack.strategies.base import BaseStrategy
 from mockstack.strategies.create_mixin import CreateMixin
-from mockstack.templating import (
-    templates_env_provider,
-    parse_template_name_segments_and_identifiers,
-)
+from mockstack.templating import templates_env_provider
 
 
-class RuleResult(ABC):
-    """Base class for rule application results."""
+def maybe_update_headers(
+    response_headers: Headers, request_headers: Headers
+) -> Headers:
+    """Update the response headers if needed, e.g. to adjust for compression etc."""
+    _headers = response_headers.copy()
 
-    @abstractmethod
-    def get_result_type(self) -> str:
-        """Return the type of result."""
-        pass
+    if _headers.get("content-encoding") in CONTENT_ENCODING_COMPRESSED:
+        # If the response is compressed, we need to remove the content-encoding header
+        # since httpx will automatically decompress the response while proxying.
+        _headers["content-encoding"] = "identity"
 
-
-@dataclass
-class URLRuleResult(RuleResult):
-    """Result for URL-based rules."""
-
-    url: str
-
-    def get_result_type(self) -> str:
-        return "url"
-
-
-@dataclass
-class TemplateRuleResult(RuleResult):
-    """Result for template-based rules."""
-
-    template_path: str
-    template_context: dict
-
-    def get_result_type(self) -> str:
-        return "template"
-
-
-class Rule:
-    """A rule for the proxy rules strategy."""
-
-    def __init__(
-        self,
-        pattern: str,
-        replacement: str,
-        method: str | None = None,
-        name: str | None = None,
-    ):
-        self.pattern = pattern
-        self.replacement = replacement
-        self.method = method
-        self.name = name
-
-    @classmethod
-    def from_dict(cls, data: dict[str, str]) -> Self:
-        return cls(
-            pattern=data["pattern"],
-            replacement=data["replacement"],
-            method=data.get("method", None),
-            name=data.get("name", None),
-        )
-
-    def matches(self, request: Request) -> bool:
-        """Check if the rule matches the request."""
-        if self.method is not None and request.method.lower() != self.method.lower():
-            # if rule is limited to a specific HTTP method, validate first.
-            return False
-
-        return re.match(self.pattern, request.url.path) is not None
-
-    def apply(self, request: Request) -> RuleResult:
-        """Apply the rule to the request."""
-        path = request.url.path
-        result = self._url_for(path)
-
-        # Check if the replacement is a file template
-        if result.startswith(PROXYRULES_FILE_TEMPLATE_PREFIX):
-            # Extract the file path from the file:/// URL
-            file_path = result[len(PROXYRULES_FILE_TEMPLATE_PREFIX) - 1 :]
-
-            # Create template context from request
-            template_context = self._create_template_context(request)
-
-            return TemplateRuleResult(
-                template_path=file_path,
-                template_context=template_context,
-            )
-        else:
-            # Regular URL replacement
-            return URLRuleResult(url=result)
-
-    def _url_for(self, path: str) -> str:
-        return re.sub(self.pattern, self.replacement, path)
-
-    def _create_template_context(self, request: Request) -> dict:
-        """Create template context from the request, using the same logic as templating.py."""
-        path = request.url.path
-        name_segments, identifiers = parse_template_name_segments_and_identifiers(
-            path, default_identifier_key="id"
-        )
-        return {
-            "query": dict(request.query_params),
-            "headers": dict(request.headers),
-            "path": request.url.path,
-            "method": request.method,
-            **identifiers,
-        }
+    return _headers
 
 
 class ProxyRulesStrategy(BaseStrategy, CreateMixin):
@@ -299,12 +206,13 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
 
             resp = await client.send(req, stream=False)
             content = resp.read()
+            response_headers = maybe_update_headers(resp.headers, request.headers)
 
             return Response(
                 content=content,
                 status_code=resp.status_code,
-                headers=resp.headers,
-                media_type=resp.headers.get("content-type"),
+                headers=response_headers,
+                media_type=response_headers.get("content-type"),
             )
 
     def reverse_proxy_headers(self, headers: Headers, url: str) -> Headers:
