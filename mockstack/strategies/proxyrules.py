@@ -25,7 +25,7 @@ from mockstack.templating import templates_env_provider
 def maybe_update_response_headers(
     response_headers: ResponseHeaders,
     *,
-    request_headers: Headers,
+    content_length: int,
 ) -> ResponseHeaders:
     """Update the response headers if needed, e.g. to adjust for compression etc."""
     _headers = response_headers.copy()
@@ -34,6 +34,8 @@ def maybe_update_response_headers(
         # If the response is compressed, we need to remove the content-encoding header
         # since httpx will automatically decompress the response while proxying.
         _headers["content-encoding"] = "identity"
+        # content length needs to be adjusted as well for uncompressed content.
+        _headers["content-length"] = str(content_length)
 
     return _headers
 
@@ -209,9 +211,10 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
 
             resp = await client.send(req, stream=False)
             content = resp.read()
+
             response_headers = maybe_update_response_headers(
                 resp.headers,
-                request_headers=request.headers,
+                content_length=len(content),
             )
 
             return Response(
