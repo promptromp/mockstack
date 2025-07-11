@@ -13,7 +13,7 @@ from mockstack.constants import ProxyRulesRedirectVia
 from mockstack.strategies.proxyrules import (
     ProxyRulesStrategy,
     Rule,
-    maybe_update_headers,
+    maybe_update_response_headers,
 )
 
 
@@ -359,14 +359,14 @@ async def test_proxy_rules_strategy_reverse_proxy(settings_reverse_proxy, span):
 
         mock_client.send.assert_called_once()
 
-    def test_maybe_update_headers_updates_content_encoding():
-        """Test maybe_update_headers updates content-encoding."""
+    def test_maybe_update_response_headers_updates_content_encoding():
+        """Test maybe_update_response_headers updates content-encoding."""
         headers = Headers(
             {"content-encoding": "gzip", "content-type": "application/json"}
         )
         request_headers = Headers({"accept-encoding": "gzip"})
 
-        updated_headers = maybe_update_headers(headers, request_headers)
+        updated_headers = maybe_update_response_headers(headers, request_headers)
 
         assert updated_headers["content-encoding"] == "identity"
         assert updated_headers["content-type"] == "application/json"

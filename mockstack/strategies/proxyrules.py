@@ -9,6 +9,7 @@ import httpx
 import yaml
 from fastapi import Request, Response, status
 from fastapi.responses import JSONResponse, RedirectResponse
+from httpx import Headers as ResponseHeaders
 from jinja2 import Environment
 from starlette.datastructures import Headers
 
@@ -21,9 +22,11 @@ from mockstack.strategies.create_mixin import CreateMixin
 from mockstack.templating import templates_env_provider
 
 
-def maybe_update_headers(
-    response_headers: Headers, request_headers: Headers
-) -> Headers:
+def maybe_update_response_headers(
+    response_headers: ResponseHeaders,
+    *,
+    request_headers: Headers,
+) -> ResponseHeaders:
     """Update the response headers if needed, e.g. to adjust for compression etc."""
     _headers = response_headers.copy()
 
@@ -206,7 +209,10 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
 
             resp = await client.send(req, stream=False)
             content = resp.read()
-            response_headers = maybe_update_headers(resp.headers, request.headers)
+            response_headers = maybe_update_response_headers(
+                resp.headers,
+                request_headers=request.headers,
+            )
 
             return Response(
                 content=content,
