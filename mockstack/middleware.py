@@ -11,6 +11,7 @@ from mockstack.constants import SENSITIVE_HEADERS
 from mockstack.telemetry import (
     span_name_for,
     with_request_attributes,
+    with_request_body,
     with_response_attributes,
     with_response_body,
 )
@@ -46,6 +47,9 @@ def middleware_provider(app: FastAPI, settings: Settings) -> None:
             span = with_response_attributes(
                 response, span, sensitive_headers=SENSITIVE_HEADERS
             )
+
+            if settings.opentelemetry.capture_request_body:
+                span = await with_request_body(request, span)
 
             if settings.opentelemetry.capture_response_body:
                 response, span = await with_response_body(response, span)
