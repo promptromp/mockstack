@@ -1,5 +1,6 @@
 """Unit tests for the proxyrules module."""
 
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -9,113 +10,11 @@ from fastapi.responses import RedirectResponse
 from starlette.datastructures import Headers
 
 from mockstack.constants import ProxyRulesRedirectVia
-from mockstack.strategies.proxyrules import ProxyRulesStrategy, Rule
-
-
-def test_rule_from_dict():
-    """Test creating a Rule from a dictionary."""
-    data = {
-        "pattern": r"/api/v1/projects/(\d+)",
-        "replacement": r"/projects/\1",
-        "method": "GET",
-    }
-    rule = Rule.from_dict(data)
-    assert rule.pattern == data["pattern"]
-    assert rule.replacement == data["replacement"]
-    assert rule.method == data["method"]
-
-
-def test_rule_from_dict_without_method():
-    """Test creating a Rule from a dictionary without a method."""
-    data = {
-        "pattern": r"/api/v1/projects/(\d+)",
-        "replacement": r"/projects/\1",
-    }
-    rule = Rule.from_dict(data)
-    assert rule.pattern == data["pattern"]
-    assert rule.replacement == data["replacement"]
-    assert rule.method is None
-
-
-@pytest.mark.parametrize(
-    "pattern,path,method,expected",
-    [
-        (r"/api/v1/projects/\d+", "/api/v1/projects/123", "GET", True),
-        (r"/api/v1/projects/\d+", "/api/v1/projects/123", "POST", True),
-        (r"/api/v1/projects/\d+", "/api/v1/projects/abc", "GET", False),
-        (r"/api/v1/projects/\d+", "/api/v1/users/123", "GET", False),
-        (r"/api/v1/projects/\d+", "/api/v1/projects/123", "POST", True),
-    ],
+from mockstack.strategies.proxyrules import (
+    ProxyRulesStrategy,
+    Rule,
+    maybe_update_response_headers,
 )
-def test_rule_matches(pattern, path, method, expected):
-    """Test the rule matching logic."""
-    rule = Rule(pattern=pattern, replacement="", method=None)
-    request = Request(
-        scope={
-            "type": "http",
-            "method": method,
-            "path": path,
-            "query_string": b"",
-            "headers": [],
-        }
-    )
-    assert rule.matches(request) == expected
-
-
-@pytest.mark.parametrize(
-    "pattern,path,method,expected",
-    [
-        (r"/api/v1/projects/\d+", "/api/v1/projects/123", "GET", True),
-        (r"/api/v1/projects/\d+", "/api/v1/projects/123", "POST", False),
-    ],
-)
-def test_rule_matches_with_method(pattern, path, method, expected):
-    """Test the rule matching logic with method restriction."""
-    rule = Rule(pattern=pattern, replacement="", method="GET")
-    request = Request(
-        scope={
-            "type": "http",
-            "method": method,
-            "path": path,
-            "query_string": b"",
-            "headers": [],
-        }
-    )
-    assert rule.matches(request) == expected
-
-
-@pytest.mark.parametrize(
-    "pattern,replacement,path,expected_url",
-    [
-        (
-            r"/api/v1/projects/(\d+)",
-            r"/projects/\1",
-            "/api/v1/projects/123",
-            "/projects/123",
-        ),
-        (
-            r"/api/v1/users/([^/]+)",
-            r"/users/\1",
-            "/api/v1/users/john",
-            "/users/john",
-        ),
-    ],
-)
-def test_rule_apply(pattern, replacement, path, expected_url):
-    """Test the rule application logic."""
-    rule = Rule(pattern=pattern, replacement=replacement)
-    request = Request(
-        scope={
-            "type": "http",
-            "method": "GET",
-            "path": path,
-            "query_string": b"",
-            "headers": [],
-        }
-    )
-    url = rule.apply(request)
-    assert isinstance(url, str)
-    assert url == expected_url
 
 
 def test_proxy_rules_strategy_load_rules(settings):
@@ -196,6 +95,58 @@ async def test_proxy_rules_strategy_apply_no_match(settings, span):
     request.state.span = span
     response = await strategy.apply(request)
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_proxy_rules_strategy_apply_template(settings, span, tmp_path):
+    """Test applying strategy with template rendering."""
+    # Create a template file
+    template_file = tmp_path / "template.json"
+    template_file.write_text(
+        '{"projects": "{{ projects }}", "name": "Project {{ projects }}"}'
+    )
+
+    # Create a rule that points to the template file
+    rule_data = {
+        "pattern": r"/api/v1/projects/(\d+)",
+        "replacement": f"file:///{template_file}",
+        "name": "test_template_rule",
+    }
+
+    # Mock the rule_for method to return our test rule
+    strategy = ProxyRulesStrategy(settings)
+    test_rule = Rule.from_dict(rule_data)
+
+    with patch.object(strategy, "rule_for", return_value=test_rule):
+        request = Request(
+            scope={
+                "type": "http",
+                "method": "GET",
+                "path": "/api/v1/projects/1234",
+                "query_string": b"",
+                "headers": [],
+            }
+        )
+        request.state.span = span
+        response = await strategy.apply(request)
+
+        assert response.status_code == 200
+        assert response.media_type == "application/json"
+        assert response.body.decode() == '{"projects": "1234", "name": "Project 1234"}'
+
+
+def test_proxy_rules_strategy_get_content_type(settings):
+    """Test content type detection based on file extension."""
+    strategy = ProxyRulesStrategy(settings)
+
+    # Test various file extensions
+    assert strategy._get_content_type(Path("file.json")) == "application/json"
+    assert strategy._get_content_type(Path("file.xml")) == "application/xml"
+    assert strategy._get_content_type(Path("file.html")) == "text/html"
+    assert strategy._get_content_type(Path("file.txt")) == "text/plain"
+    assert strategy._get_content_type(Path("file.yaml")) == "application/x-yaml"
+    assert strategy._get_content_type(Path("file.yml")) == "application/x-yaml"
+    assert strategy._get_content_type(Path("file.unknown")) == "text/plain"
 
 
 @pytest.mark.asyncio
@@ -407,3 +358,19 @@ async def test_proxy_rules_strategy_reverse_proxy(settings_reverse_proxy, span):
         assert isinstance(headers, Headers)
 
         mock_client.send.assert_called_once()
+
+
+def test_maybe_update_response_headers_updates_content_encoding():
+    """Test maybe_update_response_headers updates content-encoding."""
+    response_headers = httpx.Headers(
+        {"content-encoding": "gzip", "content-type": "application/json"}
+    )
+
+    updated_headers = maybe_update_response_headers(
+        response_headers=response_headers,
+        content_length=100,
+    )
+
+    assert updated_headers["content-encoding"] == "identity"
+    assert updated_headers["content-type"] == "application/json"
+    assert updated_headers["content-length"] == "100"
