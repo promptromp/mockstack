@@ -4,6 +4,7 @@ import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Self
+from urllib.parse import quote
 
 from fastapi import Request
 
@@ -75,7 +76,11 @@ class Rule:
 
     def apply(self, request: Request) -> RuleResult:
         """Apply the rule to the request."""
-        path = request.url.path
+        path = f"{request.url.path}"
+        if request.url.fragment:
+            # If a URL fragment component is present, we URL encode it and include it in the path to proxy.
+            path += quote("#") + request.url.fragment
+
         result = self._url_for(path)
 
         # Check if the replacement is a file template
