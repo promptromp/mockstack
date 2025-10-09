@@ -2,6 +2,7 @@
 
 import pytest
 from fastapi import Request
+from starlette.datastructures import URL
 
 from mockstack.rules import Rule, TemplateRuleResult, URLRuleResult
 
@@ -79,34 +80,63 @@ def test_rule_matches_with_method(pattern, path, method, expected):
 
 
 @pytest.mark.parametrize(
-    "pattern,replacement,path,expected_url",
+    "pattern,replacement,path,fragment,expected_url",
     [
         (
             r"/api/v1/projects/(\d+)",
             r"/projects/\1",
             "/api/v1/projects/123",
+            None,
             "/projects/123",
         ),
         (
             r"/api/v1/users/([^/]+)",
             r"/users/\1",
             "/api/v1/users/john",
+            None,
             "/users/john",
+        ),
+        (
+            r"/api/v1/projects/(\d+)",
+            r"/projects/\1",
+            "/api/v1/projects/123",
+            "section",
+            "/projects/123%23section",
+        ),
+        (
+            r"/api/v1/users/([^/]+)",
+            r"/users/\1",
+            "/api/v1/users/john",
+            "profile",
+            "/users/john%23profile",
+        ),
+        (
+            r"/api/v1/projects/(\d+)",
+            r"/projects/\1",
+            "/api/v1/projects/456",
+            "top",
+            "/projects/456%23top",
         ),
     ],
 )
-def test_rule_apply(pattern, replacement, path, expected_url):
+def test_rule_apply(pattern, replacement, path, fragment, expected_url):
     """Test the rule application logic."""
     rule = Rule(pattern=pattern, replacement=replacement)
-    request = Request(
-        scope={
-            "type": "http",
-            "method": "GET",
-            "path": path,
-            "query_string": b"",
-            "headers": [],
-        }
-    )
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": path,
+        "query_string": b"",
+        "headers": [],
+    }
+    request = Request(scope=scope)
+
+    # If fragment is specified, we need to manually set the URL with the fragment
+    # since fragments are not part of standard HTTP requests (they're client-side)
+    if fragment:
+        url_with_fragment = f"http://testserver{path}#{fragment}"
+        request._url = URL(url_with_fragment)
+
     result = rule.apply(request)
     assert isinstance(result, URLRuleResult)
     assert result.get_result_type() == "url"
