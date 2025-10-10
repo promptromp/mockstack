@@ -7,7 +7,7 @@ import httpx
 import pytest
 from fastapi import Request, status
 from fastapi.responses import RedirectResponse
-from starlette.datastructures import Headers
+from starlette.datastructures import Headers, URL
 
 from mockstack.constants import ProxyRulesRedirectVia
 from mockstack.strategies.proxyrules import (
@@ -77,6 +77,27 @@ async def test_proxy_rules_strategy_apply(settings, span):
     response = await strategy.apply(request)
     assert isinstance(response, RedirectResponse)
     assert response.headers["location"] == "/projects/123"
+
+
+@pytest.mark.asyncio
+async def test_proxy_rules_strategy_apply_with_fragment(settings, span):
+    """Test applying a rule to a request with URL fragment."""
+    strategy = ProxyRulesStrategy(settings)
+    request = Request(
+        scope={
+            "type": "http",
+            "method": "GET",
+            "path": "/api/v1/projects/123",
+            "query_string": b"",
+            "headers": [],
+        }
+    )
+    # Set URL with fragment (fragments are client-side only in HTTP, but we test the logic)
+    request._url = URL("http://testserver/api/v1/projects/123#section")
+    request.state.span = span
+    response = await strategy.apply(request)
+    assert isinstance(response, RedirectResponse)
+    assert response.headers["location"] == "/projects/123%23section"
 
 
 @pytest.mark.asyncio
