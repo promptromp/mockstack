@@ -1,0 +1,79 @@
+# Weekly smoke test that installs mockstack from PyPI without the lock file
+# and boots the server. Catches breaking changes in transitive dependencies
+# (fastapi, starlette, uvicorn, pydantic, ...) that would otherwise only
+# surface when end-users run `uvx mockstack`.
+
+name: Smoke Test (PyPI, latest deps)
+
+permissions:
+  contents: read
+
+on:
+  schedule:
+    # Mondays at 06:17 UTC. Off-the-hour to avoid GH-Actions cron congestion.
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - name: Install uv with Python ${{ matrix.python-version }}
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          version: "latest"
+
+      - name: Show resolved dependency versions
+        run: |
+          set -euo pipefail
+          uvx --from mockstack python -c \
+            "import fastapi, starlette, uvicorn, pydantic; \
+             print(f'fastapi={fastapi.__version__}'); \
+             print(f'starlette={starlette.__version__}'); \
+             print(f'uvicorn={uvicorn.__version__}'); \
+             print(f'pydantic={pydantic.__version__}')"
+
+      - name: Boot mockstack and probe HTTP
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/mockstack-templates
+          uvx mockstack --templates-dir /tmp/mockstack-templates --port 18999 \
+            > server.log 2>&1 &
+          SERVER_PID=$!
+          echo "started mockstack pid=$SERVER_PID"
+
+          # Poll for readiness for up to 30s. /openapi.json is served by FastAPI
+          # itself, so a 200 here proves import + app construction + uvicorn boot
+          # + HTTP serving are all healthy end-to-end.
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:18999/openapi.json -o /dev/null; then
+              echo "ready after ${i}s"
+              READY=1
+              break
+            fi
+            if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+              echo "server died before becoming ready; logs:"
+              cat server.log
+              exit 1
+            fi
+            sleep 1
+          done
+
+          if [ "${READY:-0}" != "1" ]; then
+            echo "server never became ready; logs:"
+            cat server.log
+            kill "$SERVER_PID" 2>/dev/null || true
+            exit 1
+          fi
+
+          # Final assertion + capture status
+          curl -fsS http://127.0.0.1:18999/openapi.json -o /dev/null
+          echo "smoke test passed"
+
+          kill "$SERVER_PID" 2>/dev/null || true
+          wait "$SERVER_PID" 2>/dev/null || true
