@@ -23,10 +23,14 @@ jobs:
         python-version: ["3.11", "3.12", "3.13"]
     steps:
       - name: Install uv with Python ${{ matrix.python-version }}
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v8.1.0
         with:
           python-version: ${{ matrix.python-version }}
           version: "latest"
+          # We don't `actions/checkout` (the smoke test installs from PyPI),
+          # so silence setup-uv's empty-workdir + no-lock-to-cache warnings.
+          ignore-empty-workdir: true
+          enable-cache: false
 
       - name: Show resolved dependency versions
         run: |
