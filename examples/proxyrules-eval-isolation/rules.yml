@@ -1,0 +1,26 @@
+# Eval-isolation pattern: stamped requests (X-Request-Eval-Scenario) get fixtures,
+# everything else is reverse-proxied to the real service. Order matters: first match wins.
+rules:
+  - name: juvenal-project-eval
+    method: GET
+    pattern: ^/juvenal/api/v2/project/(?P<id>[^/]+)$
+    headers:
+      x-request-eval-scenario: "[a-z0-9_-]+"
+    replacement: file:///${FIXTURES_DIR}/{{ headers['x-request-eval-scenario'] }}/juvenal/project.json.j2
+
+  - name: juvenal-passthrough
+    pattern: ^/juvenal/(.*)
+    replacement: ${JUVENAL_URL}/\1
+
+  - name: druid-pricing-eval
+    method: POST
+    pattern: ^/druid/druid/v2/sql$
+    headers:
+      x-request-eval-scenario: "[a-z0-9_-]+"
+    json:
+      query: "(?is).*FROM\\s+pricing_facts.*"
+    replacement: file:///${FIXTURES_DIR}/{{ headers['x-request-eval-scenario'] }}/druid/pricing_facts.json.j2
+
+  - name: druid-passthrough
+    pattern: ^/druid/(.*)
+    replacement: ${DRUID_URL}/\1
