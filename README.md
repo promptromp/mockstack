@@ -26,6 +26,9 @@ Use mockstack for:
 Highlights include:
 
 * Multiple strategies for handling requests such as [Jinja](https://jinja.palletsprojects.com/en/stable/) template files with intelligent URL request-to-template routing, proxy strategy, and mixed strategies. :game_die:
+* Rule predicates for the `proxyrules` strategy: match requests on path, method, headers, query parameters and JSON body fields, then serve a fixture, reverse-proxy to a real service, or redirect. :dart:
+* Dynamic replacements: a rule's replacement can be a Jinja template, so a request header can pick the fixture scenario to serve. :twisted_rightwards_arrows:
+* Result headers: every `proxyrules` response is stamped with `X-Mockstack-Result` and `X-Mockstack-Rule`, so a test can assert it got a fixture and not the real service. :label:
 * Observability via [OpenTelemetry](https://opentelemetry.io/) integration. Get detailed traces of your sessions instantly reported to backends such as [Grafana](https://grafana.com/), [Jaeger](https://www.jaegertracing.io/), [Zipkin](https://zipkin.io/), etc. :eyes:
 * Configurability via [pydantic-settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/) supports customizing behaviour via environment variables and a `.env` file. :flags:
 * Comprehensive unit-tests, linting and formatting coverage as well as vulnerabilities and security scanning with full CI automation to ensure stability and a high-quality codebase for production-grade use. :+1:
@@ -78,12 +81,43 @@ Out of the box, you get the following behavior when using the default `filefixtu
 Overall, the design philosophy is that things "just work". The framework attempts to intelligently deduce the intent of the request as much as possible and act accordingly,
 while leaving room for advanced users to go in and customize behavior using the configuration options.
 
+### Mix fixtures and real services
+
+With the `proxyrules` strategy, one mockstack instance can serve fixtures to test traffic and pass everything else through to the real service. Rules are tried in order and the first match wins:
+
+```yaml
+rules:
+  - name: projects-fixture
+    method: GET
+    pattern: ^/projects/api/v1/project/(?P<id>[a-z0-9-]+)$
+    headers:
+      x-test-run: ".+"
+    replacement: file://${FIXTURES_DIR}/projects/project.json.j2
+
+  - name: projects-passthrough
+    pattern: ^/projects/(.*)
+    replacement: ${UPSTREAM_URL}/\1
+```
+
+Fill in the `${FIXTURES_DIR}` and `${UPSTREAM_URL}` placeholders (for example with `envsubst`), then start mockstack with `MOCKSTACK__STRATEGY=proxyrules` and `MOCKSTACK__PROXYRULES_RULES_FILENAME` pointing at the result. A request tagged with `X-Test-Run` is served from the fixture (`X-Mockstack-Result: template`); the untagged one is reverse-proxied to the real service (`X-Mockstack-Result: proxy`):
+
+```shell
+curl -i -H "X-Test-Run: ci-42" http://127.0.0.1:8000/projects/api/v1/project/proj-123
+curl -i http://127.0.0.1:8000/projects/api/v1/project/proj-123
+```
+
+The [ProxyRules cookbook](https://promptromp.github.io/mockstack/guides/proxyrules-cookbook/) walks through this recipe and more (per-scenario fixtures, matching on request bodies and query parameters, asserting in tests), each backed by a live test.
+
 
 ## Testing
 
 Invoke unit-tests with:
 
-    uv run python -m pytest
+    uv run pytest
+
+Live tests start real mockstack and upstream servers on loopback sockets, including one that runs every example on the ProxyRules cookbook page. They are marked `slow` and deselected by default; run them with:
+
+    uv run pytest -m slow mockstack/tests/live
 
 Linting, formatting, static type checks etc. are all managed via [pre-commit](https://pre-commit.com/) hooks. These will run automatically on every commit. You can invoke these manually on all files with:
 

@@ -1,0 +1,11 @@
+rules:
+  - name: projects-scenario
+    method: GET
+    pattern: ^/projects/api/v1/project/(?P<id>[a-z0-9-]+)$
+    headers:
+      x-test-scenario: "[a-z0-9_-]+"
+    replacement: file://${FIXTURES_DIR}/{{ headers['x-test-scenario'] }}/projects/project.json.j2
+
+  - name: projects-passthrough
+    pattern: ^/projects/(.*)
+    replacement: ${UPSTREAM_URL}/\1

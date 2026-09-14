@@ -1,0 +1,32 @@
+rules:
+  - name: express-orders
+    method: POST
+    pattern: ^/orders/api/v1/search$
+    json:
+      filter.express: "true"
+    replacement: file://${FIXTURES_DIR}/orders/search.json.j2
+
+  - name: unassigned-orders
+    method: POST
+    pattern: ^/orders/api/v1/search$
+    json:
+      filter.assignee: "null"
+    replacement: file://${FIXTURES_DIR}/orders/search.json.j2
+
+  - name: page-size-50
+    method: POST
+    pattern: ^/orders/api/v1/search$
+    json:
+      page.size: "50"
+    replacement: file://${FIXTURES_DIR}/orders/search.json.j2
+
+  - name: gold-customer
+    method: POST
+    pattern: ^/orders/api/v1/search$
+    json:
+      filter.customer: '\{"id":42,"tier":"gold"\}'
+    replacement: file://${FIXTURES_DIR}/orders/search.json.j2
+
+  - name: orders-passthrough
+    pattern: ^/orders/(.*)
+    replacement: ${UPSTREAM_URL}/\1

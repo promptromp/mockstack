@@ -1,0 +1,9 @@
+rules:
+  - name: user-fixture
+    method: GET
+    pattern: ^/users/api/v1/users/user-1$
+    replacement: file://${FIXTURES_DIR}/users/user-1.json.j2
+
+  - name: users-redirect
+    pattern: ^/users/(.*)
+    replacement: ${UPSTREAM_URL}/\1

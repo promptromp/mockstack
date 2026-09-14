@@ -1,0 +1,11 @@
+rules:
+  - name: sales-facts-query
+    method: POST
+    pattern: ^/analytics/v1/sql$
+    json:
+      query: '(?is).*\bfrom\s+sales_facts\b.*'
+    replacement: file://${FIXTURES_DIR}/analytics/sales_facts.json.j2
+
+  - name: analytics-passthrough
+    pattern: ^/analytics/(.*)
+    replacement: ${UPSTREAM_URL}/\1
