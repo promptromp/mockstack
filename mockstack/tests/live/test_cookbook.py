@@ -413,6 +413,15 @@ def test_recipe6_missing_fixture_is_404(recipe6, upstream):
     assert upstream.calls == []
 
 
+def test_recipe6_fixture_path_rendered_from_named_group_is_served(recipe6, upstream):
+    """The page embeds the one user fixture that exists: ``user-fixture`` renders its
+    file name from the ``user_id`` group, so user-1 is served where user-2 is a 404."""
+    r = httpx.get(f"{recipe6}/users/api/v1/users/user-1")
+    assert_result(r, 200, "template", "user-fixture")
+    assert r.json() == {"id": "user-1", "name": "Test user"}
+    assert upstream.calls == []
+
+
 def test_recipe6_replacement_error_is_500(recipe6):
     r = curl(R6_REPLACEMENT_ERROR, recipe6)
     assert_result(r, 500, "error", "tenant-projects")

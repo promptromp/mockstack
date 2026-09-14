@@ -1,4 +1,8 @@
-"""Live reverse-proxy tests."""
+"""Live reverse-proxy tests.
+
+An unreachable upstream (a stamped 502) and a timed-out one (a stamped 504) are covered
+by ``test_cookbook.py`` (recipe 6).
+"""
 
 import json
 
@@ -16,12 +20,7 @@ def proxy(upstream, mockstack_server):
                 "name": "upstream-passthrough",
                 "pattern": r"^/upstream/(.*)",
                 "replacement": f"{upstream.base_url}/\\1",
-            },
-            {
-                "name": "unreachable-passthrough",
-                "pattern": r"^/unreachable/(.*)",
-                "replacement": r"http://127.0.0.1:1/\1",
-            },
+            }
         ]
     )
 
@@ -43,19 +42,6 @@ def test_fixed_length_body_is_forwarded(proxy, upstream):
     assert json.loads(upstream.calls[-1]["body"]) == big
     assert upstream.calls[-1]["query"] == {"a": "1"}
     assert "x-mockstack-rule" not in upstream.calls[-1]["headers"]
-
-
-def test_upstream_unreachable_returns_stamped_502(proxy):
-    """A passthrough rule whose replacement points at a port nothing listens on must
-    not surface as a bare, unstamped 500 from Starlette's ServerErrorMiddleware --
-    'upstream unreachable' is the single most common eval failure and apply() must
-    stamp it with the strategy's own X-Mockstack-* headers instead.
-    """
-    r = httpx.get(f"{proxy.base_url}/unreachable/api/v1/thing")
-    assert r.status_code == 502
-    assert r.headers["x-mockstack-result"] == "error"
-    assert r.headers["x-mockstack-rule"] == "unreachable-passthrough"
-    assert r.json() == {"error": "mockstack: upstream request failed"}
 
 
 def test_repeated_set_cookie_headers_survive_reverse_proxy(proxy):
