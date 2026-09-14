@@ -356,7 +356,9 @@ def _analytics(sql):
     ],
 )
 def test_rule_matches_body_predicates(predicate, payload, expected):
-    rule = Rule(pattern=r"^/analytics/v2/sql$", replacement="", method="POST", **predicate)
+    rule = Rule(
+        pattern=r"^/analytics/v2/sql$", replacement="", method="POST", **predicate
+    )
     request = _request(path="/analytics/v2/sql", method="POST")
     assert rule.matches(request, payload) is expected
 

@@ -85,7 +85,9 @@ def test_analytics_query_selected_by_body(analytics, upstream):
     sql = "SELECT client_id, SUM(amount)\nFROM sales_facts WHERE 1=1"
     stamped = {"X-Request-Eval-Scenario": "healthy"}
     r = httpx.post(
-        f"{analytics.base_url}/analytics/analytics/v2/sql", json={"query": sql}, headers=stamped
+        f"{analytics.base_url}/analytics/analytics/v2/sql",
+        json={"query": sql},
+        headers=stamped,
     )
     assert r.status_code == 200 and r.json() == {"source": "fixture", "sql": sql}
 
