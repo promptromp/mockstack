@@ -1,15 +1,42 @@
 """Rules for the proxy rules strategy."""
 
+import json
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Self
+from typing import Any, Self
 from urllib.parse import quote
 
 from fastapi import Request
 
 from mockstack.constants import PROXYRULES_FILE_TEMPLATE_PREFIX
 from mockstack.templating import parse_template_name_segments_and_identifiers
+
+
+@dataclass(frozen=True)
+class RequestPayload:
+    """The request body, read exactly once by the strategy and shared with every rule.
+
+    Keeping this separate from ``Request`` lets ``Rule.matches`` / ``Rule.apply`` stay
+    synchronous while still seeing the body.
+    """
+
+    raw: bytes
+    text: str
+    json: Any | None
+
+    @classmethod
+    def from_bytes(cls, raw: bytes) -> "RequestPayload":
+        text = raw.decode("utf-8", errors="replace")
+        try:
+            parsed: Any | None = json.loads(text) if text.strip() else None
+        except ValueError:
+            parsed = None
+        return cls(raw=raw, text=text, json=parsed)
+
+    @classmethod
+    def empty(cls) -> "RequestPayload":
+        return cls.from_bytes(b"")
 
 
 class RuleResult(ABC):
