@@ -22,6 +22,7 @@ from typing import Any
 
 import httpx
 import pytest
+import yaml
 
 from mockstack.tests.live.conftest import LiveServer, proxyrules_settings
 
@@ -30,6 +31,7 @@ pytestmark = pytest.mark.slow
 REPO_ROOT = Path(__file__).resolve().parents[3]
 COOKBOOK_DIR = REPO_ROOT / "examples" / "proxyrules-cookbook"
 COOKBOOK_PAGE = REPO_ROOT / "docs" / "guides" / "proxyrules-cookbook.md"
+README = REPO_ROOT / "README.md"
 
 # The mockstack address the page uses; requests go to the live server instead.
 DOCS_MOCKSTACK_URL = "http://127.0.0.1:8000"
@@ -517,3 +519,14 @@ def test_cookbook_page_embeds_every_recipe_file():
     assert recipe_files
     for path in recipe_files:
         assert f'--8<-- "{path.relative_to(REPO_ROOT)}"' in page
+
+
+def test_readme_mix_example_matches_recipe1():
+    readme = README.read_text()
+    section = readme.split("### Mix fixtures and real services", 1)[1]
+    block = re.search(r"```yaml\n(.*?)```", section, re.DOTALL)
+    assert block is not None
+    recipe_rules = (COOKBOOK_DIR / "01-tagged-traffic" / "rules.yml").read_text()
+    assert yaml.safe_load(block.group(1)) == yaml.safe_load(recipe_rules)
+    for command in (R1_TAGGED, R1_UNTAGGED):
+        assert command in section
