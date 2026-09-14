@@ -35,6 +35,11 @@ def test_proxy_rules_strategy_load_rules(settings):
     assert all(isinstance(rule, Rule) for rule in rules)
 
 
+def test_load_rules_attaches_jinja_env(settings):
+    strategy = ProxyRulesStrategy(settings)
+    assert all(rule.env is strategy.env for rule in strategy.rules)
+
+
 def test_proxy_rules_strategy_rule_for(settings, span):
     """Test finding a matching rule for a request."""
     strategy = ProxyRulesStrategy(settings)

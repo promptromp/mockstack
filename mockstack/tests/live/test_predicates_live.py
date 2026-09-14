@@ -96,3 +96,50 @@ def test_druid_query_selected_by_body(druid, upstream):
     )
     assert other.json()["source"] == "upstream"
     assert json.loads(upstream.calls[-1]["body"]) == {"query": "SELECT 1 FROM users"}
+
+
+@pytest.fixture
+def scenarios(tmp_path, upstream, mockstack_server):
+    for name in ("healthy", "degraded"):
+        d = tmp_path / name / "juvenal"
+        d.mkdir(parents=True)
+        (d / "project.abc.json.j2").write_text(
+            f'{{"scenario": "{name}", "id": "{{{{ id }}}}"}}'
+        )
+    rules = write_rules(
+        tmp_path,
+        [
+            {
+                "name": "project-eval",
+                "method": "GET",
+                "pattern": r"^/juvenal/api/v2/project/(?P<id>[^/]+)$",
+                "headers": {"x-request-eval-scenario": ".*"},
+                "replacement": f"file://{tmp_path}/{{{{ headers['x-request-eval-scenario'] }}}}/juvenal/project.{{{{ id }}}}.json.j2",
+            },
+            {
+                "name": "passthrough",
+                "pattern": r"^/juvenal/(.*)",
+                "replacement": f"{upstream.base_url}/\\1",
+            },
+        ],
+    )
+    return mockstack_server(proxyrules_settings(rules))
+
+
+@pytest.mark.parametrize("scenario", ["healthy", "degraded"])
+def test_scenario_header_selects_fixture_directory(scenarios, scenario):
+    r = httpx.get(
+        f"{scenarios.base_url}/juvenal/api/v2/project/abc",
+        headers={"X-Request-Eval-Scenario": scenario},
+    )
+    assert r.status_code == 200
+    assert r.json() == {"scenario": scenario, "id": "abc"}
+
+
+def test_unknown_scenario_returns_404_not_upstream(scenarios, upstream):
+    r = httpx.get(
+        f"{scenarios.base_url}/juvenal/api/v2/project/abc",
+        headers={"X-Request-Eval-Scenario": "nope"},
+    )
+    assert r.status_code == 404
+    assert upstream.calls == []
