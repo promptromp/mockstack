@@ -32,13 +32,15 @@ jobs:
     - name: Install ruff
       uses: astral-sh/ruff-action@v4.0.0
       with:
-        version: "latest"
+        # Pinned to the ruff-pre-commit rev: new ruff releases add rules to the selected
+        # families, which should arrive through a deliberate bump, not a random CI run.
+        version: "0.16.7"
     - name: Install the project
       run: uv sync --all-extras --dev
     - name: Run ruff lint and formatting checks
       run: |
         ruff check
-        ruff format
+        ruff format --check
     - name: Run mypy
       run: |
         uv pip install types-pyyaml
