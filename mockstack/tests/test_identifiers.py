@@ -5,21 +5,19 @@ import pytest
 from mockstack.identifiers import looks_like_id, prefixes
 
 
-def test_prefixes():
-    # Test basic functionality
-    assert list(prefixes([1, 2, 3])) == [(1,), (1, 2), (1, 2, 3)]
-
-    # Test with reverse=True
-    assert list(prefixes([1, 2, 3], reverse=True)) == [(1, 2, 3), (1, 2), (1,)]
-
-    # Test with empty list
-    assert list(prefixes([])) == []
-
-    # Test with single element
-    assert list(prefixes([1])) == [(1,)]
-
-    # Test with strings
-    assert list(prefixes(["a", "b", "c"])) == [("a",), ("a", "b"), ("a", "b", "c")]
+@pytest.mark.parametrize(
+    "items,reverse,expected",
+    [
+        ([1, 2, 3], False, [(1,), (1, 2), (1, 2, 3)]),
+        ([1, 2, 3], True, [(1, 2, 3), (1, 2), (1,)]),
+        ([], False, []),
+        ([1], False, [(1,)]),
+        (["a", "b", "c"], False, [("a",), ("a", "b"), ("a", "b", "c")]),
+    ],
+    ids=["basic", "reverse", "empty", "single-element", "strings"],
+)
+def test_prefixes(items, reverse, expected):
+    assert list(prefixes(items, reverse=reverse)) == expected
 
 
 @pytest.mark.parametrize(
@@ -57,6 +55,19 @@ def test_prefixes():
         ("create", False, "Action name"),
         ("update", False, "Action name"),
         ("delete", False, "Action name"),
+        # Empty and whitespace strings
+        ("", False, "Empty string"),
+        (" ", False, "Whitespace"),
+        ("\t", False, "Whitespace"),
+        ("\n", False, "Whitespace"),
+        ("  ", False, "Whitespace"),
+        # Special characters
+        ("12-34", False, "Hyphen in wrong place"),
+        ("12_34", False, "Underscore"),
+        ("12.34", False, "Period"),
+        ("12/34", False, "Slash"),
+        ("12+34", False, "Plus"),
+        ("@1234", False, "At symbol"),
     ],
 )
 def test_looks_like_id(chunk: str, expected: bool, reason: str) -> None:
@@ -67,28 +78,6 @@ def test_looks_like_id(chunk: str, expected: bool, reason: str) -> None:
     2. Even and odd length hexadecimal IDs
     3. Valid and invalid UUID formats
     4. Common non-ID path segments
+    5. Empty strings, whitespace and special characters
     """
-    assert looks_like_id(chunk) == expected, f"Failed for {chunk} ({reason})"
-
-
-def test_looks_like_id_empty_string():
-    """Test that empty string is not considered an ID."""
-    assert not looks_like_id("")
-
-
-def test_looks_like_id_whitespace():
-    """Test that whitespace is not considered an ID."""
-    assert not looks_like_id(" ")
-    assert not looks_like_id("\t")
-    assert not looks_like_id("\n")
-    assert not looks_like_id("  ")
-
-
-def test_looks_like_id_special_chars():
-    """Test that strings with special characters are not considered IDs."""
-    assert not looks_like_id("12-34")  # Hyphen in wrong place
-    assert not looks_like_id("12_34")  # Underscore
-    assert not looks_like_id("12.34")  # Period
-    assert not looks_like_id("12/34")  # Slash
-    assert not looks_like_id("12+34")  # Plus
-    assert not looks_like_id("@1234")  # At symbol
+    assert looks_like_id(chunk) == expected, f"Failed for {chunk!r} ({reason})"

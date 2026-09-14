@@ -1,7 +1,6 @@
 """Unit tests for the templates module."""
 
 import pytest
-from fastapi import Request
 
 from mockstack.templating import (
     iter_possible_template_arguments,
@@ -116,21 +115,12 @@ from mockstack.templating import (
     ],
 )
 def test_iter_possible_template_arguments(
+    make_request,
     path: str,
     expected_results: list,
 ) -> None:
     """Test the iter_possible_template_arguments function with various paths."""
-    request = Request(
-        scope={
-            "type": "http",
-            "method": "GET",
-            "path": path,
-            "query_string": b"",
-            "headers": [],
-        }
-    )
-
-    results = list(iter_possible_template_arguments(request))
+    results = list(iter_possible_template_arguments(make_request(path)))
     assert len(results) == len(expected_results)
 
     for actual, expected in zip(results, expected_results):
@@ -139,16 +129,10 @@ def test_iter_possible_template_arguments(
         assert actual["media_type"] == expected["media_type"]
 
 
-def test_iter_possible_template_arguments_with_custom_media_type():
+def test_iter_possible_template_arguments_with_custom_media_type(make_request):
     """Test that custom media type from headers is respected."""
-    request = Request(
-        scope={
-            "type": "http",
-            "method": "GET",
-            "path": "/api/v1/projects",
-            "query_string": b"",
-            "headers": [(b"content-type", b"application/xml")],
-        }
+    request = make_request(
+        "/api/v1/projects", headers={"content-type": "application/xml"}
     )
 
     results = list(iter_possible_template_arguments(request))
@@ -160,17 +144,9 @@ def test_iter_possible_template_arguments_with_custom_media_type():
     assert "content-type" in results[0]["context"]["headers"]
 
 
-def test_iter_possible_template_arguments_with_query_params():
+def test_iter_possible_template_arguments_with_query_params(make_request):
     """Test that query parameters are included in the context."""
-    request = Request(
-        scope={
-            "type": "http",
-            "method": "GET",
-            "path": "/api/v1/projects",
-            "query_string": b"filter=active&sort=name",
-            "headers": [],
-        }
-    )
+    request = make_request("/api/v1/projects", query=b"filter=active&sort=name")
 
     results = list(iter_possible_template_arguments(request))
     assert len(results) == 2
@@ -179,99 +155,83 @@ def test_iter_possible_template_arguments_with_query_params():
     assert results[0]["context"]["query"] == {"filter": "active", "sort": "name"}
 
 
-def test_parse_template_name_segments_and_identifiers():
+@pytest.mark.parametrize(
+    "path,expected_segments,expected_identifiers",
+    [
+        ("/api/v1/projects/1234", ["api", "v1", "projects"], {"projects": "1234"}),
+        ("/api/v1/projects", ["api", "v1", "projects"], {}),
+        ("/1234", [], {"id": "1234"}),
+        (
+            "/api/v1/projects/1234/tasks/5678",
+            ["api", "v1", "projects", "tasks"],
+            {"projects": "1234", "tasks": "5678"},
+        ),
+    ],
+    ids=[
+        "nested-identifier",
+        "no-identifier",
+        "only-an-identifier",
+        "multiple-identifiers",
+    ],
+)
+def test_parse_template_name_segments_and_identifiers(
+    path, expected_segments, expected_identifiers
+):
     """Test the parse_template_name_segments_and_identifiers function."""
-    # Test with a simple path
     name_segments, identifiers = parse_template_name_segments_and_identifiers(
-        "/api/v1/projects/1234", default_identifier_key="id"
+        path, default_identifier_key="id"
     )
-    assert name_segments == ["api", "v1", "projects"]
-    assert identifiers == {"projects": "1234"}
-
-    # Test with a path with no identifiers
-    name_segments, identifiers = parse_template_name_segments_and_identifiers(
-        "/api/v1/projects", default_identifier_key="id"
-    )
-    assert name_segments == ["api", "v1", "projects"]
-    assert identifiers == {}
-
-    # Test with a path with only an identifier
-    name_segments, identifiers = parse_template_name_segments_and_identifiers(
-        "/1234", default_identifier_key="id"
-    )
-    assert name_segments == []
-    assert identifiers == {"id": "1234"}
-
-    # Test with a path with multiple identifiers
-    name_segments, identifiers = parse_template_name_segments_and_identifiers(
-        "/api/v1/projects/1234/tasks/5678", default_identifier_key="id"
-    )
-    assert name_segments == ["api", "v1", "projects", "tasks"]
-    assert identifiers == {"projects": "1234", "tasks": "5678"}
+    assert name_segments == expected_segments
+    assert identifiers == expected_identifiers
 
 
-def test_iter_possible_template_filenames():
+@pytest.mark.parametrize(
+    "name_segments,identifiers,separator,extension,default_name,expected",
+    [
+        (
+            ["api", "v1", "projects"],
+            {"projects": "1234"},
+            "-",
+            ".j2",
+            "index.j2",
+            ["api-v1-projects.1234.j2", "api-v1-projects.j2", "index.j2"],
+        ),
+        (
+            ["api", "v1", "projects"],
+            {},
+            "-",
+            ".j2",
+            "index.j2",
+            ["api-v1-projects.j2", "index.j2"],
+        ),
+        ([], {"id": "1234"}, "-", ".j2", "index.j2", ["index.j2"]),
+        ([], {}, "-", ".j2", "index.j2", ["index.j2"]),
+        (
+            ["api", "v1", "projects"],
+            {"projects": "1234"},
+            "_",
+            ".html",
+            "default.html",
+            ["api_v1_projects.1234.html", "api_v1_projects.html", "default.html"],
+        ),
+    ],
+    ids=[
+        "segments-and-identifiers",
+        "segments-only",
+        "identifiers-only",
+        "neither",
+        "custom-separator-and-extension",
+    ],
+)
+def test_iter_possible_template_filenames(
+    name_segments, identifiers, separator, extension, default_name, expected
+):
     """Test the iter_possible_template_filenames function."""
-    # Test with name segments and context
-    filenames = list(
-        iter_possible_template_filenames(
-            ["api", "v1", "projects"],
-            identifiers={"projects": "1234"},
-            template_file_separator="-",
-            template_file_extension=".j2",
-            default_template_name="index.j2",
-        )
+    filenames = iter_possible_template_filenames(
+        name_segments,
+        identifiers=identifiers,
+        template_file_separator=separator,
+        template_file_extension=extension,
+        default_template_name=default_name,
     )
-    assert filenames == ["api-v1-projects.1234.j2", "api-v1-projects.j2", "index.j2"]
-
-    # Test with name segments and no context
-    filenames = list(
-        iter_possible_template_filenames(
-            ["api", "v1", "projects"],
-            identifiers={},
-            template_file_separator="-",
-            template_file_extension=".j2",
-            default_template_name="index.j2",
-        )
-    )
-    assert filenames == ["api-v1-projects.j2", "index.j2"]
-
-    # Test with no name segments and context
-    filenames = list(
-        iter_possible_template_filenames(
-            [],
-            identifiers={"id": "1234"},
-            template_file_separator="-",
-            template_file_extension=".j2",
-            default_template_name="index.j2",
-        )
-    )
-    assert filenames == ["index.j2"]
-
-    # Test with no name segments and no context
-    filenames = list(
-        iter_possible_template_filenames(
-            [],
-            identifiers={},
-            template_file_separator="-",
-            template_file_extension=".j2",
-            default_template_name="index.j2",
-        )
-    )
-    assert filenames == ["index.j2"]
-
-    # Test with custom separator and extension
-    filenames = list(
-        iter_possible_template_filenames(
-            ["api", "v1", "projects"],
-            identifiers={"projects": "1234"},
-            template_file_separator="_",
-            template_file_extension=".html",
-            default_template_name="default.html",
-        )
-    )
-    assert filenames == [
-        "api_v1_projects.1234.html",
-        "api_v1_projects.html",
-        "default.html",
-    ]
+    assert list(filenames) == expected
