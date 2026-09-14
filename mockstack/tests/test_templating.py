@@ -123,7 +123,7 @@ def test_iter_possible_template_arguments(
     results = list(iter_possible_template_arguments(make_request(path)))
     assert len(results) == len(expected_results)
 
-    for actual, expected in zip(results, expected_results):
+    for actual, expected in zip(results, expected_results, strict=True):
         assert actual["name"] == expected["name"]
         assert actual["context"] == expected["context"]
         assert actual["media_type"] == expected["media_type"]

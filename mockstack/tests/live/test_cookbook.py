@@ -353,7 +353,8 @@ def recipe6(cookbook):
 
 def _load_fixture_assertions() -> ModuleType:
     spec = importlib.util.spec_from_file_location("cookbook_fixture_assertions", FIXTURE_ASSERTIONS)
-    assert spec is not None and spec.loader is not None
+    assert spec is not None
+    assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -361,8 +362,9 @@ def _load_fixture_assertions() -> ModuleType:
 
 def test_recipe6_snippet_passes_against_fixture(recipe6):
     """Run the snippet with pytest, as the page shows."""
-    completed = subprocess.run(
-        [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider"] + [FIXTURE_ASSERTIONS.name],
+    # A fixed argument list: this interpreter running pytest on the shipped snippet.
+    completed = subprocess.run(  # noqa: S603
+        [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", FIXTURE_ASSERTIONS.name],
         cwd=FIXTURE_ASSERTIONS.parent,
         env={
             **os.environ,

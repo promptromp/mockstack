@@ -625,7 +625,8 @@ def test_method_comparison_is_case_insensitive_but_attribute_is_preserved(
 def test_match_returns_the_path_match(make_request):
     rule = Rule(pattern=r"^/x/(?P<id>[^/]+)$", replacement="u")
     match = rule.match(make_request("/x/abc"))
-    assert match is not None and match.group("id") == "abc"
+    assert match is not None
+    assert match.group("id") == "abc"
     assert rule.match(make_request("/y")) is None
 
 

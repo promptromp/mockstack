@@ -165,8 +165,10 @@ def test_rule_for_prefers_stamped_fixture_then_falls_through(proxyrules_strategy
     path = "/projects/api/v1/project/abc"
     stamped = strategy.rule_for(traced_request(path, headers={"x-request-eval-scenario": "healthy"}))
     unstamped = strategy.rule_for(traced_request(path))
-    assert stamped is not None and stamped.name == "projects-eval"
-    assert unstamped is not None and unstamped.name == "projects-passthrough"
+    assert stamped is not None
+    assert stamped.name == "projects-eval"
+    assert unstamped is not None
+    assert unstamped.name == "projects-passthrough"
 
 
 # --- apply: redirects, missing rules, simulated creates ------------------------------

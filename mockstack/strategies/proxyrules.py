@@ -25,7 +25,7 @@ from mockstack.constants import (
     ProxyRulesRedirectVia,
 )
 from mockstack.intent import looks_like_a_create
-from mockstack.rules import RequestPayload, Rule, TemplateRuleResult, URLRuleResult
+from mockstack.rules import RequestPayload, Rule, RuleResult, TemplateRuleResult, URLRuleResult
 from mockstack.strategies.base import BaseStrategy
 from mockstack.strategies.create_mixin import CreateMixin
 from mockstack.templating import templates_env_provider
@@ -271,22 +271,19 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             if rule is None:
                 return await self.handle_missing_rule(request)
 
-            result = rule.apply(request, payload)
-            if isinstance(result, TemplateRuleResult):
-                self.logger.info(f"[rule:{rule.name}] template result: {result.template_path}")
-                return await self.handle_template_result(request, rule, result)
-            if isinstance(result, URLRuleResult):
-                self.logger.info(f"[rule:{rule.name}] url result: {result.url}")
-                return await self.handle_url_result(request, rule, result)
-            raise TypeError(f"Unknown result type: {type(result)}")
+            return await self.handle_result(request, rule, rule.apply(request, payload))
 
         except ClientDisconnect:
             raise
         except InvalidUpstreamURLError as exc:
-            self.logger.error(
-                f"[rule:{rule.name if rule else None}] invalid upstream URL "
-                f"{exc.url!r} for {request.method} {request.url.path}: "
-                f"{exc.__cause__!r}"
+            # A rules-file mistake: the cause is logged, and a traceback would add nothing.
+            self.logger.error(  # noqa: TRY400
+                "[rule:%s] invalid upstream URL %r for %s %s: %r",
+                rule.name if rule else None,
+                exc.url,
+                request.method,
+                request.url.path,
+                exc.__cause__,
             )
             return _error_response(
                 "mockstack: internal error",
@@ -295,14 +292,20 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             )
         except UpstreamError as exc:
             self.logger.warning(
-                f"[rule:{rule.name if rule else None}] {exc.message} for "
-                f"{request.method} {request.url.path}: {exc.__cause__!r}"
+                "[rule:%s] %s for %s %s: %r",
+                rule.name if rule else None,
+                exc.message,
+                request.method,
+                request.url.path,
+                exc.__cause__,
             )
             return _error_response(exc.message, status_code=exc.status_code, rule=rule)
         except Exception:
             self.logger.exception(
-                f"[rule:{rule.name if rule else None}] unhandled error applying "
-                f"strategy to {request.method} {request.url.path}"
+                "[rule:%s] unhandled error applying strategy to %s %s",
+                rule.name if rule else None,
+                request.method,
+                request.url.path,
             )
             return _error_response(
                 "mockstack: internal error",
@@ -310,12 +313,24 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
                 rule=rule,
             )
 
+    async def handle_result(self, request: Request, rule: Rule, result: RuleResult) -> Response:
+        """Hand the result of applying ``rule`` to the handler for its type."""
+        if isinstance(result, TemplateRuleResult):
+            self.logger.info("[rule:%s] template result: %s", rule.name, result.template_path)
+            return await self.handle_template_result(request, rule, result)
+        if isinstance(result, URLRuleResult):
+            self.logger.info("[rule:%s] url result: %s", rule.name, result.url)
+            return await self.handle_url_result(request, rule, result)
+        raise TypeError(f"Unknown result type: {type(result)}")
+
     async def handle_missing_rule(self, request: Request) -> Response:
         """Handle a missing rule."""
-        self.logger.warning(f"No rule found for request: {request.method} {request.url.path}")
+        self.logger.warning("No rule found for request: %s %s", request.method, request.url.path)
 
         if self.simulate_create_on_missing and looks_like_a_create(request):
-            self.logger.info(f"Simulating resource creation for missing rule for {request.method} {request.url.path}")
+            self.logger.info(
+                "Simulating resource creation for missing rule for %s %s", request.method, request.url.path
+            )
             response = await self._create(
                 request,
                 env=self.env,
@@ -368,15 +383,17 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             # values (headers, query, path segments, body). Reject any path traversal
             # attempt rather than resolving and possibly reading a file outside the
             # fixtures the rule author intended.
-            self.logger.error(f"Rejected template path containing '..': {template_path}")
+            self.logger.error("Rejected template path containing '..': %s", template_path)
             return _error_response(
                 "Template file not found.",
                 status_code=status.HTTP_404_NOT_FOUND,
                 rule=rule,
             )
 
-        if not template_path.exists():
-            self.logger.error(f"Template file not found: {template_path}")
+        # Templates are small local files: checking and reading them synchronously is
+        # intentional here rather than adding an async-file dependency.
+        if not template_path.exists():  # noqa: ASYNC240
+            self.logger.error("Template file not found: %s", template_path)
             return _error_response(
                 "Template file not found.",
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -384,9 +401,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             )
 
         try:
-            # Read the template file content.
-            # Templates are small local files read once per request; the sync
-            # read is intentional here rather than adding an async-file dependency.
+            # Read the template file content (synchronously, as above).
             with open(template_path) as f:  # noqa: ASYNC230
                 template_content = f.read()
 
@@ -413,7 +428,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             # Deliberate catch-all so template rendering errors (e.g. Jinja2 errors)
             # degrade to a 500 instead of crashing.
             # logger.exception: ERROR level, with the traceback (which names the error).
-            self.logger.exception(f"Error rendering template {template_path}")
+            self.logger.exception("Error rendering template %s", template_path)
             return _error_response(
                 "An internal error occurred while rendering the template.",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

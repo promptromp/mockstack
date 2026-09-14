@@ -179,7 +179,8 @@ class Rule:
         if env is not None and self._is_template:
             template_env = env.overlay(undefined=StrictUndefined)
             if any(
-                token_type == "data" and _BACKREFERENCE_RE.search(value)
+                # "data" is a Jinja lexer token type (literal template text), not a password.
+                token_type == "data" and _BACKREFERENCE_RE.search(value)  # noqa: S105
                 for _, token_type, value in template_env.lex(replacement)
             ):
                 raise ValueError(

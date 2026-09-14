@@ -17,7 +17,8 @@ class BaseStrategy(ABC):
     async def apply(self, request: Request) -> Response:
         """Apply the strategy to the request and response."""
 
-    def update_opentelemetry(self, request: Request, *args, **kwargs) -> None:
+    # An optional hook rather than an abstract method: a no-op unless a strategy overrides it.
+    def update_opentelemetry(self, request: Request, *args, **kwargs) -> None:  # noqa: B027
         """Update the opentelemetry span with strategy-specific attributes.
 
         A span is made available on `request.state.span` to use.

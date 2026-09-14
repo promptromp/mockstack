@@ -46,8 +46,9 @@ class Settings(BaseSettings):
     # whether to run in debug mode
     debug: CliImplicitFlag[bool] = False
 
-    # host to run the server on
-    host: str = "0.0.0.0"
+    # host to run the server on. Every interface by default, so the server is reachable
+    # from outside a container.
+    host: str = "0.0.0.0"  # noqa: S104
 
     # port to run the server on
     port: int = 8000

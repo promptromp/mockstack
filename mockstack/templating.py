@@ -15,11 +15,13 @@ from mockstack.identifiers import looks_like_id, prefixes
 def templates_env_provider(templates_dir: Path | str | None = None) -> Environment:
     """Provide a Jinja2 environment for the templates."""
     # TODO refactor a bit to be more generic for optional dependencies.
-    from mockstack.llm import ollama
+    # The optional ollama integration loads when an environment is built, not on import.
+    from mockstack.llm import ollama  # noqa: PLC0415
 
     loader = FileSystemLoader(templates_dir) if templates_dir else None
 
-    env = Environment(loader=loader)
+    # Templates render JSON and other non-HTML bodies, so HTML autoescaping stays off.
+    env = Environment(loader=loader)  # noqa: S701
 
     env.filters["json_escape"] = json_escape
 

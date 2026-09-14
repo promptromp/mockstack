@@ -10,6 +10,7 @@ servers are joined when the session ends.
 """
 
 import asyncio
+import contextlib
 import socket
 import string
 import threading
@@ -157,10 +158,8 @@ def upstream(_live_servers) -> Iterator[LiveServer]:
         # Registered before the catch-all: answers after three seconds, for timeouts,
         # unless the client (a timed-out proxy request) disconnects first, so no
         # request outlives the test that sent it.
-        try:
+        with contextlib.suppress(TimeoutError):
             await asyncio.wait_for(_client_disconnected(request), timeout=3)
-        except TimeoutError:
-            pass
         return {"source": "upstream", "path": "/slow"}
 
     @app.api_route("/{p:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"])
