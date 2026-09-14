@@ -35,11 +35,14 @@ def test_filefixtures_simulate_create_on_missing_env_var(monkeypatch, templates_
 
 def test_filefixtures_simulate_create_on_missing_cli_flag(templates_dir):
     """The pydantic-settings-generated CLI flag flips the setting."""
-    settings_default = CliSettings(_cli_parse_args=["--templates-dir", templates_dir])
+    # `_cli_parse_args` is a real pydantic-settings BaseSettings kwarg at runtime, but
+    # mypy (without the pydantic plugin) checks the synthesized __init__ against the
+    # model's own fields and doesn't know about it.
+    settings_default = CliSettings(_cli_parse_args=["--templates-dir", templates_dir])  # type: ignore[call-arg]
     assert settings_default.filefixtures_simulate_create_on_missing is True
 
     settings_disabled = CliSettings(
-        _cli_parse_args=[
+        _cli_parse_args=[  # type: ignore[call-arg]
             "--templates-dir",
             templates_dir,
             "--no-filefixtures-simulate-create-on-missing",

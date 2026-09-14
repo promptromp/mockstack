@@ -37,9 +37,7 @@ class FileFixturesStrategy(BaseStrategy, CreateMixin):
 
         self.templates_dir = Path(settings.templates_dir)
         self.enable_templates_for_post = settings.filefixtures_enable_templates_for_post
-        self.simulate_create_on_missing = (
-            settings.filefixtures_simulate_create_on_missing
-        )
+        self.simulate_create_on_missing = settings.filefixtures_simulate_create_on_missing
 
         self.created_resource_metadata = settings.created_resource_metadata
         self.missing_resource_fields = settings.missing_resource_fields
@@ -87,9 +85,7 @@ class FileFixturesStrategy(BaseStrategy, CreateMixin):
         """
         request_json = (await request.json()) if wants_json(request) else None
         if self.enable_templates_for_post:
-            rendered = self._render_matching_template(
-                request, request_json=request_json
-            )
+            rendered = self._render_matching_template(request, request_json=request_json)
             if rendered is not None:
                 return rendered
             # No matching template: fall through to the search/command/create

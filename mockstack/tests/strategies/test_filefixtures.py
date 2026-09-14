@@ -177,10 +177,7 @@ async def test_file_fixtures_strategy_post_create_simulate_create_disabled(
     response = await strategy_no_simulate_create.apply(request)
 
     assert response.status_code == status.HTTP_404_NOT_FOUND
-    assert (
-        json.loads(response.body.decode())
-        == settings_filefixtures.missing_resource_fields
-    )
+    assert json.loads(response.body.decode()) == settings_filefixtures.missing_resource_fields
 
 
 @pytest.mark.asyncio
@@ -302,10 +299,7 @@ async def test_file_fixtures_strategy_post_search_templates_for_post_no_template
     response = await strategy_templates_for_post.apply(request)
 
     assert response.status_code == status.HTTP_404_NOT_FOUND
-    assert (
-        json.loads(response.body.decode())
-        == settings_filefixtures.missing_resource_fields
-    )
+    assert json.loads(response.body.decode()) == settings_filefixtures.missing_resource_fields
 
 
 @pytest.mark.asyncio
@@ -324,10 +318,7 @@ async def test_file_fixtures_strategy_post_command_templates_for_post_no_templat
     response = await strategy_templates_for_post.apply(request)
 
     assert response.status_code == status.HTTP_404_NOT_FOUND
-    assert (
-        json.loads(response.body.decode())
-        == settings_filefixtures.missing_resource_fields
-    )
+    assert json.loads(response.body.decode()) == settings_filefixtures.missing_resource_fields
 
 
 @pytest.mark.asyncio
