@@ -15,7 +15,7 @@ The pattern in `rules.yml`, evaluated top to bottom (first match wins):
 
 The `x-request-eval-scenario` predicate is restricted to `[a-z0-9_-]+` (not
 `.*`) so the header can only select a sibling scenario directory under
-`fixtures/`, never escape it -- see the "path traversal" warning in
+`fixtures/`, never escape it -- see the warning under "Dynamic replacements" in
 [`docs/strategies/proxyrules.md`](../../docs/strategies/proxyrules.md).
 
 Assert on `X-Mockstack-Result`/`X-Mockstack-Rule` in your eval harness so a
