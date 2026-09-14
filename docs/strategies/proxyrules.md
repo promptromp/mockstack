@@ -39,19 +39,38 @@ rules:
 
 ### Rule Properties
 
-- `name`: Optional identifier for the rule (used in telemetry)
+- `name`: Optional identifier for the rule (used in telemetry and in the
+  `X-Mockstack-Rule` response header)
 - `pattern`: Regular expression pattern to match against the request path
+  (`re.match`, so it is anchored at the start of the path)
 - `replacement`: URL template to redirect to (can use capture groups from pattern)
-- `method`: Optional HTTP method to match (if not specified, matches all methods)
+- `method`: Optional HTTP method to match, case-insensitive (if not specified,
+  matches all methods)
 - `headers`: Optional mapping of header name -> regex. Every listed header must be
   present and its whole value must match the regex (`re.fullmatch`). Names are
-  case-insensitive. Use `".*"` to require presence only.
+  case-insensitive. Use `".*"` to require presence only. A repeated header is
+  matched on its first value.
 - `query`: Optional mapping of query parameter -> regex; same regex semantics;
-  parameter names are case-sensitive.
+  parameter names are case-sensitive. A repeated query parameter
+  (`?tag=a&tag=b`) is matched on its last value.
 - `body`: Optional regex searched (`re.search`) in the decoded request body.
 - `json`: Optional mapping of dotted JSON path -> regex, fully matched against the
-  string form of the value at that path (`query`, `filter.client.id`, `items.0.name`).
-  A rule with `body`/`json` never matches a request without a body.
+  JSON text form of the value at that path (`query`, `filter.client.id`,
+  `items.0.name`). Strings are matched raw, without quotes; every other value is
+  matched as a compact JSON literal: `true`, `false`, `null`, `1.5`,
+  `{"a":1,"b":2}` (keys sorted, no spaces). A path that is absent never matches,
+  while a present `null` matches as the text `null`. A rule with `body`/`json`
+  never matches a request without a body.
+
+Predicate values must be strings. YAML reads unquoted `2`, `true` or `2024` as
+numbers and booleans; mockstack converts them back with `str()`, which turns `true`
+into `True`, so quote them: `x-api-version: "2"`, `active: "true"`. A predicate with
+no value at all (`x-foo:`) is rejected.
+
+Every regex (`pattern` and each predicate) is compiled and validated when the rules
+file is loaded, at startup. An invalid regex, or any of the other load-time errors
+described below, stops mockstack from starting with the rule's name in the error,
+instead of failing on the first request that reaches the broken rule.
 
 All predicates on a rule are ANDed. Rules are evaluated in order and the first
 match wins, so put narrow, predicate-bearing rules before broad passthroughs:
@@ -103,9 +122,13 @@ The strategy supports three redirection methods:
     - Client is unaware of the redirection
     - Useful when you need to work with clients that do not handle HTTP redirects gracefully.
     - Request and response bodies are fully buffered. Hop-by-hop headers
-      (`Connection`, `Transfer-Encoding`, `Upgrade`, ...) and `Content-Length`
-      are stripped and recomputed on each side, so chunked clients and
-      chunked upstreams both work.
+      (`Connection`, `Transfer-Encoding`, `Upgrade`, ..., plus every header named
+      in a `Connection` value) are stripped in both directions, and
+      `Content-Length` is recomputed for the buffered body, so chunked clients and
+      chunked upstreams both work. A response to `HEAD` keeps the upstream's
+      `Content-Length`; `1xx`, `204` and `304` responses carry none.
+    - Repeated response headers, such as several `Set-Cookie` headers, are passed
+      through one by one rather than merged.
 
 ## Resource Creation Simulation
 
@@ -150,9 +173,22 @@ responses -- carries:
 | `X-Mockstack-Result` | `template`, `proxy`, `redirect`, `create`, `missing` or `error` |
 | `X-Mockstack-Rule` | The matched rule's `name` (or its `pattern` when unnamed); absent when no rule matched |
 
-Test harnesses should assert on these to turn a silently proxied request into a failure.
-An unstamped 5xx response means the ASGI layer itself failed (outside the strategy),
-not that `proxyrules` returned it.
+| `X-Mockstack-Result` | Status | Meaning |
+| --- | --- | --- |
+| `template` | 200 | A `file:///` fixture was rendered |
+| `proxy` | Upstream's | The request was reverse-proxied to the rewritten URL |
+| `redirect` | 301 / 307 | An HTTP redirect to the rewritten URL |
+| `create` | 201 | No rule matched; resource creation was simulated |
+| `missing` | 404 | No rule matched |
+| `error` | 404 | A rule matched but its fixture file does not exist (or its path contains `..`) |
+| `error` | 500 | A fixture failed to render, a template replacement failed, or another internal failure |
+| `error` | 502 | The upstream request failed |
+| `error` | 504 | The upstream request timed out |
+
+Every response the strategy returns carries the headers; a 404 or 5xx stamped
+`error` came from mockstack, not a fixture. Test harnesses should assert on these to
+turn a silently proxied request into a failure. An unstamped 5xx response means the
+ASGI layer itself failed (outside the strategy), not that `proxyrules` returned it.
 
 ## Example Rules
 
@@ -197,24 +233,34 @@ rules:
 ```
 
 The response content type comes from the file suffix, ignoring a trailing `.j2`
-(`project.json.j2` -> `application/json`). Templates always return HTTP 200.
+(`project.json.j2` -> `application/json`). A successfully rendered template always
+returns HTTP 200; see [Error Handling](#error-handling) for the failure cases.
 
 ### Template context
 
 | Variable | Contents |
 | --- | --- |
 | `path`, `method` | Request path and method |
-| `query` | Query parameters as a dict |
-| `headers` | Request headers as a dict, names lower-cased |
+| `query` | Query parameters as a dict (a repeated parameter keeps its last value) |
+| `headers` | Request headers as a dict, names lower-cased (a repeated header keeps its first value) |
 | `request_json` | Parsed JSON body, or `None` when the body is empty or not JSON |
+| `groups` | Tuple of the positional groups from `pattern` (`None` for a group that did not participate) |
+| `<named group>` | Each named group from `pattern`, e.g. `id` for `(?P<id>[^/]+)` |
 | `id`, `<segment>` | Identifiers inferred from the path, as in the filefixtures strategy |
+
+When names collide, the reserved names (`path`, `method`, `query`, `headers`,
+`request_json`, `groups`) always win, and named groups override identifiers
+inferred from the path. A named group that would shadow a reserved name, such as
+`(?P<headers>...)`, is rejected when the rules are loaded. A named group that did
+not participate in the match (an unmatched optional group) is absent from the
+context rather than `None`.
 
 ### Dynamic replacements
 
 A `replacement` containing `{{ ... }}` or `{% ... %}` is rendered as a Jinja2
-template in its own right, with the same context available to file templates,
-plus every **named group** from `pattern` and a `groups` tuple of positional
-groups. This lets one rule fan out to per-scenario fixture directories:
+template in its own right, with the same context as file templates, including every
+**named group** from `pattern` and the `groups` tuple of positional groups. This
+lets one rule fan out to per-scenario fixture directories:
 
 ```yaml
   - name: project-eval
@@ -225,11 +271,23 @@ groups. This lets one rule fan out to per-scenario fixture directories:
     replacement: file:///fixtures/{{ headers['x-request-eval-scenario'] }}/projects/project.{{ id }}.json.j2
 ```
 
-In this mode regex backreferences (`\1`, `\g<id>`) are **not** expanded -- the
-`replacement` string is rendered directly and `re.sub` never runs, so use
-`{{ groups[0] }}` (positional) or the named group (`{{ id }}`) instead. A
-`replacement` with no Jinja delimiters keeps today's plain `re.sub` behaviour, and
+The replacement is compiled once, when the rules are loaded, so a Jinja syntax
+error stops mockstack from starting. In this mode regex backreferences (`\1`,
+`\g<id>`) are **not** expanded -- the `replacement` string is rendered directly and
+`re.sub` never runs, so use `{{ groups[0] }}` (positional) or the named group
+(`{{ id }}`) instead. A replacement that mixes Jinja delimiters with a backreference
+is rejected at load. The URL fragment is not carried into the rendered result
+either; only plain `re.sub` mode appends it (URL-encoded) to the path it rewrites.
+A `replacement` with no Jinja delimiters keeps the plain `re.sub` behaviour, and
 backreferences work as before.
+
+Template replacements are rendered with strict undefined: referencing a header,
+query parameter, JSON key or group that is not there is an error, not an empty
+string. The request is answered with a 500 stamped `X-Mockstack-Result: error` and
+the rule's `X-Mockstack-Rule`, and the error is logged, instead of silently
+rendering a path such as `file:///fixtures//projects/project.json.j2`. Give
+optional values an explicit fallback, e.g.
+`{{ headers.get('x-request-eval-scenario', 'default') }}`.
 
 !!! warning
     A rendered `file://` path or proxied URL must never be built from an
@@ -255,9 +313,9 @@ broad passthrough for the same path prefix, and point the fixture rule's
 other request -- unstamped, or one whose header value fails the predicate --
 fails open and is reverse-proxied to the real service untouched. A *stamped*
 request naming a scenario with no fixture on disk still matches the eval rule
-and does not fall through to the passthrough: it gets a 404 from
-`handle_template_result`, so evaluators should treat a 404 paired with
-`X-Mockstack-Result: template` as a missing-fixture error, not a passthrough.
+and does not fall through to the passthrough: it gets a 404 stamped
+`X-Mockstack-Result: error` with body `{"error": "Template file not found."}`, so
+evaluators see a missing fixture as an error, not a passthrough.
 
 Have the eval harness assert `X-Mockstack-Result` (and, ideally,
 `X-Mockstack-Rule`) on every response instead of only checking the body: a rule
@@ -271,13 +329,29 @@ and fixtures for real.
 
 ## Error Handling
 
-When no matching rule is found and resource creation simulation is disabled, the strategy returns a 404 NOT FOUND response.
+When no matching rule is found and resource creation simulation is disabled, the
+strategy returns a 404 NOT FOUND response stamped `X-Mockstack-Result: missing`.
 
-When a matched rule fails -- an unreachable or slow upstream during reverse
-proxying, or an internal error such as an unrecognised `proxyrules_redirect_via`
-value -- `apply()` catches the failure itself and returns a 502 BAD GATEWAY response
-with body `{"error": "mockstack: upstream request failed or internal error"}`,
-stamped with `X-Mockstack-Result: error` and, when a rule had already matched,
-`X-Mockstack-Rule`. This keeps "upstream unreachable" -- the single most common
-evaluation-harness failure -- from surfacing as a bare, unstamped 500 out of
-Starlette's `ServerErrorMiddleware`.
+Every other failure is answered by the strategy itself, stamped
+`X-Mockstack-Result: error` and, once a rule has matched, `X-Mockstack-Rule`,
+instead of surfacing as a bare, unstamped 500 from Starlette's
+`ServerErrorMiddleware`:
+
+| Failure | Status | Body |
+| --- | --- | --- |
+| The rendered fixture path does not exist, or contains `..` | 404 | `{"error": "Template file not found."}` |
+| The fixture fails to render | 500 | `{"error": "An internal error occurred while rendering the template."}` |
+| The upstream is unreachable, resets the connection or breaks the protocol | 502 | `{"error": "mockstack: upstream request failed"}` |
+| The upstream does not answer within `proxyrules_reverse_proxy_timeout` | 504 | `{"error": "mockstack: upstream request timed out"}` |
+| Anything else, e.g. a template replacement referencing a missing value, an unrecognised `proxyrules_redirect_via`, or a malformed JSON body on the resource-creation path | 500 | `{"error": "mockstack: internal error"}` |
+
+The rendered fixture path is never echoed back in a response body; it is only
+logged. Upstream failures are logged at WARNING; other failures at ERROR, with a
+traceback and the rule name. If the client disconnects before its request body has
+been read, no response is sent.
+
+A broken rules file fails at startup rather than per request: YAML that does not
+parse, and, naming the offending rule, an invalid regex, an invalid Jinja
+replacement, a predicate without a value, a named group that shadows a reserved
+template variable, or a replacement that mixes Jinja delimiters with a
+backreference.
