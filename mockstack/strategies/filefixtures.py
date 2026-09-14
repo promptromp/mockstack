@@ -84,19 +84,26 @@ class FileFixturesStrategy(BaseStrategy, CreateMixin):
 
         """
         request_json = (await request.json()) if wants_json(request) else None
+        template_already_missing = False
         if self.enable_templates_for_post:
             rendered = self._render_matching_template(request, request_json=request_json)
             if rendered is not None:
                 return rendered
-            # No matching template: fall through to the search/command/create
-            # logic below to try to infer intent from the request instead.
+            # No matching template: fall through to the search/command/create logic
+            # below to try to infer intent from the request instead, without
+            # repeating the template lookup we just did.
+            template_already_missing = True
 
         if looks_like_a_search(request):
             # Searching for resources with a complex query that cannot be expressed in a URI.
+            if template_already_missing:
+                return self._missing_resource_response()
             return self._response_from_template(request, request_json=request_json)
         if looks_like_a_command(request):
             # Executing a 'command' of some sort, like a workflow or a batch job.
             # We return a 201 CREATED status code with response from template.
+            if template_already_missing:
+                return self._missing_resource_response()
             return self._response_from_template(request, request_json=request_json, status_code=status.HTTP_201_CREATED)
         if self.simulate_create_on_missing:
             # simulate resource creation:
@@ -107,10 +114,7 @@ class FileFixturesStrategy(BaseStrategy, CreateMixin):
             )
         # simulating creation is disabled: same 404 as a GET with no
         # matching template.
-        return JSONResponse(
-            content=self.missing_resource_fields,
-            status_code=status.HTTP_404_NOT_FOUND,
-        )
+        return self._missing_resource_response()
 
     async def _get(self, request: Request) -> Response:
         """Apply the strategy for GET requests.
@@ -156,10 +160,7 @@ class FileFixturesStrategy(BaseStrategy, CreateMixin):
             return rendered
 
         # if we get here, we have no template to render.
-        return JSONResponse(
-            content=self.missing_resource_fields,
-            status_code=status.HTTP_404_NOT_FOUND,
-        )
+        return self._missing_resource_response()
 
     def _render_matching_template(
         self,
@@ -192,6 +193,14 @@ class FileFixturesStrategy(BaseStrategy, CreateMixin):
 
         # if we get here, we have no template to render.
         return None
+
+    def _missing_resource_response(self) -> JSONResponse:
+        """The 404 response for a resource with no matching template (or, for POST,
+        with creation simulation disabled)."""
+        return JSONResponse(
+            content=self.missing_resource_fields,
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
 
     def update_opentelemetry(self, request: Request, template_args: dict) -> None:
         """Update the opentelemetry span with the file fixtures details."""
