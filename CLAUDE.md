@@ -27,10 +27,12 @@ CLI flags, `MOCKSTACK__*` environment variables, or a `.env` file.
   template context
 - `mockstack/templating.py`: Jinja environment and path-to-template-name resolution
 - `mockstack/routers/`: catch-all and homepage routes
-- `mockstack/tests/`: unit tests
+- `mockstack/tests/`: unit tests; `conftest.py` holds fixtures shared by unit and live
+  tests (`make_settings`, `make_request`, `write_rules`, `write_template`, `span`), and
+  `strategies/conftest.py` adds strategy helpers
 - `mockstack/tests/live/`: live tests against real uvicorn servers on loopback sockets;
-  `conftest.py` provides `upstream` (a recording echo server), `mockstack_server`,
-  `write_rules` and `proxyrules_settings`
+  `conftest.py` provides the session-scoped recording echo `upstream`, the module-scoped
+  `mockstack_server`, `proxyrules_settings` and `render_rules`
 - `examples/`: runnable examples; `examples/proxyrules-cookbook/` holds the files
   embedded in the cookbook docs page
 - `docs/`: the MkDocs Material site (`mkdocs.yml`); the home page is `README.md`
