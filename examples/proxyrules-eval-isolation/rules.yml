@@ -1,0 +1,26 @@
+# Eval-isolation pattern: stamped requests (X-Request-Eval-Scenario) get fixtures,
+# everything else is reverse-proxied to the real service. Order matters: first match wins.
+rules:
+  - name: projects-project-eval
+    method: GET
+    pattern: ^/projects/api/v2/project/(?P<id>[^/]+)$
+    headers:
+      x-request-eval-scenario: "[a-z0-9_-]+"
+    replacement: file:///${FIXTURES_DIR}/{{ headers['x-request-eval-scenario'] }}/projects/project.json.j2
+
+  - name: projects-passthrough
+    pattern: ^/projects/(.*)
+    replacement: ${PROJECTS_URL}/\1
+
+  - name: analytics-sales-eval
+    method: POST
+    pattern: ^/analytics/analytics/v2/sql$
+    headers:
+      x-request-eval-scenario: "[a-z0-9_-]+"
+    json:
+      query: "(?is).*FROM\\s+sales_facts.*"
+    replacement: file:///${FIXTURES_DIR}/{{ headers['x-request-eval-scenario'] }}/analytics/sales_facts.json.j2
+
+  - name: analytics-passthrough
+    pattern: ^/analytics/(.*)
+    replacement: ${ANALYTICS_URL}/\1
