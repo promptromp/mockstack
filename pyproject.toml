@@ -13,11 +13,12 @@ authors = [{ name = "Adam Ever-Hadani", email = "mockstack.contact@gmail.com" }]
 classifiers = [
   "Development Status :: 5 - Production/Stable",
   "Programming Language :: Python",
-  "Programming Language :: Python :: 3.11",
-  "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: Implementation :: CPython",
 ]
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 dependencies = [
     "colorama>=0.4.6",
     "fastapi[standard]>=0.141.1",
@@ -60,6 +61,7 @@ dev = [
 # can be empty if no extra settings are needed, presence enables setuptools-scm
 
 [tool.mypy]
+python_version = "3.13"
 namespace_packages = true
 ignore_missing_imports = true
 
@@ -74,5 +76,8 @@ addopts = "-m 'not slow'"
 # Measure production code only: test modules, including the deselected live tests,
 # are not coverage targets.
 omit = ["mockstack/tests/*"]
+
+[tool.ruff]
+target-version = "py313"
 
 [tool.ruff.lint]

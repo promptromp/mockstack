@@ -53,7 +53,7 @@ def iter_possible_template_arguments(
     default_template_name: str = "index.j2",
     template_file_separator: str = "-",
     template_file_extension: str = ".j2",
-) -> Generator[dict, None, None]:
+) -> Generator[dict]:
     """Infer the template arguments for a given request.
 
     This includes:
@@ -123,7 +123,7 @@ def iter_possible_template_filenames(
     template_file_separator: str,
     template_file_extension: str,
     default_template_name: str,
-) -> Generator[str, None, None]:
+) -> Generator[str]:
     """Infer the template filename from the name segments and context.
 
     We have a cascade of possible filename formats:

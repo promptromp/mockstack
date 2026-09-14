@@ -4,7 +4,7 @@ import logging
 import re
 from functools import cached_property
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any
 from urllib.parse import urlparse
 
 import httpx
@@ -50,9 +50,6 @@ class UpstreamError(Exception):
         self.message = message
 
 
-HeadersT = TypeVar("HeadersT", MutableHeaders, ResponseHeaders)
-
-
 class InvalidUpstreamURLError(Exception):
     """A rewritten URL that httpx cannot send at all (not absolute, bad port, ...).
 
@@ -65,7 +62,9 @@ class InvalidUpstreamURLError(Exception):
         self.url = url
 
 
-def strip_hop_by_hop(headers: HeadersT) -> HeadersT:
+def strip_hop_by_hop[HeadersT: (MutableHeaders, ResponseHeaders)](
+    headers: HeadersT,
+) -> HeadersT:
     """Remove hop-by-hop headers in place (RFC 9110 §7.6.1) and return ``headers``.
 
     That is every name in ``HOP_BY_HOP_HEADERS`` plus every header listed in a
