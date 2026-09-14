@@ -87,7 +87,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
 
         with open(self.rules_filename, "r") as file:
             data = yaml.safe_load(file)
-            return [Rule.from_dict(rule) for rule in data["rules"]]
+            return [Rule.from_dict(rule, env=self.env) for rule in data["rules"]]
 
     def rule_for(
         self, request: Request, payload: RequestPayload | None = None

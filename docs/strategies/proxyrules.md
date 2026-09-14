@@ -190,6 +190,29 @@ The response content type comes from the file suffix, ignoring a trailing `.j2`
 | `request_json` | Parsed JSON body, or `None` when the body is empty or not JSON |
 | `id`, `<segment>` | Identifiers inferred from the path, as in the filefixtures strategy |
 
+### Dynamic replacements
+
+After regex substitution, a `replacement` containing `{{ ... }}` or `{% ... %}` is
+rendered as a Jinja2 template with the same context available to file templates,
+plus every **named group** from `pattern` and a `groups` tuple of positional groups.
+This lets one rule fan out to per-scenario fixture directories:
+
+```yaml
+  - name: project-eval
+    method: GET
+    pattern: ^/projects/api/v2/project/(?P<id>[^/]+)$
+    headers:
+      x-request-eval-scenario: ".*"
+    replacement: file:///fixtures/{{ headers['x-request-eval-scenario'] }}/projects/project.{{ id }}.json.j2
+```
+
+Regex backreferences (`\1`, `\g<id>`) keep working and are applied first.
+
+!!! warning
+    A rendered replacement that proxies (`https://{{ ... }}`) lets request data choose
+    the upstream. mockstack is already an open reverse proxy; only expose it on trusted
+    networks.
+
 ## Error Handling
 
 When no matching rule is found and resource creation simulation is disabled, the strategy returns a 404 NOT FOUND response.
