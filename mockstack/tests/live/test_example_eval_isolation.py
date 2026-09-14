@@ -45,7 +45,9 @@ def server(tmp_path, upstream, mockstack_server):
 
 def test_stamped_get_project_returns_fixture(server, upstream):
     """README scenario 1: stamped GET project -> template fixture."""
-    r = httpx.get(f"{server.base_url}/projects/api/v2/project/proj-123", headers=STAMPED)
+    r = httpx.get(
+        f"{server.base_url}/projects/api/v2/project/proj-123", headers=STAMPED
+    )
     assert r.status_code == 200
     assert r.headers["x-mockstack-result"] == "template"
     assert r.headers["x-mockstack-rule"] == "projects-project-eval"
