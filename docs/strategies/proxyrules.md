@@ -240,8 +240,12 @@ only to evaluation traffic: stamp eval requests with a header (e.g.
 `X-Request-Eval-Scenario: healthy`), put a narrow, header-gated rule ahead of a
 broad passthrough for the same path prefix, and point the fixture rule's
 `replacement` at a `file:///` template under a per-scenario directory. Every
-other request -- unstamped, or a scenario with no matching fixture -- fails open
-and is reverse-proxied to the real service untouched.
+other request -- unstamped, or one whose header value fails the predicate --
+fails open and is reverse-proxied to the real service untouched. A *stamped*
+request naming a scenario with no fixture on disk still matches the eval rule
+and does not fall through to the passthrough: it gets a 404 from
+`handle_template_result`, so evaluators should treat a 404 paired with
+`X-Mockstack-Result: template` as a missing-fixture error, not a passthrough.
 
 Have the eval harness assert `X-Mockstack-Result` (and, ideally,
 `X-Mockstack-Rule`) on every response instead of only checking the body: a rule

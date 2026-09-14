@@ -31,7 +31,9 @@ python upstream.py
 ```
 
 In another, render the rules file (mockstack does not expand `${VAR}`
-placeholders itself) and start mockstack:
+placeholders itself) and start mockstack. `envsubst` ships with GNU gettext;
+on macOS install it with `brew install gettext` if it's missing, or use any
+equivalent `${VAR}` substitution tool instead:
 
 ```bash
 export FIXTURES_DIR=$(pwd)/fixtures JUVENAL_URL=http://127.0.0.1:8081 DRUID_URL=http://127.0.0.1:8081
@@ -40,6 +42,12 @@ envsubst < rules.yml > rules.local.yml
 MOCKSTACK__STRATEGY=proxyrules MOCKSTACK__PROXYRULES_RULES_FILENAME=rules.local.yml uvx mockstack
 # or: uv run mockstack
 ```
+
+Instead of passing `MOCKSTACK__*` variables inline, you can copy
+`.env.example` to `.env` (as in `examples/proxyrules-with-rules-file`) --
+its `MOCKSTACK__PROXYRULES_RULES_FILENAME` already points at
+`./rules.local.yml`, matching the command above -- and just run
+`uvx mockstack` / `uv run mockstack`.
 
 Then, in a third terminal:
 
