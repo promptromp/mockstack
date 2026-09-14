@@ -69,6 +69,11 @@ class Settings(BaseSettings):
     # with a 404, we will then try to simulate creation of the resource.
     filefixtures_enable_templates_for_post: CliImplicitFlag[bool] = True
 
+    # controls behavior of filefixtures. Whether to simulate creation of resources
+    # when a POST request doesn't match any template (or templates-for-POST is off).
+    # When disabled, such a request gets the same 404 as a GET with no template.
+    filefixtures_simulate_create_on_missing: CliImplicitFlag[bool] = True
+
     # rules filename for proxyrules strategy
     proxyrules_rules_filename: FilePath | None = None
 

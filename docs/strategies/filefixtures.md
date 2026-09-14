@@ -31,7 +31,10 @@ The strategy intelligently handles POST requests based on the request context:
 
 1. **Search Requests**: If the request looks like a search (based on URL and body), returns a template response
 2. **Command Requests**: If the request looks like a command, returns a 201 CREATED status with template response
-3. **Resource Creation**: Otherwise, simulates resource creation with injected metadata
+3. **Resource Creation**: Otherwise, simulates resource creation with injected metadata, when
+   `filefixtures_simulate_create_on_missing` is enabled (the default). When it is disabled, a
+   create-looking POST with no matching template gets the same 404 missing-resource response as
+   a GET with no template, instead of a simulated create.
 
 ### DELETE/PUT/PATCH Requests
 - Returns 204 NO CONTENT by default
@@ -72,6 +75,7 @@ settings = Settings(
     strategy="filefixtures",
     templates_dir="/path/to/templates",
     filefixtures_enable_templates_for_post=True,  # Optional: Enables template-based responses for POST requests
+    filefixtures_simulate_create_on_missing=False,  # Optional: Disables the create-simulation fallback for POSTs without a template
 )
 ```
 
@@ -96,7 +100,7 @@ The strategy automatically adds the following OpenTelemetry attributes:
 
 ## Error Handling
 
-When no matching template is found, the strategy returns a 404 response with the following structure:
+When no matching template is found, the strategy returns a 404 response with the following structure. The exception is a POST that looks like resource creation: with `filefixtures_simulate_create_on_missing` enabled (the default), a missing template there falls back to simulating creation (see [Resource Creation](#resource-creation)) instead of 404ing. Set `filefixtures_simulate_create_on_missing=False` to turn that fallback off and get the same 404 as any other unmatched request.
 
 ```json
 {

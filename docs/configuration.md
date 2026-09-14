@@ -35,10 +35,11 @@ flags with a `--no-` form.
 
 ### FileFixtures Strategy
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `templates_dir` | string | - | Base directory for templates used by the strategy |
-| `filefixtures_enable_templates_for_post` | boolean | `true` | Whether to try a template-based response for POST requests before simulating resource creation |
+| Option | Environment variable | Type | Default | Description |
+|--------|----------------------|------|---------|-------------|
+| `templates_dir` | `MOCKSTACK__TEMPLATES_DIR` | string | - | Base directory for templates used by the strategy |
+| `filefixtures_enable_templates_for_post` | `MOCKSTACK__FILEFIXTURES_ENABLE_TEMPLATES_FOR_POST` | boolean | `true` | Whether to try a template-based response for POST requests before simulating resource creation |
+| `filefixtures_simulate_create_on_missing` | `MOCKSTACK__FILEFIXTURES_SIMULATE_CREATE_ON_MISSING` | boolean | `true` | Whether a create-looking POST with no matching template (or with templates-for-POST off) gets a simulated 201 instead of the same 404 (`missing`) a GET with no template gets |
 
 ### ProxyRules Strategy
 
