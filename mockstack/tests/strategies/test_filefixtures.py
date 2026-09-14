@@ -1,10 +1,10 @@
 """Unit tests for the filefixtures strategy module."""
 
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException, Request, status
-import json
 
 from mockstack.strategies.filefixtures import FileFixturesStrategy
 

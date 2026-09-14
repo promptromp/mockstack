@@ -1,8 +1,8 @@
 """Unit tests for the create mixin module."""
 
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock
 import json
+from datetime import UTC, datetime
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import Request, status
@@ -13,8 +13,6 @@ from mockstack.strategies.create_mixin import CreateMixin
 
 class TestStrategy(CreateMixin):
     """A test strategy that uses the CreateMixin."""
-
-    pass
 
 
 @pytest.fixture
@@ -171,7 +169,7 @@ def test_metadata_context(strategy, span):
 
     assert callable(context["utcnow"])
     assert isinstance(context["utcnow"](), datetime)
-    assert context["utcnow"]().tzinfo == timezone.utc
+    assert context["utcnow"]().tzinfo == UTC
 
     assert callable(context["uuid4"])
     assert len(str(context["uuid4"]())) > 0

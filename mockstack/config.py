@@ -94,16 +94,16 @@ class Settings(BaseSettings):
         "createdAt": "{{ utcnow().isoformat() }}",
         "updatedAt": "{{ utcnow().isoformat() }}",
         "createdBy": "{{ request.headers.get('X-User-Id', uuid4()) }}",
-        "status": dict(code="OK", error_code=None),
+        "status": {"code": "OK", "error_code": None},
     }
 
     # fields to inject into missing resources response json.
     # some services may require such additional fields to be present in the response.
-    missing_resource_fields: CliSuppress[dict[str, Any]] = dict(
-        code=404,
-        message="mockstack: resource not found",
-        retryable=False,
-    )
+    missing_resource_fields: CliSuppress[dict[str, Any]] = {
+        "code": 404,
+        "message": "mockstack: resource not found",
+        "retryable": False,
+    }
 
     # logging configuration. schema is based on the logging configuration schema:
     # https://docs.python.org/3/library/logging.config.html#logging-config-dictschema
@@ -152,17 +152,13 @@ class Settings(BaseSettings):
 
         # TODO: make this validation dynamic based on the strategy classes themselves.
 
-        if self.strategy == "proxyrules":
-            if self.proxyrules_rules_filename is None:
-                raise ValueError(
-                    "proxyrules_rules_filename is required when strategy is proxyrules"
-                )
+        if self.strategy == "proxyrules" and self.proxyrules_rules_filename is None:
+            raise ValueError(
+                "proxyrules_rules_filename is required when strategy is proxyrules"
+            )
 
-        elif self.strategy == "filefixtures":
-            if self.templates_dir is None:
-                raise ValueError(
-                    "templates_dir is required when strategy is proxyrules"
-                )
+        elif self.strategy == "filefixtures" and self.templates_dir is None:
+            raise ValueError("templates_dir is required when strategy is proxyrules")
 
         return self
 

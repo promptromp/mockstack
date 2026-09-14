@@ -5,10 +5,10 @@ from fastapi import Request
 from starlette.datastructures import Headers
 
 from mockstack.intent import (
-    wants_json,
-    looks_like_a_search,
     looks_like_a_command,
     looks_like_a_create,
+    looks_like_a_search,
+    wants_json,
 )
 
 

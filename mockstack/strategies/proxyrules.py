@@ -102,7 +102,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         elif isinstance(result, URLRuleResult):
             return await self.handle_url_result(request, rule, result)
         else:
-            raise ValueError(f"Unknown result type: {type(result)}")
+            raise TypeError(f"Unknown result type: {type(result)}")
 
     async def handle_missing_rule(self, request: Request) -> Response:
         """Handle a missing rule."""
@@ -163,8 +163,10 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             )
 
         try:
-            # Read the template file content
-            with open(template_path, "r") as f:
+            # Read the template file content.
+            # Templates are small local files read once per request; the sync
+            # read is intentional here rather than adding an async-file dependency.
+            with open(template_path, "r") as f:  # noqa: ASYNC230
                 template_content = f.read()
 
             # Create a template from the content
@@ -185,7 +187,8 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
                 status_code=status.HTTP_200_OK,
             )
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 -- deliberate catch-all so template
+            # rendering errors (e.g. Jinja2 errors) degrade to a 500 instead of crashing.
             self.logger.error(f"Error rendering template {template_path}: {e}")
             return JSONResponse(
                 content={

@@ -18,7 +18,6 @@ class RuleResult(ABC):
     @abstractmethod
     def get_result_type(self) -> str:
         """Return the type of result."""
-        pass
 
 
 @dataclass
@@ -105,7 +104,7 @@ class Rule:
     def _create_template_context(self, request: Request) -> dict:
         """Create template context from the request, using the same logic as templating.py."""
         path = request.url.path
-        name_segments, identifiers = parse_template_name_segments_and_identifiers(
+        _, identifiers = parse_template_name_segments_and_identifiers(
             path, default_identifier_key="id"
         )
         return {

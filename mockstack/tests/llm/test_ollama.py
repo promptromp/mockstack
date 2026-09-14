@@ -1,12 +1,12 @@
 """Tests for the Ollama module."""
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
-from typing import List, Dict
 
 
 @pytest.fixture
-def mock_messages() -> List[Dict[str, str]]:
+def mock_messages() -> list[dict[str, str]]:
     """Sample messages for testing."""
     return [
         {"role": "user", "content": "Hello"},
@@ -15,7 +15,7 @@ def mock_messages() -> List[Dict[str, str]]:
 
 
 @pytest.fixture
-def mock_chat_response() -> Dict:
+def mock_chat_response() -> dict:
     """Mock chat response from Ollama."""
     return {"message": {"content": "This is a test response"}}
 

@@ -15,7 +15,7 @@ def prefixes(iterable, reverse=False):
     [(1, 2, 3), (1, 2), (1,)]
 
     """
-    iterator = itertools.accumulate(map(lambda x: (x,), iterable))
+    iterator = itertools.accumulate((x,) for x in iterable)
     if reverse:
         return reversed(list(iterator))
     return iterator

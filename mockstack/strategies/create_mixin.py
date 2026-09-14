@@ -1,8 +1,8 @@
 """Create mixin class."""
 
-from datetime import datetime, timezone
-from uuid import uuid4
 import json
+from datetime import UTC, datetime
+from uuid import uuid4
 
 from fastapi import Request, Response, status
 from fastapi.responses import JSONResponse
@@ -79,7 +79,7 @@ class CreateMixin:
 
         """
         return {
-            "utcnow": lambda: datetime.now(timezone.utc),
+            "utcnow": lambda: datetime.now(UTC),
             "uuid4": uuid4,
             "request": request,
         }

@@ -31,6 +31,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 def run():
     """run the mockstack server."""
     import argparse
+
     import uvicorn
 
     parser = argparse.ArgumentParser()

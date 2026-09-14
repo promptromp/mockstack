@@ -128,7 +128,7 @@ async def test_with_response_body():
     )
     span = MagicMock()
 
-    new_response, updated_span = await with_response_body(response, span)
+    new_response, _ = await with_response_body(response, span)
 
     # Verify response body was added to span
     span.set_attribute.assert_called_once_with(
