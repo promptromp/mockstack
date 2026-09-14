@@ -198,13 +198,18 @@ class Rule:
         _, identifiers = parse_template_name_segments_and_identifiers(
             path, default_identifier_key="id"
         )
+        match = re.match(self.pattern, request.url.path)
+        groups = match.groups() if match else ()
+        named = match.groupdict() if match else {}
         return {
             "query": dict(request.query_params),
             "headers": dict(request.headers),
             "path": request.url.path,
             "method": request.method,
             "request_json": payload.json,
+            "groups": groups,
             **identifiers,
+            **named,
         }
 
 
