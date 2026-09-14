@@ -4,6 +4,7 @@ import logging
 import re
 from functools import cached_property
 from pathlib import Path
+from typing import Any, TypeVar
 from urllib.parse import urlparse
 
 import httpx
@@ -11,8 +12,9 @@ import yaml
 from fastapi import Request, Response, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from httpx import Headers as ResponseHeaders
-from jinja2 import Environment
-from starlette.datastructures import Headers
+from jinja2 import Environment, TemplateSyntaxError
+from starlette.datastructures import Headers, MutableHeaders
+from starlette.requests import ClientDisconnect
 
 from mockstack.config import Settings
 from mockstack.constants import (
@@ -29,21 +31,55 @@ from mockstack.strategies.create_mixin import CreateMixin
 from mockstack.templating import templates_env_provider
 
 
+class UpstreamError(Exception):
+    """The reverse-proxied upstream could not be reached or did not answer in time."""
+
+    def __init__(self, status_code: int, message: str):
+        super().__init__(message)
+        self.status_code = status_code
+        self.message = message
+
+
+HeadersT = TypeVar("HeadersT", MutableHeaders, ResponseHeaders)
+
+
+def strip_hop_by_hop(headers: HeadersT) -> HeadersT:
+    """Remove hop-by-hop headers in place (RFC 9110 §7.6.1) and return ``headers``.
+
+    That is every name in ``HOP_BY_HOP_HEADERS`` plus every header listed in a
+    ``Connection`` header value. Works for both Starlette ``MutableHeaders`` and
+    ``httpx.Headers``, whose ``items()`` both expose every ``Connection`` value.
+    """
+    listed: set[str] = {
+        token.strip().lower()
+        for name, value in headers.items()
+        if name.lower() == "connection"
+        for token in value.split(",")
+    }
+    listed.discard("")
+    for name in (*HOP_BY_HOP_HEADERS, *sorted(listed)):
+        if name in headers:
+            del headers[name]
+    return headers
+
+
 def maybe_update_response_headers(
     response_headers: ResponseHeaders,
     *,
     content_length: int,
     status_code: int,
+    request_method: str,
 ) -> ResponseHeaders:
     """Update the response headers if needed, e.g. to adjust for compression and framing."""
     _headers = response_headers.copy()
+    strip_hop_by_hop(_headers)
 
-    for name in HOP_BY_HOP_HEADERS:
-        _headers.pop(name, None)
-
-    if _headers.get("content-encoding") in CONTENT_ENCODING_COMPRESSED:
-        # httpx already decompressed the body while proxying.
-        _headers["content-encoding"] = "identity"
+    encoding = _headers.get("content-encoding")
+    if encoding is not None:
+        tokens = [t.strip() for t in encoding.lower().split(",") if t.strip()]
+        if tokens and all(t in CONTENT_ENCODING_COMPRESSED for t in tokens):
+            # httpx already decompressed the body while proxying.
+            _headers["content-encoding"] = "identity"
 
     if status_code < 200 or status_code in (
         status.HTTP_204_NO_CONTENT,
@@ -54,6 +90,10 @@ def maybe_update_response_headers(
         # ``0`` (the length of our empty buffered body) would be a lie. Drop any
         # inherited value rather than stamp one.
         _headers.pop("content-length", None)
+    elif request_method.upper() == "HEAD":
+        # A HEAD response has no body; the upstream's Content-Length describes the
+        # representation a GET would return, so leave it (or its absence) untouched.
+        pass
     else:
         # We always return a fully buffered body, so the length is known.
         _headers["content-length"] = str(content_length)
@@ -72,20 +112,32 @@ def _header_safe(value: str) -> str:
     ``UnicodeEncodeError`` when the response is sent. ASCII control characters
     (CR/LF included, but also e.g. NUL, VT, DEL) are also stripped (replaced with a
     space) since they are not valid inside a single header value and would otherwise
-    survive ``backslashreplace`` as literal bytes that h11 rejects.
+    survive ``backslashreplace`` as literal bytes that h11 rejects. Surrounding
+    whitespace is trimmed, and an empty result falls back to ``"unnamed"``.
     """
-    value = _CONTROL_CHARACTERS_RE.sub(" ", value)
-    return value.encode("ascii", "backslashreplace").decode("ascii")
+    value = _CONTROL_CHARACTERS_RE.sub(" ", value).strip()
+    return value.encode("ascii", "backslashreplace").decode("ascii") or "unnamed"
 
 
 def with_result_headers(
     response: Response, *, rule: Rule | None, result_type: str
 ) -> Response:
-    """Stamp the response with which rule (if any) produced it and how."""
+    """Stamp the response with which rule (if any) produced it and how. Never raises."""
     response.headers[RESULT_TYPE_HEADER] = result_type
     if rule is not None:
-        response.headers[RESULT_RULE_HEADER] = _header_safe(rule.name or rule.pattern)
+        response.headers[RESULT_RULE_HEADER] = _header_safe(
+            str(rule.name or rule.pattern)
+        )
     return response
+
+
+def _error_response(message: str, *, status_code: int, rule: Rule | None) -> Response:
+    """A JSON error body stamped ``X-Mockstack-Result: error``."""
+    return with_result_headers(
+        JSONResponse(content={"error": message}, status_code=status_code),
+        rule=rule,
+        result_type="error",
+    )
 
 
 class ProxyRulesStrategy(BaseStrategy, CreateMixin):
@@ -102,6 +154,11 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         self.rules_filename = settings.proxyrules_rules_filename
         self.simulate_create_on_missing = settings.proxyrules_simulate_create_on_missing
         self.verify_ssl_certificates = settings.proxyrules_verify_ssl_certificates
+
+        if self.rules_filename is not None:
+            # Load (and so validate) the rules now, so a bad rules file fails at
+            # startup rather than on the first request.
+            _ = self.rules
 
     def __str__(self) -> str:
         return (
@@ -128,7 +185,21 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
 
         with open(self.rules_filename, "r") as file:
             data = yaml.safe_load(file)
-            return [Rule.from_dict(rule, env=self.env) for rule in data["rules"]]
+        return [self._rule_from_dict(rule) for rule in data["rules"]]
+
+    def _rule_from_dict(self, data: dict[str, Any]) -> Rule:
+        """Build one rule, naming it in any load-time validation error."""
+        name = str(data["name"]) if data.get("name") is not None else None
+        try:
+            return Rule.from_dict(data, env=self.env)
+        except re.error as exc:
+            raise ValueError(
+                f"rule {name!r}: invalid regex {exc.pattern!r}: {exc}"
+            ) from exc
+        except TemplateSyntaxError as exc:
+            raise ValueError(
+                f"rule {name!r}: invalid replacement template: {exc}"
+            ) from exc
 
     def rule_for(
         self, request: Request, payload: RequestPayload | None = None
@@ -141,63 +212,51 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
     async def apply(self, request: Request) -> Response:
         """Apply the proxyrules strategy to the request.
 
-        Wraps ``_apply`` so that any failure -- an upstream connect error/timeout out
-        of ``reverse_proxy``, or an internal ``ValueError`` -- is stamped with the
-        strategy's own ``X-Mockstack-*`` headers before it is returned, instead of
-        propagating to Starlette's ``ServerErrorMiddleware``, which would produce a
-        bare 500 with none of them. An unstamped 5xx therefore means the ASGI layer
-        itself failed, not this strategy.
+        Every response carries the ``X-Mockstack-*`` result headers, including the
+        strategy's own error responses: an unreachable or slow upstream is a stamped
+        502/504, and any other failure (e.g. a replacement referencing a missing
+        header) a stamped 500, instead of a bare, unstamped 500 from Starlette's
+        ``ServerErrorMiddleware``. A client that disconnected gets no answer.
         """
+        rule: Rule | None = None
         try:
-            return await self._apply(request)
+            # Read the body exactly once. Starlette caches it on the request, so the
+            # reverse proxy and create-mixin paths can safely read it again later.
+            payload = RequestPayload.from_bytes(await request.body())
+
+            rule = self.rule_for(request, payload)
+            if rule is None:
+                return await self.handle_missing_rule(request)
+
+            result = rule.apply(request, payload)
+            if isinstance(result, TemplateRuleResult):
+                self.logger.info(
+                    f"[rule:{rule.name}] template result: {result.template_path}"
+                )
+                return await self.handle_template_result(request, rule, result)
+            if isinstance(result, URLRuleResult):
+                self.logger.info(f"[rule:{rule.name}] url result: {result.url}")
+                return await self.handle_url_result(request, rule, result)
+            raise TypeError(f"Unknown result type: {type(result)}")
+
+        except ClientDisconnect:
+            raise
+        except UpstreamError as exc:
+            self.logger.warning(
+                f"[rule:{rule.name if rule else None}] {exc.message} for "
+                f"{request.method} {request.url.path}: {exc.__cause__!r}"
+            )
+            return _error_response(exc.message, status_code=exc.status_code, rule=rule)
         except Exception:
             self.logger.exception(
-                f"proxyrules: unhandled error applying strategy to "
-                f"{request.method} {request.url.path}"
+                f"[rule:{rule.name if rule else None}] unhandled error applying "
+                f"strategy to {request.method} {request.url.path}"
             )
-            rule = getattr(request.state, "proxyrules_matched_rule", None)
-            return with_result_headers(
-                JSONResponse(
-                    content={
-                        "error": "mockstack: upstream request failed or internal error"
-                    },
-                    status_code=status.HTTP_502_BAD_GATEWAY,
-                ),
+            return _error_response(
+                "mockstack: internal error",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 rule=rule,
-                result_type="error",
             )
-
-    async def _apply(self, request: Request) -> Response:
-        # Read the body exactly once. Starlette caches it on the request, so the
-        # reverse proxy and create-mixin paths can safely read it again later.
-        payload = RequestPayload.from_bytes(await request.body())
-
-        rule = self.rule_for(request, payload)
-        if rule is None:
-            return await self.handle_missing_rule(request)
-
-        # Recorded on the request (not on `self`, which may be shared across
-        # concurrent requests) so `apply()` can still stamp the matched rule on an
-        # error response raised further down, after matching succeeded.
-        request.state.proxyrules_matched_rule = rule
-
-        result = rule.apply(request, payload)
-        self.logger.info(f"[rule:{rule.name}] Result: {result}")
-
-        # Handle template results
-        if isinstance(result, TemplateRuleResult):
-            response = await self.handle_template_result(request, rule, result)
-            return with_result_headers(response, rule=rule, result_type="template")
-        elif isinstance(result, URLRuleResult):
-            response = await self.handle_url_result(request, rule, result)
-            result_type = (
-                "proxy"
-                if self.redirect_via == ProxyRulesRedirectVia.REVERSE_PROXY
-                else "redirect"
-            )
-            return with_result_headers(response, rule=rule, result_type=result_type)
-        else:
-            raise TypeError(f"Unknown result type: {type(result)}")
 
     async def handle_missing_rule(self, request: Request) -> Response:
         """Handle a missing rule."""
@@ -230,18 +289,20 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
 
         match self.redirect_via:
             case ProxyRulesRedirectVia.HTTP_TEMPORARY_REDIRECT:
-                return RedirectResponse(
+                response: Response = RedirectResponse(
                     url=result.url, status_code=status.HTTP_307_TEMPORARY_REDIRECT
                 )
+                return with_result_headers(response, rule=rule, result_type="redirect")
 
             case ProxyRulesRedirectVia.HTTP_PERMANENT_REDIRECT:
-                return RedirectResponse(
+                response = RedirectResponse(
                     url=result.url, status_code=status.HTTP_301_MOVED_PERMANENTLY
                 )
+                return with_result_headers(response, rule=rule, result_type="redirect")
 
             case ProxyRulesRedirectVia.REVERSE_PROXY:
                 response = await self.reverse_proxy(request, result.url)
-                return response
+                return with_result_headers(response, rule=rule, result_type="proxy")
 
             case _:
                 raise ValueError(f"Invalid redirect via value: {self.redirect_via=}")
@@ -249,28 +310,34 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
     async def handle_template_result(
         self, request: Request, rule: Rule, result: TemplateRuleResult
     ) -> Response:
-        """Handle template results by rendering the template file."""
+        """Handle template results by rendering the template file.
+
+        Only a successful render is stamped ``template``; a missing fixture (404) or
+        a failed render (500) is stamped ``error``. Neither echoes the rendered path,
+        which may be built from request data, back to the client.
+        """
         template_path = Path(result.template_path)
 
         if ".." in template_path.parts:
             # A rendered `file://` path may be built (in part) from request-controlled
             # values (headers, query, path segments, body). Reject any path traversal
             # attempt rather than resolving and possibly reading a file outside the
-            # fixtures the rule author intended. The path itself is not echoed back in
-            # the response body, only to the log.
+            # fixtures the rule author intended.
             self.logger.error(
                 f"Rejected template path containing '..': {template_path}"
             )
-            return JSONResponse(
-                content={"error": "Template file not found."},
+            return _error_response(
+                "Template file not found.",
                 status_code=status.HTTP_404_NOT_FOUND,
+                rule=rule,
             )
 
         if not template_path.exists():
             self.logger.error(f"Template file not found: {template_path}")
-            return JSONResponse(
-                content={"error": f"Template file not found: {template_path}"},
+            return _error_response(
+                "Template file not found.",
                 status_code=status.HTTP_404_NOT_FOUND,
+                rule=rule,
             )
 
         try:
@@ -292,24 +359,28 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             # Update opentelemetry with template info
             self.update_opentelemetry_template(request, rule, result)
 
-            return Response(
+            response = Response(
                 content=rendered_content,
                 media_type=content_type,
                 status_code=status.HTTP_200_OK,
             )
+            return with_result_headers(response, rule=rule, result_type="template")
 
         except Exception as e:  # noqa: BLE001 -- deliberate catch-all so template
             # rendering errors (e.g. Jinja2 errors) degrade to a 500 instead of crashing.
             self.logger.error(f"Error rendering template {template_path}: {e}")
-            return JSONResponse(
-                content={
-                    "error": "An internal error occurred while rendering the template."
-                },
+            return _error_response(
+                "An internal error occurred while rendering the template.",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                rule=rule,
             )
 
     async def reverse_proxy(self, request: Request, url: str) -> Response:
-        """Reverse proxy the request to the target URL."""
+        """Reverse proxy the request to the target URL.
+
+        Raises ``UpstreamError`` (504 on a timeout, 502 on any other transport or
+        protocol failure) when the upstream cannot be reached.
+        """
         async with httpx.AsyncClient(
             timeout=self.reverse_proxy_timeout, verify=self.verify_ssl_certificates
         ) as client:
@@ -323,30 +394,44 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
                 params=request.url.query,
             )
 
-            resp = await client.send(req, stream=False)
+            try:
+                resp = await client.send(req, stream=False)
+            except httpx.TimeoutException as exc:
+                raise UpstreamError(
+                    status.HTTP_504_GATEWAY_TIMEOUT,
+                    "mockstack: upstream request timed out",
+                ) from exc
+            except httpx.HTTPError as exc:
+                raise UpstreamError(
+                    status.HTTP_502_BAD_GATEWAY, "mockstack: upstream request failed"
+                ) from exc
             content = resp.read()
 
-            response_headers = maybe_update_response_headers(
-                resp.headers,
-                content_length=len(content),
-                status_code=resp.status_code,
-            )
+        response_headers = maybe_update_response_headers(
+            resp.headers,
+            content_length=len(content),
+            status_code=resp.status_code,
+            request_method=request.method,
+        )
 
-            return Response(
-                content=content,
-                status_code=resp.status_code,
-                headers=response_headers,
-                media_type=response_headers.get("content-type"),
-            )
+        response = Response(
+            content=content, status_code=resp.status_code, media_type=None
+        )
+        # Copy the upstream headers item by item (not via a mapping) so repeated
+        # headers such as Set-Cookie survive. Starlette expects lower-cased names.
+        response.raw_headers = [
+            (name.lower(), value) for name, value in response_headers.raw
+        ]
+        return response
 
     def reverse_proxy_headers(self, headers: Headers, url: str) -> Headers:
         """Mutate the request headers for the reverse proxy mode."""
         _headers = headers.mutablecopy()
+        strip_hop_by_hop(_headers)
 
-        for name in (*HOP_BY_HOP_HEADERS, "content-length"):
-            # We forward a fully buffered body; httpx sets the correct framing headers.
-            if name in _headers:
-                del _headers[name]
+        # We forward a fully buffered body; httpx sets the correct framing headers.
+        if "content-length" in _headers:
+            del _headers["content-length"]
 
         # When reverse proxying, we must alter the Host header to the target URL.
         _headers["host"] = urlparse(url).netloc

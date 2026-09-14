@@ -63,6 +63,18 @@ def test_upstream_unreachable_returns_stamped_502(tmp_path, mockstack_server):
     r = httpx.get(f"{server.base_url}/upstream/api/v1/thing")
     assert r.status_code == 502
     assert r.headers["x-mockstack-result"] == "error"
+    assert r.headers["x-mockstack-rule"] == "unreachable-passthrough"
+    assert r.json() == {"error": "mockstack: upstream request failed"}
+
+
+def test_repeated_set_cookie_headers_survive_reverse_proxy(proxy):
+    r = httpx.get(f"{proxy.base_url}/upstream/cookies")
+    assert r.status_code == 200
+    assert r.headers["x-mockstack-result"] == "proxy"
+    cookies = r.headers.get_list("set-cookie")
+    assert len(cookies) == 2
+    assert cookies[0].startswith("first=1")
+    assert cookies[1].startswith("second=2")
 
 
 def test_chunked_request_body_is_forwarded(proxy, upstream):

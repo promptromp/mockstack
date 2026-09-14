@@ -29,8 +29,10 @@ RESULT_RULE_HEADER = "X-Mockstack-Rule"
 RESULT_TYPE_HEADER = "X-Mockstack-Result"
 
 
-# Headers that describe a single hop and must not be forwarded by a proxy (RFC 9110 §7.6.1),
-# plus content-length, which httpx / Starlette recompute for the buffered body.
+# Headers that describe a single hop and must not be forwarded by a proxy (RFC 9110 §7.6.1).
+# Headers named in a Connection header value are stripped too (see strip_hop_by_hop).
+# content-length is deliberately not listed: the proxy handles it separately in each
+# direction because the body is buffered.
 HOP_BY_HOP_HEADERS = (
     "connection",
     "keep-alive",

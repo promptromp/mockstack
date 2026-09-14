@@ -149,6 +149,9 @@ def test_unknown_scenario_returns_404_not_upstream(scenarios, upstream):
         headers={"X-Request-Eval-Scenario": "nope"},
     )
     assert r.status_code == 404
+    assert r.headers["x-mockstack-result"] == "error"
+    assert r.headers["x-mockstack-rule"] == "project-eval"
+    assert r.json() == {"error": "Template file not found."}
     assert upstream.calls == []
 
 
@@ -162,4 +165,6 @@ def test_traversal_scenario_returns_404_not_upstream(scenarios, upstream):
         headers={"X-Request-Eval-Scenario": "../healthy"},
     )
     assert r.status_code == 404
+    assert r.headers["x-mockstack-result"] == "error"
+    assert r.json() == {"error": "Template file not found."}
     assert upstream.calls == []

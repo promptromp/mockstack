@@ -14,6 +14,7 @@ import pytest
 import uvicorn
 import yaml
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
 from mockstack.config import OpenTelemetrySettings, Settings
 from mockstack.main import create_app
@@ -65,6 +66,14 @@ def upstream():
         # Registered before the catch-all so the readiness probe never hits
         # `echo()` below and never pollutes `live.calls`.
         return {"status": "ready"}
+
+    @app.get("/cookies")
+    async def cookies():
+        # Registered before the catch-all: a response with repeated Set-Cookie headers.
+        response = JSONResponse({"source": "upstream"})
+        response.set_cookie("first", "1")
+        response.set_cookie("second", "2")
+        return response
 
     @app.api_route("/{p:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
     async def echo(request: Request, p: str):
