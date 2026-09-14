@@ -1,0 +1,39 @@
+rules:
+  # The rule the test suite relies on: tagged requests get a fixture.
+  - name: project-fixture
+    method: GET
+    pattern: ^/projects/api/v1/project/(?P<id>[a-z0-9-]+)$
+    headers:
+      x-test-run: ".+"
+    replacement: file://${FIXTURES_DIR}/projects/project.json.j2
+
+  - name: projects-passthrough
+    pattern: ^/projects/(.*)
+    replacement: ${UPSTREAM_URL}/\1
+
+  # 404 error: there is no fixture file for most user ids.
+  - name: user-fixture
+    method: GET
+    pattern: ^/users/api/v1/users/(?P<user_id>[a-z0-9-]+)$
+    replacement: file://${FIXTURES_DIR}/users/{{ user_id }}.json.j2
+
+  # 500 error: the replacement uses tenant_id, but the group is named tenant.
+  - name: tenant-projects
+    method: GET
+    pattern: ^/tenants/(?P<tenant>[a-z0-9-]+)/projects$
+    replacement: file://${FIXTURES_DIR}/tenants/{{ tenant_id }}/projects.json.j2
+
+  # 500 error: the fixture reads a JSON body that a GET request does not have.
+  - name: order-echo
+    pattern: ^/orders/api/v1/echo$
+    replacement: file://${FIXTURES_DIR}/orders/echo.json.j2
+
+  # 502 error: nothing listens on port 1.
+  - name: invoices-unreachable
+    pattern: ^/invoices/(.*)
+    replacement: http://127.0.0.1:1/\1
+
+  # 504 error: the upstream answers after proxyrules_reverse_proxy_timeout.
+  - name: reports-slow
+    pattern: ^/reports/(.*)
+    replacement: ${UPSTREAM_URL}/slow

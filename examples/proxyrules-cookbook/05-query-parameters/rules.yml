@@ -1,0 +1,18 @@
+rules:
+  - name: archived-users
+    method: GET
+    pattern: ^/users/api/v1/users$
+    query:
+      status: archived
+    replacement: file://${FIXTURES_DIR}/users/archived.json.j2
+
+  - name: users-page
+    method: GET
+    pattern: ^/users/api/v1/users$
+    query:
+      page: "[0-9]+"
+    replacement: file://${FIXTURES_DIR}/users/page.json.j2
+
+  - name: users-passthrough
+    pattern: ^/users/(.*)
+    replacement: ${UPSTREAM_URL}/\1

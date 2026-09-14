@@ -40,7 +40,8 @@ markdown_extensions:
       line_spans: __span
       pygments_lang_class: true
   - pymdownx.inlinehilite
-  - pymdownx.snippets
+  - pymdownx.snippets:
+      check_paths: true
   - pymdownx.superfences:
       custom_fences:
         - name: mermaid
@@ -56,6 +57,8 @@ nav:
     - BaseStrategy: strategies/base.md
     - FileFixtures: strategies/filefixtures.md
     - ProxyRules: strategies/proxyrules.md
+  - Guides:
+    - ProxyRules cookbook: guides/proxyrules-cookbook.md
   - LLM Integrations:
     - Ollama: ollama.md
 

@@ -3,6 +3,7 @@
 These tests are marked ``slow`` and excluded by default. Run with ``uv run pytest -m slow``.
 """
 
+import asyncio
 import socket
 import threading
 import time
@@ -81,6 +82,12 @@ def upstream():
     async def sized():
         # Registered before the catch-all: a fixed 1234-byte body for GET and HEAD.
         return Response(content=b"x" * 1234, media_type="application/octet-stream")
+
+    @app.get("/slow")
+    async def slow():
+        # Registered before the catch-all: answers after three seconds, for timeouts.
+        await asyncio.sleep(3)
+        return {"source": "upstream", "path": "/slow"}
 
     @app.api_route(
         "/{p:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
