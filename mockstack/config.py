@@ -153,9 +153,7 @@ class Settings(BaseSettings):
         # TODO: make this validation dynamic based on the strategy classes themselves.
 
         if self.strategy == "proxyrules" and self.proxyrules_rules_filename is None:
-            raise ValueError(
-                "proxyrules_rules_filename is required when strategy is proxyrules"
-            )
+            raise ValueError("proxyrules_rules_filename is required when strategy is proxyrules")
 
         elif self.strategy == "filefixtures" and self.templates_dir is None:
             raise ValueError("templates_dir is required when strategy is proxyrules")

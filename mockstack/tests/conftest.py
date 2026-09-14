@@ -140,9 +140,7 @@ def make_request() -> Callable[..., Request]:
         **scope: Any,
     ) -> Request:
         pairs = headers.items() if isinstance(headers, Mapping) else headers or ()
-        messages: list[Message] = [
-            {"type": "http.request", "body": body, "more_body": False}
-        ]
+        messages: list[Message] = [{"type": "http.request", "body": body, "more_body": False}]
 
         async def receive() -> Message:
             return messages.pop(0) if messages else {"type": "http.disconnect"}
@@ -153,10 +151,7 @@ def make_request() -> Callable[..., Request]:
                 "method": method,
                 "path": path,
                 "query_string": query,
-                "headers": [
-                    (name.lower().encode("latin-1"), value.encode("latin-1"))
-                    for name, value in pairs
-                ],
+                "headers": [(name.lower().encode("latin-1"), value.encode("latin-1")) for name, value in pairs],
                 **scope,
             },
             receive=receive,

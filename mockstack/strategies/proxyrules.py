@@ -107,9 +107,7 @@ def maybe_update_response_headers(
             # httpx decoded these codings while reading the body; only the codings it
             # skipped still apply. Left untouched when nothing was decoded.
             _headers["content-encoding"] = ", ".join(remaining) or "identity"
-            body_was_decoded = any(
-                t != "identity" for t in tokens if t in DECODED_CONTENT_ENCODINGS
-            )
+            body_was_decoded = any(t != "identity" for t in tokens if t in DECODED_CONTENT_ENCODINGS)
 
     if status_code < 200 or status_code in (
         status.HTTP_204_NO_CONTENT,
@@ -173,15 +171,11 @@ def _header_safe(value: str) -> str:
     return value.encode("ascii", "backslashreplace").decode("ascii") or "unnamed"
 
 
-def with_result_headers(
-    response: Response, *, rule: Rule | None, result_type: str
-) -> Response:
+def with_result_headers(response: Response, *, rule: Rule | None, result_type: str) -> Response:
     """Stamp the response with which rule (if any) produced it and how. Never raises."""
     response.headers[RESULT_TYPE_HEADER] = result_type
     if rule is not None:
-        response.headers[RESULT_RULE_HEADER] = _header_safe(
-            str(rule.name or rule.pattern)
-        )
+        response.headers[RESULT_RULE_HEADER] = _header_safe(str(rule.name or rule.pattern))
     return response
 
 
@@ -247,17 +241,11 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         try:
             return Rule.from_dict(data, env=self.env)
         except re.error as exc:
-            raise ValueError(
-                f"rule {name!r}: invalid regex {exc.pattern!r}: {exc}"
-            ) from exc
+            raise ValueError(f"rule {name!r}: invalid regex {exc.pattern!r}: {exc}") from exc
         except TemplateSyntaxError as exc:
-            raise ValueError(
-                f"rule {name!r}: invalid replacement template: {exc}"
-            ) from exc
+            raise ValueError(f"rule {name!r}: invalid replacement template: {exc}") from exc
 
-    def rule_for(
-        self, request: Request, payload: RequestPayload | None = None
-    ) -> Rule | None:
+    def rule_for(self, request: Request, payload: RequestPayload | None = None) -> Rule | None:
         try:
             return next(rule for rule in self.rules if rule.matches(request, payload))
         except StopIteration:
@@ -284,9 +272,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
 
             result = rule.apply(request, payload)
             if isinstance(result, TemplateRuleResult):
-                self.logger.info(
-                    f"[rule:{rule.name}] template result: {result.template_path}"
-                )
+                self.logger.info(f"[rule:{rule.name}] template result: {result.template_path}")
                 return await self.handle_template_result(request, rule, result)
             if isinstance(result, URLRuleResult):
                 self.logger.info(f"[rule:{rule.name}] url result: {result.url}")
@@ -325,14 +311,10 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
 
     async def handle_missing_rule(self, request: Request) -> Response:
         """Handle a missing rule."""
-        self.logger.warning(
-            f"No rule found for request: {request.method} {request.url.path}"
-        )
+        self.logger.warning(f"No rule found for request: {request.method} {request.url.path}")
 
         if self.simulate_create_on_missing and looks_like_a_create(request):
-            self.logger.info(
-                f"Simulating resource creation for missing rule for {request.method} {request.url.path}"
-            )
+            self.logger.info(f"Simulating resource creation for missing rule for {request.method} {request.url.path}")
             response = await self._create(
                 request,
                 env=self.env,
@@ -346,9 +328,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             )
             return with_result_headers(response, rule=None, result_type="missing")
 
-    async def handle_url_result(
-        self, request: Request, rule: Rule, result: URLRuleResult
-    ) -> Response:
+    async def handle_url_result(self, request: Request, rule: Rule, result: URLRuleResult) -> Response:
         """Handle URL results by redirecting to the target URL."""
         self.update_opentelemetry(request, rule, result.url)
 
@@ -374,9 +354,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             case _:
                 raise ValueError(f"Invalid redirect via value: {self.redirect_via=}")
 
-    async def handle_template_result(
-        self, request: Request, rule: Rule, result: TemplateRuleResult
-    ) -> Response:
+    async def handle_template_result(self, request: Request, rule: Rule, result: TemplateRuleResult) -> Response:
         """Handle template results by rendering the template file.
 
         Only a successful render is stamped ``template``; a missing fixture (404) or
@@ -390,9 +368,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             # values (headers, query, path segments, body). Reject any path traversal
             # attempt rather than resolving and possibly reading a file outside the
             # fixtures the rule author intended.
-            self.logger.error(
-                f"Rejected template path containing '..': {template_path}"
-            )
+            self.logger.error(f"Rejected template path containing '..': {template_path}")
             return _error_response(
                 "Template file not found.",
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -451,9 +427,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         (e.g. a relative URL), and ``UpstreamError`` (504 on a timeout, 502 on any
         other transport or protocol failure) when the upstream cannot be reached.
         """
-        async with httpx.AsyncClient(
-            timeout=self.reverse_proxy_timeout, verify=self.verify_ssl_certificates
-        ) as client:
+        async with httpx.AsyncClient(timeout=self.reverse_proxy_timeout, verify=self.verify_ssl_certificates) as client:
             request_content = await request.body()
             request_headers = self.reverse_proxy_headers(request.headers, url=url)
             try:
@@ -475,9 +449,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
                     "mockstack: upstream request timed out",
                 ) from exc
             except httpx.HTTPError as exc:
-                raise UpstreamError(
-                    status.HTTP_502_BAD_GATEWAY, "mockstack: upstream request failed"
-                ) from exc
+                raise UpstreamError(status.HTTP_502_BAD_GATEWAY, "mockstack: upstream request failed") from exc
             content = resp.read()
 
         response_headers = maybe_update_response_headers(
@@ -487,14 +459,10 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             request_method=request.method,
         )
 
-        response = Response(
-            content=content, status_code=resp.status_code, media_type=None
-        )
+        response = Response(content=content, status_code=resp.status_code, media_type=None)
         # Copy the upstream headers item by item (not via a mapping) so repeated
         # headers such as Set-Cookie survive. Starlette expects lower-cased names.
-        response.raw_headers = [
-            (name.lower(), value) for name, value in response_headers.raw
-        ]
+        response.raw_headers = [(name.lower(), value) for name, value in response_headers.raw]
         return response
 
     def reverse_proxy_headers(self, headers: Headers, url: str) -> Headers:
@@ -526,9 +494,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         }
         return content_types.get(suffix, "text/plain")
 
-    def update_opentelemetry_template(
-        self, request: Request, rule: Rule, result: TemplateRuleResult
-    ) -> None:
+    def update_opentelemetry_template(self, request: Request, rule: Rule, result: TemplateRuleResult) -> None:
         """Update the opentelemetry span with template-specific details."""
         span = request.state.span
         if rule.name is not None:

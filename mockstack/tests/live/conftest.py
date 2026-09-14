@@ -71,9 +71,7 @@ class LiveServer:
         self.request_stop()
         self.thread.join(SHUTDOWN_TIMEOUT)
         if self.thread.is_alive():
-            raise RuntimeError(
-                f"server on {self.base_url} did not stop within {SHUTDOWN_TIMEOUT}s"
-            )
+            raise RuntimeError(f"server on {self.base_url} did not stop within {SHUTDOWN_TIMEOUT}s")
 
 
 def serve(app: FastAPI) -> LiveServer:
@@ -98,9 +96,7 @@ def serve(app: FastAPI) -> LiveServer:
         live.request_stop()
         thread.join(SHUTDOWN_TIMEOUT)
         sock.close()
-        reason = (
-            "failed to start" if finished else f"did not start in {STARTUP_TIMEOUT}s"
-        )
+        reason = "failed to start" if finished else f"did not start in {STARTUP_TIMEOUT}s"
         raise RuntimeError(f"server on {live.base_url} {reason}")
     return live
 
@@ -166,9 +162,7 @@ def upstream(_live_servers) -> Iterator[LiveServer]:
             pass
         return {"source": "upstream", "path": "/slow"}
 
-    @app.api_route(
-        "/{p:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
-    )
+    @app.api_route("/{p:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"])
     async def echo(request: Request, p: str):
         body = await request.body()
         call = {
@@ -219,9 +213,7 @@ def proxyrules_settings(make_settings) -> Callable[..., Settings]:
 
 
 @pytest.fixture(scope="module")
-def mockstack_server(
-    _live_servers, proxyrules_settings, write_rules
-) -> Iterator[Callable[..., LiveServer]]:
+def mockstack_server(_live_servers, proxyrules_settings, write_rules) -> Iterator[Callable[..., LiveServer]]:
     """Factory: start mockstack for the rest of the module on a rules file or a list of
     rules; ``overrides`` go to ``proxyrules_settings``.
 

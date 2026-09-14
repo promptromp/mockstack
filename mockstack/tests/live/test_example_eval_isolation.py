@@ -16,9 +16,7 @@ import pytest
 
 pytestmark = pytest.mark.slow
 
-EXAMPLE_DIR = (
-    Path(__file__).resolve().parents[3] / "examples" / "proxyrules-eval-isolation"
-)
+EXAMPLE_DIR = Path(__file__).resolve().parents[3] / "examples" / "proxyrules-eval-isolation"
 
 STAMPED = {"X-Request-Eval-Scenario": "healthy"}
 
@@ -36,9 +34,7 @@ def server(upstream, render_rules, mockstack_server):
 
 def test_stamped_get_project_returns_fixture(server, upstream):
     """README scenario 1: stamped GET project -> template fixture."""
-    r = httpx.get(
-        f"{server.base_url}/projects/api/v1/project/proj-123", headers=STAMPED
-    )
+    r = httpx.get(f"{server.base_url}/projects/api/v1/project/proj-123", headers=STAMPED)
     assert r.status_code == 200
     assert r.headers["x-mockstack-result"] == "template"
     assert r.headers["x-mockstack-rule"] == "projects-eval"
@@ -73,9 +69,7 @@ def test_stamped_analytics_sales_query_returns_fixture(server, upstream):
     assert r.status_code == 200
     assert r.headers["x-mockstack-result"] == "template"
     assert r.headers["x-mockstack-rule"] == "analytics-sales-eval"
-    assert r.json() == [
-        {"region": "eval-region", "total_amount": 1234.5, "echo_sql": sql}
-    ]
+    assert r.json() == [{"region": "eval-region", "total_amount": 1234.5, "echo_sql": sql}]
     assert upstream.calls == []
 
 
@@ -91,6 +85,4 @@ def test_stamped_analytics_non_sales_query_falls_through_to_upstream(server, ups
     assert r.headers["x-mockstack-rule"] == "analytics-passthrough"
     assert r.json()["source"] == "upstream"
     assert len(upstream.calls) == 1
-    assert json.loads(upstream.calls[0]["body"]) == {
-        "query": "SELECT 1 FROM other_table"
-    }
+    assert json.loads(upstream.calls[0]["body"]) == {"query": "SELECT 1 FROM other_table"}

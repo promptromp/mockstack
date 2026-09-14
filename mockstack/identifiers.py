@@ -68,9 +68,7 @@ def looks_like_id(segment: str) -> bool:
     if N == 36:
         # UUID with dashes
         parts = segment.lower().split("-")
-        if len(parts) == 5 and all(
-            all(c in "0123456789abcdef" for c in p) for p in parts
-        ):
+        if len(parts) == 5 and all(all(c in "0123456789abcdef" for c in p) for p in parts):
             lengths = [len(p) for p in parts]
             if lengths == [8, 4, 4, 4, 12]:
                 return True
@@ -79,6 +77,4 @@ def looks_like_id(segment: str) -> bool:
         return all(c in "0123456789abcdefABCDEF" for c in segment)
 
     # Check for even length numeric or hex
-    return (N % 2 == 0 and segment.isdigit()) or (
-        N % 2 == 0 and all(c in "0123456789abcdefABCDEF" for c in segment)
-    )
+    return (N % 2 == 0 and segment.isdigit()) or (N % 2 == 0 and all(c in "0123456789abcdefABCDEF" for c in segment))

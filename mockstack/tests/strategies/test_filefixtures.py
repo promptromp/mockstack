@@ -13,9 +13,7 @@ from mockstack.strategies.filefixtures import FileFixturesStrategy
 def strategy(settings_filefixtures, tmp_path):
     """A filefixtures strategy whose templates directory is ``tmp_path``, where
     ``write_template`` writes."""
-    return FileFixturesStrategy(
-        settings_filefixtures.model_copy(update={"templates_dir": tmp_path})
-    )
+    return FileFixturesStrategy(settings_filefixtures.model_copy(update={"templates_dir": tmp_path}))
 
 
 def test_filefixtures_strategy_init(settings_filefixtures):
@@ -40,13 +38,9 @@ def test_filefixtures_strategy_str(settings_filefixtures):
 
 
 @pytest.mark.asyncio
-async def test_file_fixtures_strategy_apply_success(
-    strategy, traced_request, write_template
-):
+async def test_file_fixtures_strategy_apply_success(strategy, traced_request, write_template):
     """A GET renders the most specific template for its path."""
-    write_template(
-        "api-v1-projects.1234.j2", '{"status": "success", "id": "{{ projects }}"}'
-    )
+    write_template("api-v1-projects.1234.j2", '{"status": "success", "id": "{{ projects }}"}')
 
     response = await strategy.apply(traced_request("/api/v1/projects/1234"))
 
@@ -56,25 +50,18 @@ async def test_file_fixtures_strategy_apply_success(
 
 
 @pytest.mark.asyncio
-async def test_file_fixtures_strategy_apply_template_not_found(
-    strategy, settings_filefixtures, traced_request
-):
+async def test_file_fixtures_strategy_apply_template_not_found(strategy, settings_filefixtures, traced_request):
     """Test the FileFixturesStrategy apply method when template doesn't exist."""
     response = await strategy.apply(traced_request("/api/v1/projects/1234"))
 
     assert response.status_code == 404
     assert response.media_type == "application/json"
-    assert (
-        json.loads(response.body.decode())
-        == settings_filefixtures.missing_resource_fields
-    )
+    assert json.loads(response.body.decode()) == settings_filefixtures.missing_resource_fields
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("method", ["HEAD", "OPTIONS"])
-async def test_file_fixtures_strategy_apply_rejects_head_and_options(
-    strategy, traced_request, method
-):
+async def test_file_fixtures_strategy_apply_rejects_head_and_options(strategy, traced_request, method):
     """The catch-all router routes HEAD and OPTIONS to the strategy; filefixtures keeps
     answering anything but GET/POST/PATCH/PUT/DELETE with a 405."""
     with pytest.raises(HTTPException) as info:
@@ -84,9 +71,7 @@ async def test_file_fixtures_strategy_apply_rejects_head_and_options(
 
 
 @pytest.mark.asyncio
-async def test_file_fixtures_strategy_post_search(
-    strategy, traced_request, write_template
-):
+async def test_file_fixtures_strategy_post_search(strategy, traced_request, write_template):
     """Test POST request that looks like a search."""
     write_template("api-v1-projects-search.j2", '{"results": []}')
     request = traced_request(
@@ -103,9 +88,7 @@ async def test_file_fixtures_strategy_post_search(
 
 
 @pytest.mark.asyncio
-async def test_file_fixtures_strategy_post_command(
-    strategy, traced_request, write_template
-):
+async def test_file_fixtures_strategy_post_command(strategy, traced_request, write_template):
     """Test POST request that looks like a command."""
     write_template("api-v1-projects-123-run.j2", '{"status": "started"}')
     request = traced_request(
@@ -138,13 +121,9 @@ async def test_file_fixtures_strategy_post_create(strategy, traced_request):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("method", ["PATCH", "PUT", "DELETE"])
-async def test_file_fixtures_strategy_patch_put_delete(
-    strategy, traced_request, method
-):
+async def test_file_fixtures_strategy_patch_put_delete(strategy, traced_request, method):
     """PATCH, PUT and DELETE are acknowledged with a 204 and no body."""
-    response = await strategy.apply(
-        traced_request("/api/v1/projects/123", method=method)
-    )
+    response = await strategy.apply(traced_request("/api/v1/projects/123", method=method))
     assert response.status_code == status.HTTP_204_NO_CONTENT
 
 
@@ -158,6 +137,4 @@ def test_file_fixtures_strategy_update_opentelemetry(strategy, traced_request, s
 
     strategy.update_opentelemetry(traced_request("/test"), template_args)
 
-    span.set_attribute.assert_called_once_with(
-        "mockstack.filefixtures.template_name", "test-template.j2"
-    )
+    span.set_attribute.assert_called_once_with("mockstack.filefixtures.template_name", "test-template.j2")

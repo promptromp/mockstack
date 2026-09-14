@@ -30,9 +30,7 @@ def proxyrules_strategy(settings, write_rules) -> Callable[..., ProxyRulesStrate
     they are not validated (a test can set an invalid ``proxyrules_redirect_via``).
     """
 
-    def _build(
-        rules: list[dict[str, Any]] | None = None, **settings_overrides: Any
-    ) -> ProxyRulesStrategy:
+    def _build(rules: list[dict[str, Any]] | None = None, **settings_overrides: Any) -> ProxyRulesStrategy:
         if rules is not None:
             settings_overrides["proxyrules_rules_filename"] = write_rules(rules)
         return ProxyRulesStrategy(settings.model_copy(update=settings_overrides))
@@ -41,18 +39,12 @@ def proxyrules_strategy(settings, write_rules) -> Callable[..., ProxyRulesStrate
 
 
 @pytest.fixture
-def apply_rule(
-    proxyrules_strategy, traced_request
-) -> Callable[..., Awaitable[Response]]:
+def apply_rule(proxyrules_strategy, traced_request) -> Callable[..., Awaitable[Response]]:
     """Factory: apply ``request`` (by default ``GET /x``) through a strategy whose rules
     file holds only ``rule``; ``settings_overrides`` go to ``proxyrules_strategy``."""
 
-    async def _apply(
-        rule: dict[str, Any], request: Request | None = None, **settings_overrides: Any
-    ) -> Response:
+    async def _apply(rule: dict[str, Any], request: Request | None = None, **settings_overrides: Any) -> Response:
         strategy = proxyrules_strategy(rules=[rule], **settings_overrides)
-        return await strategy.apply(
-            request if request is not None else traced_request("/x")
-        )
+        return await strategy.apply(request if request is not None else traced_request("/x"))
 
     return _apply

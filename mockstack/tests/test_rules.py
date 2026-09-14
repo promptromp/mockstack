@@ -183,9 +183,7 @@ def test_request_payload_empty():
 
 
 def test_rule_apply_template_context_includes_request_json(make_request):
-    rule = Rule(
-        pattern=r"^/analytics/v2/sql$", replacement="file:///tmp/x.json", method="POST"
-    )
+    rule = Rule(pattern=r"^/analytics/v2/sql$", replacement="file:///tmp/x.json", method="POST")
     request = make_request(
         "/analytics/v2/sql",
         method="POST",
@@ -307,9 +305,7 @@ def test_lookup_path_absent_returns_missing_sentinel(data, path):
 
 
 def _sql_payload(sql):
-    return RequestPayload.from_bytes(
-        json.dumps({"query": sql, "context": {"x": 1}}).encode()
-    )
+    return RequestPayload.from_bytes(json.dumps({"query": sql, "context": {"x": 1}}).encode())
 
 
 @pytest.mark.parametrize(
@@ -377,9 +373,7 @@ def _sql_payload(sql):
     ],
 )
 def test_rule_matches_body_predicates(make_request, predicate, payload, expected):
-    rule = Rule(
-        pattern=r"^/analytics/v2/sql$", replacement="", method="POST", **predicate
-    )
+    rule = Rule(pattern=r"^/analytics/v2/sql$", replacement="", method="POST", **predicate)
     request = make_request("/analytics/v2/sql", method="POST")
     assert rule.matches(request, payload) is expected
 
@@ -553,9 +547,7 @@ def test_named_group_shadowing_reserved_context_key_is_rejected(key):
 
 
 def test_reserved_context_keys():
-    assert RESERVED_CONTEXT_KEYS == frozenset(
-        {"query", "headers", "path", "method", "request_json", "groups"}
-    )
+    assert RESERVED_CONTEXT_KEYS == frozenset({"query", "headers", "path", "method", "request_json", "groups"})
 
 
 @pytest.mark.parametrize(
@@ -655,9 +647,7 @@ def test_reserved_context_keys_win_over_inferred_identifiers(make_request):
     """``/projects/headers/42`` infers an identifier keyed ``headers``; the reserved
     ``headers`` dict must still win."""
     rule = Rule(pattern=r"^/projects/.*$", replacement="file:///f.json")
-    result = rule.apply(
-        make_request("/projects/headers/42", headers={"x-scenario": "healthy"})
-    )
+    result = rule.apply(make_request("/projects/headers/42", headers={"x-scenario": "healthy"}))
     assert isinstance(result, TemplateRuleResult)
     assert result.template_context["headers"] == {"x-scenario": "healthy"}
 

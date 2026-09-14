@@ -14,9 +14,7 @@ from mockstack.intent import wants_json
 class CreateMixin:
     """A mixin for strategies that need to simulate creation of resources."""
 
-    async def _create(
-        self, request: Request, *, env: Environment, created_resource_metadata: dict
-    ) -> Response:
+    async def _create(self, request: Request, *, env: Environment, created_resource_metadata: dict) -> Response:
         """Simulate creation of a resource."""
         self._create_mixin_update_opentelemetry(request, created_resource_metadata)
 
@@ -62,9 +60,7 @@ class CreateMixin:
             _resource = resource.copy() if copy else resource
             for key, value in created_resource_metadata.items():
                 if isinstance(value, str):
-                    _resource[key] = env.from_string(value).render(
-                        self._metadata_context(request)
-                    )
+                    _resource[key] = env.from_string(value).render(self._metadata_context(request))
                 else:
                     _resource[key] = value
             return _resource
@@ -84,9 +80,7 @@ class CreateMixin:
             "request": request,
         }
 
-    def _create_mixin_update_opentelemetry(
-        self, request: Request, created_resource_metadata: dict
-    ) -> None:
+    def _create_mixin_update_opentelemetry(self, request: Request, created_resource_metadata: dict) -> None:
         """Update the opentelemetry span with the create mixin details."""
         span = request.state.span
         span.set_attribute(

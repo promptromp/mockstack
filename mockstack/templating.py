@@ -86,9 +86,7 @@ def iter_possible_template_arguments(
         "template_file_extension": template_file_extension,
         "default_template_name": default_template_name,
     }
-    for name in iter_possible_template_filenames(
-        name_segments, identifiers, **template_name_kwargs
-    ):
+    for name in iter_possible_template_filenames(name_segments, identifiers, **template_name_kwargs):
         yield {
             "name": name,
             "context": context,
@@ -139,9 +137,7 @@ def iter_possible_template_filenames(
     if name_segments:
         if identifiers:
             for prefix in prefixes(identifiers.values(), reverse=True):
-                yield (
-                    f"{template_file_separator.join(name_segments)}.{'.'.join(prefix)}{template_file_extension}"
-                )
+                yield (f"{template_file_separator.join(name_segments)}.{'.'.join(prefix)}{template_file_extension}")
 
         yield template_file_separator.join(name_segments) + template_file_extension
 

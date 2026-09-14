@@ -36,9 +36,7 @@ def mock_ollama_module():
 @pytest.fixture
 def mock_chat(mock_ollama_module, mock_chat_response):
     """Patch ollama's ``chat`` to answer with ``mock_chat_response``."""
-    with patch(
-        "mockstack.llm.ollama.chat", MagicMock(return_value=mock_chat_response)
-    ) as chat:
+    with patch("mockstack.llm.ollama.chat", MagicMock(return_value=mock_chat_response)) as chat:
         yield chat
 
 

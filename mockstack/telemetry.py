@@ -19,9 +19,7 @@ def span_name_for(request: Request) -> str:
     return f"{request.method.upper()} {request.url.path}"
 
 
-def with_request_attributes(
-    request: Request, span: Span, *, sensitive_headers: list[str] | None = None
-) -> Span:
+def with_request_attributes(request: Request, span: Span, *, sensitive_headers: list[str] | None = None) -> Span:
     """Add request attributes to the span."""
     sensitive_headers = sensitive_headers or []
     span.set_attribute("http.method", request.method)
@@ -42,9 +40,7 @@ def with_request_attributes(
     # Request headers (excluding sensitive headers)
     for header_name, header_value in request.headers.items():
         if header_name.lower() not in sensitive_headers:
-            span.set_attribute(
-                f"http.request.header.{header_name.lower()}", header_value
-            )
+            span.set_attribute(f"http.request.header.{header_name.lower()}", header_value)
 
     # Query parameters
     if request.query_params:
@@ -54,30 +50,22 @@ def with_request_attributes(
     return span
 
 
-def with_response_attributes(
-    response: Response, span: Span, *, sensitive_headers: list[str] | None = None
-) -> Span:
+def with_response_attributes(response: Response, span: Span, *, sensitive_headers: list[str] | None = None) -> Span:
     """Add response attributes to the span."""
     sensitive_headers = sensitive_headers or []
     # Response attributes
     span.set_attribute("http.status_code", response.status_code)
-    span.set_attribute(
-        "http.response_content_length", response.headers.get("content-length", 0)
-    )
+    span.set_attribute("http.response_content_length", response.headers.get("content-length", 0))
 
     # Response headers
     for header_name, header_value in response.headers.items():
         if header_name.lower() not in sensitive_headers:
-            span.set_attribute(
-                f"http.response.header.{header_name.lower()}", header_value
-            )
+            span.set_attribute(f"http.response.header.{header_name.lower()}", header_value)
 
     return span
 
 
-async def with_response_body(
-    response: StreamingResponse, span: Span
-) -> tuple[Response, Span]:
+async def with_response_body(response: StreamingResponse, span: Span) -> tuple[Response, Span]:
     """Add the response body to the span."""
     body = await extract_body(response)
 
