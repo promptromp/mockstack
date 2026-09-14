@@ -46,7 +46,12 @@ rules:
 - `headers`: Optional mapping of header name -> regex. Every listed header must be
   present and its whole value must match the regex (`re.fullmatch`). Names are
   case-insensitive. Use `".*"` to require presence only.
-- `query`: Optional mapping of query parameter -> regex, same semantics.
+- `query`: Optional mapping of query parameter -> regex; same regex semantics;
+  parameter names are case-sensitive.
+- `body`: Optional regex searched (`re.search`) in the decoded request body.
+- `json`: Optional mapping of dotted JSON path -> regex, fully matched against the
+  string form of the value at that path (`query`, `filter.client.id`, `items.0.name`).
+  A rule with `body`/`json` never matches a request without a body.
 
 All predicates on a rule are ANDed. Rules are evaluated in order and the first
 match wins, so put narrow, predicate-bearing rules before broad passthroughs:
@@ -63,6 +68,23 @@ rules:
     pattern: ^/juvenal/(.*)
     replacement: https://juvenal.example/\1
 ```
+
+Body predicates make it possible to mock endpoints where every request shares one
+path and the intent lives in the payload, such as SQL gateways:
+
+```yaml
+  - name: druid-pricing-eval
+    method: POST
+    pattern: ^/druid/druid/v2/sql$
+    headers:
+      x-request-eval-scenario: ".*"
+    json:
+      query: "(?is).*FROM\\s+pricing_facts.*"
+    replacement: file:///fixtures/druid/pricing_facts.json.j2
+```
+
+The body is read once per request and cached by Starlette, so predicates do not
+interfere with reverse proxying or resource-creation simulation.
 
 ## Redirection Methods
 

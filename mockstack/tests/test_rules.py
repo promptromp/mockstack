@@ -1,10 +1,18 @@
 """Unit-tests for the rules module."""
 
+import json
+
 import pytest
 from fastapi import Request
 from starlette.datastructures import URL
 
-from mockstack.rules import RequestPayload, Rule, TemplateRuleResult, URLRuleResult
+from mockstack.rules import (
+    RequestPayload,
+    Rule,
+    TemplateRuleResult,
+    URLRuleResult,
+    lookup_path,
+)
 
 
 def test_rule_from_dict():
@@ -304,3 +312,57 @@ def test_rule_from_dict_with_predicates():
 def test_rule_without_predicates_matches_any_headers():
     rule = Rule(pattern=r"^/x$", replacement="")
     assert rule.matches(_request(headers={"anything": "goes"})) is True
+
+
+@pytest.mark.parametrize(
+    "data,path,expected",
+    [
+        ({"query": "SELECT 1"}, "query", "SELECT 1"),
+        ({"filter": {"client": {"id": "c1"}}}, "filter.client.id", "c1"),
+        ({"items": [{"name": "a"}, {"name": "b"}]}, "items.1.name", "b"),
+        ({"n": 5}, "n", 5),
+        ({"query": "x"}, "missing", None),
+        ({"items": []}, "items.0", None),
+        ("not a dict", "a", None),
+        (None, "a", None),
+    ],
+)
+def test_lookup_path(data, path, expected):
+    assert lookup_path(data, path) == expected
+
+
+def _druid(sql):
+    return RequestPayload.from_bytes(
+        json.dumps({"query": sql, "context": {"x": 1}}).encode()
+    )
+
+
+@pytest.mark.parametrize(
+    "predicate,payload,expected",
+    [
+        ({"body": r"FROM\s+pricing"}, _druid("SELECT * FROM pricing WHERE 1"), True),
+        ({"body": r"FROM\s+pricing"}, _druid("SELECT * FROM users"), False),
+        (
+            {"json": {"query": r".*FROM pricing.*"}},
+            _druid("SELECT a FROM pricing"),
+            True,
+        ),
+        ({"json": {"query": r"SELECT a"}}, _druid("SELECT a FROM pricing"), False),
+        ({"json": {"context.x": "1"}}, _druid("x"), True),
+        ({"json": {"context.missing": ".*"}}, _druid("x"), False),
+        ({"json": {"query": ".*"}}, RequestPayload.empty(), False),
+        ({"body": ".*"}, None, False),
+    ],
+)
+def test_rule_matches_body_predicates(predicate, payload, expected):
+    rule = Rule(pattern=r"^/druid/v2/sql$", replacement="", method="POST", **predicate)
+    request = _request(path="/druid/v2/sql", method="POST")
+    assert rule.matches(request, payload) is expected
+
+
+def test_rule_from_dict_with_body_predicates():
+    rule = Rule.from_dict(
+        {"pattern": "^/x$", "replacement": "u", "body": "abc", "json": {"a.b": "1"}}
+    )
+    assert rule.body == "abc"
+    assert rule.json == {"a.b": "1"}
