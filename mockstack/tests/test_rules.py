@@ -605,6 +605,7 @@ def test_reserved_context_keys():
         r"file:///fixtures/{{ headers['x-scenario'] }}/\1.json",
         r"file:///fixtures/{{ id }}/\g<id>.json",
         r"https://{{ id }}.example/\9",
+        r"https://x/\1/{{ id }}",
     ],
 )
 def test_template_replacement_with_backreference_is_rejected_at_load(replacement):
@@ -765,3 +766,41 @@ def test_request_payload_equality_is_field_based():
     assert a == b
     assert hash(a) == hash(b)
     assert RequestPayload.empty() == RequestPayload(b"")
+
+
+def test_backreference_like_text_inside_jinja_expression_is_accepted():
+    """Only literal template text is scanned for backreferences; ``\\1`` inside a Jinja
+    string literal is an argument to ``replace``, not a regex backreference."""
+    rule = Rule(
+        pattern=r"^/x/(?P<id>[^/]+)$",
+        replacement=r"file:///f/{{ path | replace('\\1', 'x') }}.json",
+        env=Environment(),
+    )
+    result = rule.apply(_request(path="/x/abc"))
+    assert isinstance(result, TemplateRuleResult)
+    assert result.template_path == "/f//x/abc.json"
+
+
+def test_backreference_like_text_inside_jinja_comment_is_accepted():
+    rule = Rule(
+        pattern=r"^/x/(?P<id>[^/]+)$",
+        replacement=r"{# \1 #}{{ id }}",
+        env=Environment(),
+    )
+    result = rule.apply(_request(path="/x/abc"))
+    assert isinstance(result, URLRuleResult)
+    assert result.url == "abc"
+
+
+def test_json_predicate_keeps_non_ascii_text_inside_objects():
+    """Objects are re-serialised with ``ensure_ascii=False``: ``café``, not ``caf\\u00e9``."""
+    rule = Rule(pattern=r"^/x$", replacement="", json={"obj": r'\{"name":"café"\}'})
+    payload = RequestPayload('{"obj": {"name": "café"}}'.encode())
+    assert rule.matches(_request(), payload) is True
+
+
+@pytest.mark.parametrize("predicate,expected", [("b", True), ("a", False)])
+def test_repeated_query_parameter_matches_last_value(predicate, expected):
+    """``?status=a&status=b``: Starlette's ``QueryParams.get`` returns the last value."""
+    rule = Rule(pattern=r"^/x$", replacement="", query={"status": predicate})
+    assert rule.matches(_request(query=b"status=a&status=b")) is expected

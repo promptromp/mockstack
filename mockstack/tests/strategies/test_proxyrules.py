@@ -1400,3 +1400,59 @@ def test_invalid_rules_file_fails_at_startup_with_rule_name(
     bad = settings.model_copy(update={"proxyrules_rules_filename": rules_file})
     with pytest.raises(ValueError, match=message):
         ProxyRulesStrategy(bad)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "target",
+    ["/target", "http://example.com:abc/"],
+    ids=["relative-url-unsupported-protocol", "invalid-url"],
+)
+async def test_invalid_upstream_url_is_internal_error(
+    settings_reverse_proxy, span, caplog, target
+):
+    """A replacement that is not a usable absolute URL is a rules-file mistake, not an
+    upstream failure: a stamped 500 ``error``, logged at ERROR with the rule name and
+    the target URL (not a 502 at WARNING)."""
+    strategy = ProxyRulesStrategy(settings_reverse_proxy)
+    rule = Rule.from_dict(
+        {"name": "bad-target", "pattern": r"^/x$", "replacement": target}
+    )
+    with (
+        patch.object(strategy, "rule_for", return_value=rule),
+        caplog.at_level(logging.WARNING, logger="ProxyRulesStrategy"),
+    ):
+        response = await strategy.apply(_request_for("/x", span=span))
+    assert response.status_code == 500
+    assert response.headers[RESULT_TYPE_HEADER] == "error"
+    assert response.headers[RESULT_RULE_HEADER] == "bad-target"
+    assert json.loads(response.body) == {"error": "mockstack: internal error"}
+    records = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert [r.levelname for r in records] == ["ERROR"]
+    assert "bad-target" in records[0].getMessage()
+    assert target in records[0].getMessage()
+
+
+@pytest.mark.asyncio
+async def test_fixture_render_failure_is_logged_with_traceback(
+    settings, span, tmp_path, caplog
+):
+    template_file = tmp_path / "broken.json.j2"
+    template_file.write_text('{"x": {{ oops }')
+    strategy = ProxyRulesStrategy(settings)
+    rule = Rule.from_dict(
+        {
+            "name": "broken-rule",
+            "pattern": r"^/x$",
+            "replacement": f"file://{template_file}",
+        }
+    )
+    with (
+        patch.object(strategy, "rule_for", return_value=rule),
+        caplog.at_level(logging.ERROR, logger="ProxyRulesStrategy"),
+    ):
+        await strategy.apply(_request_for("/x", span=span))
+    errors = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert len(errors) == 1
+    assert errors[0].exc_info is not None
+    assert str(template_file) in errors[0].getMessage()

@@ -28,7 +28,8 @@ RESERVED_CONTEXT_KEYS: Final = frozenset(
 MISSING: Final = object()
 
 # ``\1``..``\9`` or ``\g<name>``: regex backreferences, which are only expanded by
-# ``re.sub`` and therefore never in template mode.
+# ``re.sub`` and therefore never in template mode. Only literal template text is
+# scanned; the same characters inside a Jinja expression or comment are not one.
 _BACKREFERENCE_RE = re.compile(r"\\[1-9]|\\g<")
 
 
@@ -95,7 +96,7 @@ def json_text(value: Any) -> str:
     """
     if isinstance(value, str):
         return value
-    return json.dumps(value, separators=(",", ":"), sort_keys=True)
+    return json.dumps(value, separators=(",", ":"), sort_keys=True, ensure_ascii=False)
 
 
 class RuleResult(ABC):
@@ -187,15 +188,17 @@ class Rule:
         self._is_template = any(d in replacement for d in JINJA_DELIMITERS)
         self._replacement_template: Template | None = None
         if env is not None and self._is_template:
-            if _BACKREFERENCE_RE.search(replacement):
+            template_env = env.overlay(undefined=StrictUndefined)
+            if any(
+                token_type == "data" and _BACKREFERENCE_RE.search(value)
+                for _, token_type, value in template_env.lex(replacement)
+            ):
                 raise ValueError(
                     f"rule {self.name!r}: replacement mixes Jinja delimiters with a regex "
                     "backreference; backreferences are not expanded in template mode, "
                     "use {{ groups[0] }} or a named group instead"
                 )
-            self._replacement_template = env.overlay(
-                undefined=StrictUndefined
-            ).from_string(replacement)
+            self._replacement_template = template_env.from_string(replacement)
 
     def _predicate_value(self, key: Any, value: Any) -> str:
         if value is None:

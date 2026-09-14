@@ -52,6 +52,18 @@ class UpstreamError(Exception):
 HeadersT = TypeVar("HeadersT", MutableHeaders, ResponseHeaders)
 
 
+class InvalidUpstreamURLError(Exception):
+    """A rewritten URL that httpx cannot send at all (not absolute, bad port, ...).
+
+    This is a rules-file mistake, not an upstream failure, so it is answered as an
+    internal error rather than a 502.
+    """
+
+    def __init__(self, url: str):
+        super().__init__(f"invalid upstream URL: {url!r}")
+        self.url = url
+
+
 def strip_hop_by_hop(headers: HeadersT) -> HeadersT:
     """Remove hop-by-hop headers in place (RFC 9110 §7.6.1) and return ``headers``.
 
@@ -259,6 +271,17 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
 
         except ClientDisconnect:
             raise
+        except InvalidUpstreamURLError as exc:
+            self.logger.error(
+                f"[rule:{rule.name if rule else None}] invalid upstream URL "
+                f"{exc.url!r} for {request.method} {request.url.path}: "
+                f"{exc.__cause__!r}"
+            )
+            return _error_response(
+                "mockstack: internal error",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                rule=rule,
+            )
         except UpstreamError as exc:
             self.logger.warning(
                 f"[rule:{rule.name if rule else None}] {exc.message} for "
@@ -384,9 +407,11 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             )
             return with_result_headers(response, rule=rule, result_type="template")
 
-        except Exception as e:  # noqa: BLE001 -- deliberate catch-all so template
-            # rendering errors (e.g. Jinja2 errors) degrade to a 500 instead of crashing.
-            self.logger.error(f"Error rendering template {template_path}: {e}")
+        except Exception:
+            # Deliberate catch-all so template rendering errors (e.g. Jinja2 errors)
+            # degrade to a 500 instead of crashing.
+            # logger.exception: ERROR level, with the traceback (which names the error).
+            self.logger.exception(f"Error rendering template {template_path}")
             return _error_response(
                 "An internal error occurred while rendering the template.",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -396,24 +421,28 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
     async def reverse_proxy(self, request: Request, url: str) -> Response:
         """Reverse proxy the request to the target URL.
 
-        Raises ``UpstreamError`` (504 on a timeout, 502 on any other transport or
-        protocol failure) when the upstream cannot be reached.
+        Raises ``InvalidUpstreamURLError`` when httpx cannot send to ``url`` at all
+        (e.g. a relative URL), and ``UpstreamError`` (504 on a timeout, 502 on any
+        other transport or protocol failure) when the upstream cannot be reached.
         """
         async with httpx.AsyncClient(
             timeout=self.reverse_proxy_timeout, verify=self.verify_ssl_certificates
         ) as client:
             request_content = await request.body()
             request_headers = self.reverse_proxy_headers(request.headers, url=url)
-            req = client.build_request(
-                request.method,
-                url,
-                content=request_content,
-                headers=request_headers,
-                params=request.url.query,
-            )
-
             try:
+                req = client.build_request(
+                    request.method,
+                    url,
+                    content=request_content,
+                    headers=request_headers,
+                    params=request.url.query,
+                )
                 resp = await client.send(req, stream=False)
+            except (httpx.UnsupportedProtocol, httpx.InvalidURL) as exc:
+                # Checked before the generic HTTPError mapping: UnsupportedProtocol is
+                # a TransportError, but the cause is the rewritten URL, not the upstream.
+                raise InvalidUpstreamURLError(url) from exc
             except httpx.TimeoutException as exc:
                 raise UpstreamError(
                     status.HTTP_504_GATEWAY_TIMEOUT,
