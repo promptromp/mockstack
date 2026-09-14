@@ -482,6 +482,42 @@ def test_reverse_proxy_headers_strips_hop_by_hop_and_length():
     assert out["host"] == "api.target.com"
 
 
+def test_rule_for_prefers_stamped_fixture_then_falls_through(settings, tmp_path):
+    rules_file = tmp_path / "rules.yml"
+    rules_file.write_text(
+        """
+rules:
+  - name: juvenal-project-eval
+    method: GET
+    pattern: ^/juvenal/api/v2/project/(?P<id>[^/]+)$
+    headers:
+      x-request-eval-scenario: ".*"
+    replacement: file:///fixtures/juvenal/project.json.j2
+  - name: juvenal-passthrough
+    pattern: ^/juvenal/(.*)
+    replacement: https://juvenal.example/\\1
+"""
+    )
+    settings = settings.model_copy(update={"proxyrules_rules_filename": rules_file})
+    strategy = ProxyRulesStrategy(settings)
+
+    def req(headers):
+        return Request(
+            scope={
+                "type": "http",
+                "method": "GET",
+                "path": "/juvenal/api/v2/project/abc",
+                "query_string": b"",
+                "headers": headers,
+            }
+        )
+
+    stamped = strategy.rule_for(req([(b"x-request-eval-scenario", b"healthy")]))
+    unstamped = strategy.rule_for(req([]))
+    assert stamped is not None and stamped.name == "juvenal-project-eval"
+    assert unstamped is not None and unstamped.name == "juvenal-passthrough"
+
+
 def test_maybe_update_response_headers_strips_transfer_encoding():
     """Upstream chunked responses are buffered, so transfer-encoding must go and content-length be set."""
     response_headers = httpx.Headers(

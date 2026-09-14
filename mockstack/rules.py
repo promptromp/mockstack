@@ -3,6 +3,7 @@
 import json
 import re
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Self
 from urllib.parse import quote
@@ -78,28 +79,45 @@ class Rule:
         replacement: str,
         method: str | None = None,
         name: str | None = None,
+        headers: Mapping[str, str] | None = None,
+        query: Mapping[str, str] | None = None,
     ):
         self.pattern = pattern
         self.replacement = replacement
         self.method = method
         self.name = name
+        # Header names are case-insensitive; normalise once so matching is a plain lookup.
+        self.headers = {k.lower(): v for k, v in (headers or {}).items()}
+        self.query = dict(query or {})
 
     @classmethod
-    def from_dict(cls, data: dict[str, str]) -> Self:
+    def from_dict(cls, data: dict) -> Self:
         return cls(
             pattern=data["pattern"],
             replacement=data["replacement"],
             method=data.get("method", None),
             name=data.get("name", None),
+            headers=data.get("headers"),
+            query=data.get("query"),
         )
 
     def matches(self, request: Request) -> bool:
-        """Check if the rule matches the request."""
+        """Check if the rule matches the request.
+
+        All configured predicates must hold (logical AND). Predicate values are regular
+        expressions matched against the whole value.
+        """
         if self.method is not None and request.method.lower() != self.method.lower():
             # if rule is limited to a specific HTTP method, validate first.
             return False
 
-        return re.match(self.pattern, request.url.path) is not None
+        if re.match(self.pattern, request.url.path) is None:
+            return False
+
+        if not _mapping_matches(self.headers, request.headers):
+            return False
+
+        return _mapping_matches(self.query, request.query_params)
 
     def apply(
         self, request: Request, payload: RequestPayload | None = None
@@ -148,3 +166,12 @@ class Rule:
             "request_json": payload.json,
             **identifiers,
         }
+
+
+def _mapping_matches(predicates: Mapping[str, str], actual: Mapping[str, str]) -> bool:
+    """True when every predicate regex fully matches the corresponding actual value."""
+    for key, pattern in predicates.items():
+        value = actual.get(key)
+        if value is None or re.fullmatch(pattern, value) is None:
+            return False
+    return True

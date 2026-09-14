@@ -226,3 +226,81 @@ def test_rule_apply_without_payload_has_none_request_json():
     result = rule.apply(request)
     assert isinstance(result, TemplateRuleResult)
     assert result.template_context["request_json"] is None
+
+
+def _request(path="/x", method="GET", headers=None, query=b""):
+    raw_headers = [(k.lower().encode(), v.encode()) for k, v in (headers or {}).items()]
+    return Request(
+        scope={
+            "type": "http",
+            "method": method,
+            "path": path,
+            "query_string": query,
+            "headers": raw_headers,
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    "rule_headers,request_headers,expected",
+    [
+        (
+            {"x-request-eval-scenario": ".*"},
+            {"X-Request-Eval-Scenario": "healthy"},
+            True,
+        ),
+        ({"x-request-eval-scenario": ".*"}, {}, False),
+        (
+            {"x-request-eval-scenario": "healthy"},
+            {"x-request-eval-scenario": "healthy"},
+            True,
+        ),
+        (
+            {"x-request-eval-scenario": "healthy"},
+            {"x-request-eval-scenario": "healthy_aligned"},
+            False,
+        ),
+        (
+            {"X-Request-Eval-Scenario": "h.*"},
+            {"x-request-eval-scenario": "healthy"},
+            True,
+        ),
+        ({"a": ".*", "b": "1"}, {"a": "x"}, False),
+        ({"a": ".*", "b": "1"}, {"a": "x", "b": "1"}, True),
+    ],
+)
+def test_rule_matches_headers(rule_headers, request_headers, expected):
+    rule = Rule(pattern=r"^/x$", replacement="", headers=rule_headers)
+    assert rule.matches(_request(headers=request_headers)) is expected
+
+
+@pytest.mark.parametrize(
+    "rule_query,query_string,expected",
+    [
+        ({"scenario": ".*"}, b"scenario=healthy", True),
+        ({"scenario": ".*"}, b"", False),
+        ({"scenario": "healthy"}, b"scenario=healthy_aligned", False),
+        ({"limit": r"\d+"}, b"limit=10&x=1", True),
+    ],
+)
+def test_rule_matches_query(rule_query, query_string, expected):
+    rule = Rule(pattern=r"^/x$", replacement="", query=rule_query)
+    assert rule.matches(_request(query=query_string)) is expected
+
+
+def test_rule_from_dict_with_predicates():
+    rule = Rule.from_dict(
+        {
+            "pattern": "^/x$",
+            "replacement": "file:///f.json",
+            "headers": {"X-Request-Eval-Scenario": ".*"},
+            "query": {"q": "a"},
+        }
+    )
+    assert rule.headers == {"x-request-eval-scenario": ".*"}
+    assert rule.query == {"q": "a"}
+
+
+def test_rule_without_predicates_matches_any_headers():
+    rule = Rule(pattern=r"^/x$", replacement="")
+    assert rule.matches(_request(headers={"anything": "goes"})) is True

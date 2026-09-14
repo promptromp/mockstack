@@ -43,6 +43,26 @@ rules:
 - `pattern`: Regular expression pattern to match against the request path
 - `replacement`: URL template to redirect to (can use capture groups from pattern)
 - `method`: Optional HTTP method to match (if not specified, matches all methods)
+- `headers`: Optional mapping of header name -> regex. Every listed header must be
+  present and its whole value must match the regex (`re.fullmatch`). Names are
+  case-insensitive. Use `".*"` to require presence only.
+- `query`: Optional mapping of query parameter -> regex, same semantics.
+
+All predicates on a rule are ANDed. Rules are evaluated in order and the first
+match wins, so put narrow, predicate-bearing rules before broad passthroughs:
+
+```yaml
+rules:
+  - name: project-eval               # only stamped eval traffic
+    method: GET
+    pattern: ^/juvenal/api/v2/project/(?P<id>[^/]+)$
+    headers:
+      x-request-eval-scenario: ".*"
+    replacement: file:///fixtures/juvenal/project.json.j2
+  - name: juvenal-passthrough        # everything else reaches the real service
+    pattern: ^/juvenal/(.*)
+    replacement: https://juvenal.example/\1
+```
 
 ## Redirection Methods
 
