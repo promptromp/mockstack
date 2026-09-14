@@ -250,7 +250,9 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         return _headers
 
     def _get_content_type(self, template_path: Path) -> str:
-        """Determine content type based on file extension."""
+        """Determine content type from the file extension, ignoring a trailing ``.j2``."""
+        if template_path.suffix.lower() == ".j2":
+            template_path = template_path.with_suffix("")
         suffix = template_path.suffix.lower()
         content_types = {
             ".json": "application/json",

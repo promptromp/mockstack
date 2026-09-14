@@ -122,6 +122,32 @@ rules:
     replacement: "http://product-service/api/v1/products/\1"
 ```
 
+## File Templates
+
+A `replacement` starting with `file:///` serves a Jinja2 template instead of proxying.
+The path is an **absolute filesystem path**; `templates_dir` is not consulted.
+
+```yaml
+rules:
+  - name: project-fixture
+    method: GET
+    pattern: ^/juvenal/api/v2/project/(?P<id>[^/]+)$
+    replacement: file:///fixtures/juvenal/project.json.j2
+```
+
+The response content type comes from the file suffix, ignoring a trailing `.j2`
+(`project.json.j2` -> `application/json`). Templates always return HTTP 200.
+
+### Template context
+
+| Variable | Contents |
+| --- | --- |
+| `path`, `method` | Request path and method |
+| `query` | Query parameters as a dict |
+| `headers` | Request headers as a dict, names lower-cased |
+| `request_json` | Parsed JSON body, or `None` when the body is empty or not JSON |
+| `id`, `<segment>` | Identifiers inferred from the path, as in the filefixtures strategy |
+
 ## Error Handling
 
 When no matching rule is found and resource creation simulation is disabled, the strategy returns a 404 NOT FOUND response.

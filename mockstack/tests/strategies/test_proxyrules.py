@@ -218,6 +218,21 @@ def test_proxy_rules_strategy_get_content_type(settings):
     assert strategy._get_content_type(Path("file.unknown")) == "text/plain"
 
 
+@pytest.mark.parametrize(
+    "filename,expected",
+    [
+        ("project.json", "application/json"),
+        ("project.json.j2", "application/json"),
+        ("project.xml.j2", "application/xml"),
+        ("project.j2", "text/plain"),
+        ("project", "text/plain"),
+    ],
+)
+def test_get_content_type_strips_j2_suffix(settings, filename, expected):
+    strategy = ProxyRulesStrategy(settings)
+    assert strategy._get_content_type(Path(filename)) == expected
+
+
 @pytest.mark.asyncio
 @pytest.mark.skip(reason="TODO: Fix this test")
 async def test_proxy_rules_strategy_apply_reverse_proxy(settings_reverse_proxy, span):
