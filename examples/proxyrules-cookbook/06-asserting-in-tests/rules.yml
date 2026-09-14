@@ -28,6 +28,11 @@ rules:
     pattern: ^/orders/api/v1/echo$
     replacement: file://${FIXTURES_DIR}/orders/echo.json.j2
 
+  # 500 error: the replacement is a path, not an absolute URL.
+  - name: accounts-relative
+    pattern: ^/accounts/(.*)
+    replacement: /api/\1
+
   # 502 error: nothing listens on port 1.
   - name: invoices-unreachable
     pattern: ^/invoices/(.*)

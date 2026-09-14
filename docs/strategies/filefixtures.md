@@ -8,7 +8,7 @@ This strategy:
 
 - Uses Jinja2 templates stored in a specified directory
 - Intelligently matches requests to templates based on the request path
-- Supports all HTTP methods (GET, POST, PUT, PATCH, DELETE)
+- Supports the GET, POST, PUT, PATCH and DELETE HTTP methods; HEAD and OPTIONS requests are answered 405 Method Not Allowed
 - Simulates resource creation for POST requests which are not handled by proxying rules (behavior controlled via configuration)
 - Provides OpenTelemetry integration for observability
 

@@ -68,7 +68,7 @@ rules:
   applied with `re.sub`, so backreferences such as `\1` work. A replacement containing
   `{{`/`{%` is a [dynamic replacement](#dynamic-replacements) instead.
 - `method`: Optional HTTP method to match, case-insensitive (if not specified,
-  matches all methods).
+  matches all methods, `HEAD` and `OPTIONS` included).
 - `headers`: Optional mapping of header name -> regex. Every listed header must be
   present and its whole value must match the regex (`re.fullmatch`). Names are
   case-insensitive. Use `".*"` to require presence only. A repeated header is
@@ -143,7 +143,8 @@ offending rule, when:
 - a regex (`pattern` or any predicate) is invalid;
 - a predicate has no value;
 - a Jinja `replacement` has a syntax error;
-- a `replacement` mixes Jinja delimiters with a regex backreference (`\1`, `\g<id>`);
+- a `replacement` mixes Jinja delimiters with a regex backreference (`\1`, `\g<id>`)
+  in its literal text;
 - a named group in `pattern` shadows a reserved template variable (`path`, `method`,
   `query`, `headers`, `request_json`, `groups`).
 
@@ -238,8 +239,10 @@ error stops mockstack from starting. In this mode regex backreferences (`\1`,
 `\g<id>`) are **not** expanded -- the `replacement` string is rendered directly and
 `re.sub` never runs, so use `{{ groups[0] }}` (positional) or the named group
 (`{{ id }}`) instead. A replacement that mixes Jinja delimiters with a backreference
-is rejected at load. The URL fragment is not carried into the rendered result
-either; only plain `re.sub` mode appends it (URL-encoded) to the path it rewrites.
+is rejected at load; only its literal text is checked, so the same characters inside a
+`{{ ... }}` expression or a `{# ... #}` comment are allowed. The URL fragment is not
+carried into the rendered result either; only plain `re.sub` mode appends it
+(URL-encoded) to the path it rewrites.
 A `replacement` with no Jinja delimiters keeps the plain `re.sub` behaviour, and
 backreferences work as before.
 
@@ -274,19 +277,32 @@ Rules that serve a `file:///` template are unaffected.
     - Server forwards the request to the target service
     - Client is unaware of the redirection
     - Useful when you need to work with clients that do not handle HTTP redirects gracefully.
-    - The method, query string, headers and body are forwarded; the `Host` header is
-      set to the target's host. The upstream's status, headers and body are returned.
+    - Every routed method is forwarded, `HEAD` and `OPTIONS` included, together with
+      the query string, headers and body; the `Host` header is set to the target's
+      host. The upstream's status, headers and body are returned.
     - Request and response bodies are fully buffered. Hop-by-hop headers
       (`Connection`, `Transfer-Encoding`, `Upgrade`, ..., plus every header named
       in a `Connection` value) are stripped in both directions, and
       `Content-Length` is recomputed for the buffered body, so chunked clients and
       chunked upstreams both work. `1xx`, `204` and `304` responses carry no
-      `Content-Length`.
-    - Repeated response headers, such as several `Set-Cookie` headers, are passed
-      through one by one rather than merged.
+      `Content-Length`. A response to `HEAD` keeps the upstream's `Content-Length`,
+      unless its `Content-Encoding` names a coding that mockstack decodes (below): that
+      length is the encoded one, so it is dropped.
+    - Compressed upstream bodies are decoded while they are read: `gzip` and `deflate`
+      always, `br` and `zstd` only when the optional `brotli` and `zstandard` packages
+      are installed. The decoded codings are removed from `Content-Encoding`, which
+      becomes `identity` only when no coding remains. A coding that was not decoded
+      (e.g. `compress`) stays in the header, and the body is forwarded still encoded
+      with it.
+    - The upstream's `Date` and `Server` headers are dropped, so the response carries
+      a single `date` and `server` header: the mockstack server's own. Other repeated
+      response headers, such as several `Set-Cookie` headers, are passed through one by
+      one rather than merged.
     - An upstream that cannot be reached, or does not answer within
-      `proxyrules_reverse_proxy_timeout`, is answered by mockstack with a 502 or 504
-      (see [Error handling](#error-handling)). HTTPS certificates are verified unless
+      `proxyrules_reverse_proxy_timeout`, is answered by mockstack with a 502 or 504. A
+      rewritten URL that cannot be sent at all, such as one that is not an absolute URL,
+      is a rules-file mistake and is answered with a 500 (see
+      [Error handling](#error-handling)). HTTPS certificates are verified unless
       `proxyrules_verify_ssl_certificates` is disabled.
 
 2. **HTTP Temporary Redirect** (`http_307_temporary`, 307; stamped `redirect`)
@@ -297,9 +313,11 @@ Rules that serve a `file:///` template are unaffected.
     - Client makes a new request to the target URL
     - Browsers may cache the redirect
 
-In both redirect modes the target URL is built from the request path, so the query
-string is not carried into the `Location` header, and the client's follow-up request
-goes straight to the target: its response carries no `X-Mockstack-*` headers.
+In both redirect modes the target URL is built from the request path, and the
+original query string is then appended to it in the `Location` header: after `?`, or
+after `&` when the target already has a query of its own, and before any `#fragment`
+of the target. The client's follow-up request goes straight to the target, so its
+response carries no `X-Mockstack-*` headers.
 
 ## Result headers
 
@@ -319,7 +337,7 @@ responses -- carries:
 | `create` | 201 | No rule matched; resource creation was simulated |
 | `missing` | 404 | No rule matched |
 | `error` | 404 | A rule matched but its fixture file does not exist (or its path contains `..`) |
-| `error` | 500 | A fixture failed to render, a template replacement failed, or another internal failure |
+| `error` | 500 | A fixture failed to render, a template replacement failed, the rewritten URL is not a usable absolute URL, or another internal failure |
 | `error` | 502 | The upstream request failed |
 | `error` | 504 | The upstream request timed out |
 
@@ -347,13 +365,14 @@ instead of surfacing as a bare, unstamped 500 from Starlette's
 | The fixture fails to render | 500 | `{"error": "An internal error occurred while rendering the template."}` |
 | The upstream is unreachable, resets the connection or breaks the protocol | 502 | `{"error": "mockstack: upstream request failed"}` |
 | The upstream does not answer within `proxyrules_reverse_proxy_timeout` | 504 | `{"error": "mockstack: upstream request timed out"}` |
+| The rewritten URL cannot be sent at all: not an absolute URL (e.g. `/api/v1/users`), or an invalid port | 500 | `{"error": "mockstack: internal error"}` |
 | Anything else, e.g. a template replacement referencing a missing value, or a malformed JSON body on the resource-creation path | 500 | `{"error": "mockstack: internal error"}` |
 
 The rendered fixture path is never echoed back in a response body; it is only
-logged. Upstream failures are logged at WARNING; missing or rejected fixture paths at
-ERROR; template render failures and unexpected internal errors at ERROR with a
-traceback. Log lines name the matched rule. If the client disconnects before its
-request body has been read, no response is sent.
+logged. Upstream failures are logged at WARNING; missing or rejected fixture paths,
+and rewritten URLs that cannot be sent, at ERROR; template render failures and
+unexpected internal errors at ERROR with a traceback. Log lines name the matched rule.
+If the client disconnects before its request body has been read, no response is sent.
 
 A broken rules file fails at startup rather than per request; see
 [Load-time validation](#load-time-validation).

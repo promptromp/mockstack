@@ -297,7 +297,7 @@ details, such as the rendered path or the exception, are only in mockstack's log
 | --- | --- | --- |
 | 404 | `{"error":"Template file not found."}` | A rule matched, but the fixture file it rendered does not exist (or its path contains `..`) |
 | 500 | `{"error":"An internal error occurred while rendering the template."}` | The fixture file failed to render |
-| 500 | `{"error":"mockstack: internal error"}` | Any other failure, such as a `replacement` that references an undefined value |
+| 500 | `{"error":"mockstack: internal error"}` | Any other failure, such as a `replacement` that references an undefined value or does not produce an absolute URL |
 | 502 | `{"error":"mockstack: upstream request failed"}` | The upstream could not be reached, or broke the connection or protocol |
 | 504 | `{"error":"mockstack: upstream request timed out"}` | The upstream did not answer within `proxyrules_reverse_proxy_timeout` |
 
@@ -341,6 +341,12 @@ curl -i http://127.0.0.1:8000/orders/api/v1/echo
 # x-mockstack-result: error
 # x-mockstack-rule: order-echo
 # {"error":"An internal error occurred while rendering the template."}
+
+curl -i http://127.0.0.1:8000/accounts/v1/balance
+# HTTP/1.1 500 Internal Server Error
+# x-mockstack-result: error
+# x-mockstack-rule: accounts-relative
+# {"error":"mockstack: internal error"}
 
 curl -i http://127.0.0.1:8000/invoices/api/v1/invoices
 # HTTP/1.1 502 Bad Gateway
@@ -396,7 +402,7 @@ curl -i -L http://127.0.0.1:8000/users/api/v1/users/user-2
 
 curl -i "http://127.0.0.1:8000/users/api/v1/users?page=2"
 # HTTP/1.1 307 Temporary Redirect
-# location: http://127.0.0.1:8081/api/v1/users
+# location: http://127.0.0.1:8081/api/v1/users?page=2
 # x-mockstack-result: redirect
 # x-mockstack-rule: users-redirect
 ```
@@ -406,5 +412,5 @@ Things to know before choosing redirect mode:
 - The final response comes straight from the upstream, so it carries no
   `X-Mockstack-*` headers, and a test cannot tell from it that mockstack was involved.
 - The client must be able to reach the upstream itself, and must follow redirects.
-- The rewritten URL is built from the request path, so the query string is not carried
-  into `location`.
+- The original query string is kept: it is appended to the rewritten URL in
+  `location` (with `&` if the replacement already has a query of its own).

@@ -80,6 +80,7 @@ R5_REPEATED_LAST_DIFFERS = (
 R6_MISSING_FIXTURE = "curl -i http://127.0.0.1:8000/users/api/v1/users/user-2"
 R6_REPLACEMENT_ERROR = "curl -i http://127.0.0.1:8000/tenants/tenant-a/projects"
 R6_FIXTURE_RENDER_ERROR = "curl -i http://127.0.0.1:8000/orders/api/v1/echo"
+R6_RELATIVE_URL = "curl -i http://127.0.0.1:8000/accounts/v1/balance"
 R6_UPSTREAM_FAILED = "curl -i http://127.0.0.1:8000/invoices/api/v1/invoices"
 R6_UPSTREAM_TIMEOUT = "curl -i http://127.0.0.1:8000/reports/daily"
 
@@ -87,7 +88,7 @@ R6_UPSTREAM_TIMEOUT = "curl -i http://127.0.0.1:8000/reports/daily"
 R7_FIXTURE = "curl -i http://127.0.0.1:8000/users/api/v1/users/user-1"
 R7_REDIRECT = "curl -i http://127.0.0.1:8000/users/api/v1/users/user-2"
 R7_FOLLOW_REDIRECT = "curl -i -L http://127.0.0.1:8000/users/api/v1/users/user-2"
-R7_QUERY_NOT_CARRIED = 'curl -i "http://127.0.0.1:8000/users/api/v1/users?page=2"'
+R7_QUERY_KEPT = 'curl -i "http://127.0.0.1:8000/users/api/v1/users?page=2"'
 
 TESTED_CURLS = {
     name: value
@@ -432,6 +433,13 @@ def test_recipe6_fixture_render_error_is_500(recipe6):
     }
 
 
+def test_recipe6_relative_replacement_is_500_not_502(recipe6, upstream):
+    r = curl(R6_RELATIVE_URL, recipe6)
+    assert_result(r, 500, "error", "accounts-relative")
+    assert r.json() == {"error": "mockstack: internal error"}
+    assert upstream.calls == []
+
+
 def test_recipe6_upstream_failure_is_502(recipe6):
     r = curl(R6_UPSTREAM_FAILED, recipe6)
     assert_result(r, 502, "error", "invoices-unreachable")
@@ -477,10 +485,11 @@ def test_recipe7_following_the_redirect_reaches_upstream_directly(recipe7, upstr
     assert [c["path"] for c in upstream.calls] == ["/api/v1/users/user-2"]
 
 
-def test_recipe7_query_string_is_not_carried_into_location(recipe7, upstream):
-    r = curl(R7_QUERY_NOT_CARRIED, recipe7)
+def test_recipe7_query_string_is_kept_in_location(recipe7, upstream):
+    r = curl(R7_QUERY_KEPT, recipe7)
     assert_result(r, 307, "redirect", "users-redirect")
-    assert r.headers["location"] == f"{upstream.base_url}/api/v1/users"
+    assert r.headers["location"] == f"{upstream.base_url}/api/v1/users?page=2"
+    assert upstream.calls == []
 
 
 # --- The page, the README and this module stay in step ----------------------
