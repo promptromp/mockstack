@@ -273,9 +273,11 @@ broken fixture rule: if a path or header changes, the request silently reaches t
 service and the test may still pass. Assert `X-Mockstack-Result` on every response
 that should come from a fixture:
 
+<!-- fmt: off -->
 ```python title="06-asserting-in-tests/fixture_assertions.py"
 --8<-- "examples/proxyrules-cookbook/06-asserting-in-tests/fixture_assertions.py"
 ```
+<!-- fmt: on -->
 
 Run it against mockstack started on this recipe's rules:
 
