@@ -4,7 +4,7 @@ import pytest
 from fastapi import Request
 from starlette.datastructures import URL
 
-from mockstack.rules import Rule, TemplateRuleResult, URLRuleResult
+from mockstack.rules import RequestPayload, Rule, TemplateRuleResult, URLRuleResult
 
 
 def test_rule_from_dict():
@@ -165,3 +165,63 @@ def test_rule_apply_template():
     # The context should contain the extracted project ID from the path
     assert "projects" in result.template_context
     assert result.template_context["projects"] == "1234"
+
+
+def test_request_payload_from_json_bytes():
+    payload = RequestPayload.from_bytes(b'{"query": "SELECT 1"}')
+    assert payload.text == '{"query": "SELECT 1"}'
+    assert payload.json == {"query": "SELECT 1"}
+
+
+def test_request_payload_from_non_json_bytes():
+    payload = RequestPayload.from_bytes(b"plain text")
+    assert payload.text == "plain text"
+    assert payload.json is None
+
+
+def test_request_payload_empty():
+    assert RequestPayload.empty() == RequestPayload.from_bytes(b"")
+    assert RequestPayload.empty().json is None
+    assert RequestPayload.empty().text == ""
+
+
+def test_request_payload_invalid_utf8_does_not_raise():
+    payload = RequestPayload.from_bytes(b"\xff\xfe")
+    assert "�" in payload.text
+    assert payload.json is None
+
+
+def test_rule_apply_template_context_includes_request_json():
+    rule = Rule(
+        pattern=r"^/analytics/v2/sql$", replacement="file:///tmp/x.json", method="POST"
+    )
+    request = Request(
+        scope={
+            "type": "http",
+            "method": "POST",
+            "path": "/analytics/v2/sql",
+            "query_string": b"",
+            "headers": [(b"x-request-eval-scenario", b"healthy")],
+        }
+    )
+    payload = RequestPayload.from_bytes(b'{"query": "SELECT 1"}')
+    result = rule.apply(request, payload)
+    assert isinstance(result, TemplateRuleResult)
+    assert result.template_context["request_json"] == {"query": "SELECT 1"}
+    assert result.template_context["headers"]["x-request-eval-scenario"] == "healthy"
+
+
+def test_rule_apply_without_payload_has_none_request_json():
+    rule = Rule(pattern=r"^/x$", replacement="file:///tmp/x.json")
+    request = Request(
+        scope={
+            "type": "http",
+            "method": "GET",
+            "path": "/x",
+            "query_string": b"",
+            "headers": [],
+        }
+    )
+    result = rule.apply(request)
+    assert isinstance(result, TemplateRuleResult)
+    assert result.template_context["request_json"] is None

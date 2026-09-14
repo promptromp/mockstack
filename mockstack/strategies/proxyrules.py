@@ -20,7 +20,7 @@ from mockstack.constants import (
     ProxyRulesRedirectVia,
 )
 from mockstack.intent import looks_like_a_create
-from mockstack.rules import Rule, TemplateRuleResult, URLRuleResult
+from mockstack.rules import RequestPayload, Rule, TemplateRuleResult, URLRuleResult
 from mockstack.strategies.base import BaseStrategy
 from mockstack.strategies.create_mixin import CreateMixin
 from mockstack.templating import templates_env_provider
@@ -96,11 +96,15 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             return None
 
     async def apply(self, request: Request) -> Response:
+        # Read the body exactly once. Starlette caches it on the request, so the
+        # reverse proxy and create-mixin paths can safely read it again later.
+        payload = RequestPayload.from_bytes(await request.body())
+
         rule = self.rule_for(request)
         if rule is None:
             return await self.handle_missing_rule(request)
 
-        result = rule.apply(request)
+        result = rule.apply(request, payload)
         self.logger.info(f"[rule:{rule.name}] Result: {result}")
 
         # Handle template results
@@ -249,7 +253,9 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         return _headers
 
     def _get_content_type(self, template_path: Path) -> str:
-        """Determine content type based on file extension."""
+        """Determine content type from the file extension, ignoring a trailing ``.j2``."""
+        if template_path.suffix.lower() == ".j2":
+            template_path = template_path.with_suffix("")
         suffix = template_path.suffix.lower()
         content_types = {
             ".json": "application/json",
