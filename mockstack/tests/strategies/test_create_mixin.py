@@ -38,9 +38,7 @@ def created_resource_metadata():
 
 
 @pytest.mark.asyncio
-async def test_create_with_json_request(
-    strategy, env, created_resource_metadata, traced_request
-):
+async def test_create_with_json_request(strategy, env, created_resource_metadata, traced_request):
     """Test creating a resource with a JSON request."""
     request = traced_request(
         "/test",
@@ -65,13 +63,9 @@ async def test_create_with_json_request(
 
 
 @pytest.mark.asyncio
-async def test_create_with_non_json_request(
-    strategy, env, created_resource_metadata, traced_request
-):
+async def test_create_with_non_json_request(strategy, env, created_resource_metadata, traced_request):
     """Test creating a resource with a non-JSON request."""
-    request = traced_request(
-        "/test", method="POST", headers={"content-type": "text/plain"}
-    )
+    request = traced_request("/test", method="POST", headers={"content-type": "text/plain"})
 
     response = await strategy._create(
         request,
@@ -142,9 +136,7 @@ def test_metadata_context(strategy, traced_request):
 def test_create_mixin_update_opentelemetry(strategy, traced_request, span):
     """Test OpenTelemetry span updates."""
     metadata = {"id": "test-id", "status": "active"}
-    strategy._create_mixin_update_opentelemetry(
-        traced_request("/test", method="POST"), metadata
-    )
+    strategy._create_mixin_update_opentelemetry(traced_request("/test", method="POST"), metadata)
 
     span.set_attribute.assert_called_once_with(
         "mockstack.create_mixin.created_resource_metadata",

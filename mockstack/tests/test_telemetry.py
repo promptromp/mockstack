@@ -46,9 +46,7 @@ def test_with_request_attributes(make_request):
 
     # Verify basic request attributes
     span.set_attribute.assert_any_call("http.method", "POST")
-    span.set_attribute.assert_any_call(
-        "http.url", "https://example.com:8443/test/path?key=value&other=123"
-    )
+    span.set_attribute.assert_any_call("http.url", "https://example.com:8443/test/path?key=value&other=123")
     span.set_attribute.assert_any_call("http.scheme", "https")
     span.set_attribute.assert_any_call("http.host", "example.com")
     span.set_attribute.assert_any_call("http.target", "/test/path")
@@ -60,9 +58,7 @@ def test_with_request_attributes(make_request):
 
     # Verify headers (excluding sensitive)
     span.set_attribute.assert_any_call("http.request.header.user-agent", "test-client")
-    span.set_attribute.assert_any_call(
-        "http.request.header.content-type", "application/json"
-    )
+    span.set_attribute.assert_any_call("http.request.header.content-type", "application/json")
 
     # Verify query parameters
     span.set_attribute.assert_any_call("http.request.query.key", "value")
@@ -94,9 +90,7 @@ def test_with_response_attributes():
     span.set_attribute.assert_any_call("http.response_content_length", "11")
 
     # Verify headers (excluding sensitive)
-    span.set_attribute.assert_any_call(
-        "http.response.header.content-type", "text/plain"
-    )
+    span.set_attribute.assert_any_call("http.response.header.content-type", "text/plain")
     span.set_attribute.assert_any_call("http.response.header.content-length", "11")
 
     # Verify sensitive headers are not included
@@ -118,9 +112,7 @@ async def test_with_response_body():
     new_response, _ = await with_response_body(response, span)
 
     # Verify response body was added to span
-    span.set_attribute.assert_called_once_with(
-        "http.response.body", body_content.decode()
-    )
+    span.set_attribute.assert_called_once_with("http.response.body", body_content.decode())
 
     # Verify new response has same properties
     assert new_response.status_code == 200
@@ -141,9 +133,10 @@ async def test_extract_body(chunks):
 
 
 def test_opentelemetry_provider_disabled(settings_filefixtures):
-    """Test OpenTelemetry provider when disabled."""
-    # Should not raise any errors and return None
-    assert opentelemetry_provider(FastAPI(), settings_filefixtures) is None
+    """Test OpenTelemetry provider when disabled: no tracer provider is configured."""
+    with patch("mockstack.telemetry.trace") as mock_trace:
+        opentelemetry_provider(FastAPI(), settings_filefixtures)
+    mock_trace.set_tracer_provider.assert_not_called()
 
 
 @patch("mockstack.telemetry.OTLPSpanExporter")
@@ -189,6 +182,4 @@ def test_opentelemetry_provider_enabled(
     # Verify exporter setup
     mock_otlp_exporter.assert_called_once_with(endpoint="http://localhost:4317")
     mock_batch_processor.assert_called_once_with(mock_otlp_exporter.return_value)
-    mock_provider_instance.add_span_processor.assert_called_once_with(
-        mock_batch_processor.return_value
-    )
+    mock_provider_instance.add_span_processor.assert_called_once_with(mock_batch_processor.return_value)

@@ -30,6 +30,7 @@ from mockstack.strategies.proxyrules import (
     with_result_headers,
 )
 
+
 # Target URL for tests that call reverse_proxy directly; nothing is sent there, since
 # those tests patch httpx.AsyncClient.send (see `upstream_send`).
 UPSTREAM_URL = "http://upstream.invalid/x"
@@ -74,7 +75,7 @@ def test_proxy_rules_strategy_missing_rules_file(proxyrules_strategy):
 
 
 @pytest.mark.parametrize(
-    "rule,message",
+    ("rule", "message"),
     [
         (
             {"name": "bad-regex", "pattern": "^/x/(unclosed$", "replacement": "u"},
@@ -123,9 +124,7 @@ def test_proxy_rules_strategy_missing_rules_file(proxyrules_strategy):
         "predicate-without-value",
     ],
 )
-def test_invalid_rules_file_fails_at_startup_with_rule_name(
-    proxyrules_strategy, rule, message
-):
+def test_invalid_rules_file_fails_at_startup_with_rule_name(proxyrules_strategy, rule, message):
     """A bad rules file fails when the strategy is built (startup), naming the rule."""
     with pytest.raises(ValueError, match=message):
         proxyrules_strategy(rules=[rule])
@@ -146,9 +145,7 @@ def test_proxy_rules_strategy_rule_for_no_match(proxyrules_strategy, traced_requ
     assert proxyrules_strategy().rule_for(traced_request("/nonexistent/path")) is None
 
 
-def test_rule_for_prefers_stamped_fixture_then_falls_through(
-    proxyrules_strategy, traced_request
-):
+def test_rule_for_prefers_stamped_fixture_then_falls_through(proxyrules_strategy, traced_request):
     strategy = proxyrules_strategy(
         rules=[
             {
@@ -166,12 +163,12 @@ def test_rule_for_prefers_stamped_fixture_then_falls_through(
         ]
     )
     path = "/projects/api/v1/project/abc"
-    stamped = strategy.rule_for(
-        traced_request(path, headers={"x-request-eval-scenario": "healthy"})
-    )
+    stamped = strategy.rule_for(traced_request(path, headers={"x-request-eval-scenario": "healthy"}))
     unstamped = strategy.rule_for(traced_request(path))
-    assert stamped is not None and stamped.name == "projects-eval"
-    assert unstamped is not None and unstamped.name == "projects-passthrough"
+    assert stamped is not None
+    assert stamped.name == "projects-eval"
+    assert unstamped is not None
+    assert unstamped.name == "projects-passthrough"
 
 
 # --- apply: redirects, missing rules, simulated creates ------------------------------
@@ -179,7 +176,7 @@ def test_rule_for_prefers_stamped_fixture_then_falls_through(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "redirect_via,status_code",
+    ("redirect_via", "status_code"),
     [
         (
             ProxyRulesRedirectVia.HTTP_TEMPORARY_REDIRECT,
@@ -192,9 +189,7 @@ def test_rule_for_prefers_stamped_fixture_then_falls_through(
     ],
     ids=["307", "301"],
 )
-async def test_proxy_rules_strategy_apply_redirects(
-    proxyrules_strategy, traced_request, redirect_via, status_code
-):
+async def test_proxy_rules_strategy_apply_redirects(proxyrules_strategy, traced_request, redirect_via, status_code):
     """A matching rule redirects to the rewritten path, temporarily or permanently."""
     strategy = proxyrules_strategy(proxyrules_redirect_via=redirect_via)
     response = await strategy.apply(traced_request(PROJECT_PATH))
@@ -204,9 +199,7 @@ async def test_proxy_rules_strategy_apply_redirects(
 
 
 @pytest.mark.asyncio
-async def test_proxy_rules_strategy_apply_with_fragment(
-    proxyrules_strategy, traced_request
-):
+async def test_proxy_rules_strategy_apply_with_fragment(proxyrules_strategy, traced_request):
     """Test applying a rule to a request with URL fragment."""
     request = traced_request(PROJECT_PATH)
     # Set URL with fragment (fragments are client-side only in HTTP, but we test the logic)
@@ -218,7 +211,7 @@ async def test_proxy_rules_strategy_apply_with_fragment(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "redirect_via,status_code",
+    ("redirect_via", "status_code"),
     [
         (ProxyRulesRedirectVia.HTTP_TEMPORARY_REDIRECT, 307),
         (ProxyRulesRedirectVia.HTTP_PERMANENT_REDIRECT, 301),
@@ -226,7 +219,7 @@ async def test_proxy_rules_strategy_apply_with_fragment(
     ids=["307", "301"],
 )
 @pytest.mark.parametrize(
-    "replacement,query_string,expected_location",
+    ("replacement", "query_string", "expected_location"),
     [
         (
             r"https://api.example/\1",
@@ -307,9 +300,7 @@ async def test_proxy_rules_strategy_apply_no_match(proxyrules_strategy, traced_r
 
 
 @pytest.mark.asyncio
-async def test_proxy_rules_strategy_apply_invalid_redirect_via(
-    proxyrules_strategy, traced_request
-):
+async def test_proxy_rules_strategy_apply_invalid_redirect_via(proxyrules_strategy, traced_request):
     """An invalid redirect_via value is an internal failure: apply() answers it as a
     stamped 500 ``error`` rather than letting it propagate to Starlette's
     ServerErrorMiddleware as a bare, unstamped 500.
@@ -323,9 +314,7 @@ async def test_proxy_rules_strategy_apply_invalid_redirect_via(
 
 
 @pytest.mark.asyncio
-async def test_proxy_rules_strategy_apply_simulate_create(
-    proxyrules_strategy, traced_request
-):
+async def test_proxy_rules_strategy_apply_simulate_create(proxyrules_strategy, traced_request):
     """Test simulating resource creation when no rule matches."""
     strategy = proxyrules_strategy(proxyrules_simulate_create_on_missing=True)
     request = traced_request(
@@ -341,9 +330,7 @@ async def test_proxy_rules_strategy_apply_simulate_create(
 
 
 @pytest.mark.asyncio
-async def test_simulate_create_with_malformed_json_body_is_stamped_500(
-    proxyrules_strategy, traced_request
-):
+async def test_simulate_create_with_malformed_json_body_is_stamped_500(proxyrules_strategy, traced_request):
     """The create path parses the body with ``request.json()`` (create_mixin is out of
     scope here); a malformed body is an internal failure, answered as a stamped 500
     ``error`` with no rule header since no rule matched.
@@ -379,9 +366,7 @@ async def test_client_disconnect_propagates(proxyrules_strategy, make_request, s
 
 
 @pytest.mark.asyncio
-async def test_proxy_rules_strategy_apply_template(
-    apply_rule, traced_request, write_template
-):
+async def test_proxy_rules_strategy_apply_template(apply_rule, traced_request, write_template):
     """Test applying strategy with template rendering."""
     template_file = write_template(
         "template.json",
@@ -401,9 +386,7 @@ async def test_proxy_rules_strategy_apply_template(
 
 
 @pytest.mark.asyncio
-async def test_apply_template_rejects_path_traversal(
-    proxyrules_strategy, traced_request, tmp_path
-):
+async def test_apply_template_rejects_path_traversal(proxyrules_strategy, traced_request, tmp_path):
     """A rendered ``file://`` path containing ``..`` -- e.g. built in part from an
     unconstrained request value such as a header matched by ``.*`` -- must never be
     opened. It 404s without ever calling `open`, and the response body does not echo
@@ -428,12 +411,8 @@ async def test_apply_template_rejects_path_traversal(
 
 
 @pytest.mark.asyncio
-async def test_apply_renders_request_json_from_body(
-    apply_rule, traced_request, write_template
-):
-    template_file = write_template(
-        "sql.json", '{"echo": {{ request_json.query | tojson }}}'
-    )
+async def test_apply_renders_request_json_from_body(apply_rule, traced_request, write_template):
+    template_file = write_template("sql.json", '{"echo": {{ request_json.query | tojson }}}')
     response = await apply_rule(
         {
             "pattern": r"^/analytics/v2/sql$",
@@ -452,7 +431,7 @@ async def test_apply_renders_request_json_from_body(
 
 
 @pytest.mark.parametrize(
-    "filename,expected",
+    ("filename", "expected"),
     [
         ("file.json", "application/json"),
         ("file.xml", "application/xml"),
@@ -475,7 +454,7 @@ def test_proxy_rules_strategy_get_content_type(proxyrules_strategy, filename, ex
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "name,expected",
+    ("name", "expected"),
     [
         ("t-rule", "t-rule"),
         ("日本語ルール", "\\u65e5\\u672c\\u8a9e\\u30eb\\u30fc\\u30eb"),
@@ -483,9 +462,7 @@ def test_proxy_rules_strategy_get_content_type(proxyrules_strategy, filename, ex
     ],
     ids=["plain", "non-latin1-escaped", "crlf-replaced"],
 )
-async def test_template_response_carries_result_headers(
-    apply_rule, traced_request, write_template, name, expected
-):
+async def test_template_response_carries_result_headers(apply_rule, traced_request, write_template, name, expected):
     """A rendered fixture is stamped ``template`` with its rule's name. Starlette encodes
     header values as latin-1 and CR/LF must not leak into a header, so a name outside
     latin-1 is escaped to plain ASCII and control characters become spaces, rather than
@@ -501,9 +478,7 @@ async def test_template_response_carries_result_headers(
 
 
 @pytest.mark.asyncio
-async def test_missing_fixture_is_stamped_404_error_without_echoing_path(
-    apply_rule, tmp_path, caplog
-):
+async def test_missing_fixture_is_stamped_404_error_without_echoing_path(apply_rule, tmp_path, caplog):
     missing = tmp_path / "secret-scenario" / "project.json.j2"
     with caplog.at_level(logging.ERROR, logger="ProxyRulesStrategy"):
         response = await apply_rule(
@@ -521,9 +496,7 @@ async def test_missing_fixture_is_stamped_404_error_without_echoing_path(
 
 
 @pytest.mark.asyncio
-async def test_fixture_render_failure_is_stamped_500_error(
-    apply_rule, write_template, caplog
-):
+async def test_fixture_render_failure_is_stamped_500_error(apply_rule, write_template, caplog):
     """A fixture that fails to render is a stamped 500 ``error``, logged once at ERROR
     with the traceback and the fixture path."""
     template_file = write_template("broken.json.j2", '{"x": {{ oops }')
@@ -545,9 +518,7 @@ async def test_fixture_render_failure_is_stamped_500_error(
 
 
 @pytest.mark.asyncio
-async def test_undefined_variable_in_replacement_is_stamped_500_error(
-    apply_rule, caplog
-):
+async def test_undefined_variable_in_replacement_is_stamped_500_error(apply_rule, caplog):
     with caplog.at_level(logging.ERROR, logger="ProxyRulesStrategy"):
         response = await apply_rule(
             {
@@ -567,12 +538,8 @@ async def test_undefined_variable_in_replacement_is_stamped_500_error(
 
 
 @pytest.mark.asyncio
-async def test_unexpected_error_after_match_is_stamped_500_with_rule(
-    proxyrules_strategy, traced_request
-):
-    strategy = proxyrules_strategy(
-        rules=[{"name": "boom-rule", "pattern": r"^/x$", "replacement": "u"}]
-    )
+async def test_unexpected_error_after_match_is_stamped_500_with_rule(proxyrules_strategy, traced_request):
+    strategy = proxyrules_strategy(rules=[{"name": "boom-rule", "pattern": r"^/x$", "replacement": "u"}])
     [rule] = strategy.rules
     with patch.object(rule, "apply", side_effect=RuntimeError("boom")):
         response = await strategy.apply(traced_request("/x"))
@@ -582,9 +549,7 @@ async def test_unexpected_error_after_match_is_stamped_500_with_rule(
 
 
 @pytest.mark.asyncio
-async def test_result_log_line_omits_template_context(
-    apply_rule, traced_request, write_template, caplog
-):
+async def test_result_log_line_omits_template_context(apply_rule, traced_request, write_template, caplog):
     template_file = write_template("t.json", '{"ok": true}')
     request = traced_request(
         "/t",
@@ -609,9 +574,7 @@ async def test_result_log_line_omits_template_context(
 
 
 @pytest.mark.asyncio
-async def test_result_log_line_for_url_result_logs_target_url(
-    apply_rule, traced_request, caplog
-):
+async def test_result_log_line_for_url_result_logs_target_url(apply_rule, traced_request, caplog):
     request = traced_request("/api/x", headers={"x-secret-token": "hunter2"})
     with caplog.at_level(logging.INFO, logger="ProxyRulesStrategy"):
         await apply_rule(
@@ -627,16 +590,12 @@ async def test_result_log_line_for_url_result_logs_target_url(
 
 
 @pytest.mark.asyncio
-async def test_handlers_stamp_their_own_result_type(
-    proxyrules_strategy, traced_request, write_template
-):
+async def test_handlers_stamp_their_own_result_type(proxyrules_strategy, traced_request, write_template):
     strategy = proxyrules_strategy()  # HTTP_TEMPORARY_REDIRECT
     rule = Rule.from_dict({"name": "r", "pattern": r"^/x$", "replacement": "https://h"})
     request = traced_request("/x")
 
-    redirect = await strategy.handle_url_result(
-        request, rule, URLRuleResult(url="https://h/x")
-    )
+    redirect = await strategy.handle_url_result(request, rule, URLRuleResult(url="https://h/x"))
     assert redirect.headers[RESULT_TYPE_HEADER] == "redirect"
     assert redirect.headers[RESULT_RULE_HEADER] == "r"
 
@@ -653,9 +612,7 @@ async def test_handlers_stamp_their_own_result_type(
 
 
 @pytest.mark.asyncio
-async def test_proxy_rules_strategy_apply_reverse_proxy(
-    apply_rule, traced_request, upstream_send
-):
+async def test_proxy_rules_strategy_apply_reverse_proxy(apply_rule, traced_request, upstream_send):
     """In reverse-proxy mode apply() sends the request to the rewritten URL and answers
     with the upstream's response, stamped ``proxy``."""
     upstream_send.return_value = httpx.Response(
@@ -683,7 +640,7 @@ async def test_proxy_rules_strategy_apply_reverse_proxy(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "error,status_code,message",
+    ("error", "status_code", "message"),
     [
         (httpx.ConnectError("boom"), 502, "mockstack: upstream request failed"),
         (httpx.ReadTimeout("slow"), 504, "mockstack: upstream request timed out"),
@@ -744,9 +701,7 @@ async def test_invalid_upstream_url_is_internal_error(apply_rule, caplog, target
 
 
 @pytest.mark.asyncio
-async def test_proxy_rules_strategy_reverse_proxy(
-    reverse_proxy_strategy, make_request, upstream_send
-):
+async def test_proxy_rules_strategy_reverse_proxy(reverse_proxy_strategy, make_request, upstream_send):
     """reverse_proxy sends the method, body and query string to the target URL, with
     the target's host, and answers with the upstream's response."""
     upstream_send.return_value = httpx.Response(
@@ -762,9 +717,7 @@ async def test_proxy_rules_strategy_reverse_proxy(
         body=b'{"data": "test"}',
     )
 
-    response = await reverse_proxy_strategy.reverse_proxy(
-        request, "https://api.target.com/test"
-    )
+    response = await reverse_proxy_strategy.reverse_proxy(request, "https://api.target.com/test")
 
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/json"
@@ -780,7 +733,7 @@ async def test_proxy_rules_strategy_reverse_proxy(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "exc,status_code",
+    ("exc", "status_code"),
     [
         (httpx.ConnectTimeout("t"), 504),
         (httpx.ReadTimeout("t"), 504),
@@ -800,7 +753,7 @@ async def test_reverse_proxy_translates_httpx_errors(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "encoding,upstream_body,expected_body,expected_encoding",
+    ("encoding", "upstream_body", "expected_body", "expected_encoding"),
     [
         ("gzip", gzip.compress(b'{"ok":true}'), b'{"ok":true}', "identity"),
         (
@@ -824,21 +777,15 @@ async def test_reverse_proxy_response_body_encoding(
     """httpx decodes gzip, so that body is forwarded decoded and relabelled
     ``identity``; a coding httpx skips reaches the client still encoded, and labelled so.
     Either way content-length is the length of the forwarded body."""
-    upstream_send.return_value = httpx.Response(
-        200, headers={"content-encoding": encoding}, content=upstream_body
-    )
-    response = await reverse_proxy_strategy.reverse_proxy(
-        make_request("/x"), UPSTREAM_URL
-    )
+    upstream_send.return_value = httpx.Response(200, headers={"content-encoding": encoding}, content=upstream_body)
+    response = await reverse_proxy_strategy.reverse_proxy(make_request("/x"), UPSTREAM_URL)
     assert response.body == expected_body
     assert response.headers["content-encoding"] == expected_encoding
     assert response.headers["content-length"] == str(len(expected_body))
 
 
 @pytest.mark.asyncio
-async def test_reverse_proxy_preserves_repeated_response_headers(
-    reverse_proxy_strategy, make_request, upstream_send
-):
+async def test_reverse_proxy_preserves_repeated_response_headers(reverse_proxy_strategy, make_request, upstream_send):
     """Upstream headers are copied item by item, so repeated ones such as Set-Cookie
     survive; the upstream's date and server are dropped, since uvicorn adds its own."""
     body = b'{"ok":true}'
@@ -853,9 +800,7 @@ async def test_reverse_proxy_preserves_repeated_response_headers(
         ],
         content=body,
     )
-    response = await reverse_proxy_strategy.reverse_proxy(
-        make_request("/x"), UPSTREAM_URL
-    )
+    response = await reverse_proxy_strategy.reverse_proxy(make_request("/x"), UPSTREAM_URL)
     names = [name for name, _ in response.raw_headers]
     assert b"date" not in names
     assert b"server" not in names
@@ -869,16 +814,12 @@ async def test_reverse_proxy_preserves_repeated_response_headers(
 
 
 @pytest.mark.asyncio
-async def test_reverse_proxy_head_keeps_upstream_content_length(
-    reverse_proxy_strategy, make_request, upstream_send
-):
+async def test_reverse_proxy_head_keeps_upstream_content_length(reverse_proxy_strategy, make_request, upstream_send):
     upstream_send.return_value = httpx.Response(
         200,
         headers=[("content-type", "application/json"), ("content-length", "1234")],
     )
-    response = await reverse_proxy_strategy.reverse_proxy(
-        make_request("/x", method="HEAD"), UPSTREAM_URL
-    )
+    response = await reverse_proxy_strategy.reverse_proxy(make_request("/x", method="HEAD"), UPSTREAM_URL)
     assert response.headers["content-length"] == "1234"
     assert response.body == b""
 
@@ -887,7 +828,7 @@ async def test_reverse_proxy_head_keeps_upstream_content_length(
 
 
 @pytest.mark.parametrize(
-    "headers,forwarded,stripped",
+    ("headers", "forwarded", "stripped"),
     [
         (
             {"host": "example.com", "user-agent": "test", "accept": "application/json"},
@@ -926,23 +867,17 @@ async def test_reverse_proxy_head_keeps_upstream_content_length(
         "connection-listed-stripped",
     ],
 )
-def test_proxy_rules_strategy_reverse_proxy_headers(
-    proxyrules_strategy, headers, forwarded, stripped
-):
+def test_proxy_rules_strategy_reverse_proxy_headers(proxyrules_strategy, headers, forwarded, stripped):
     """Forwarded request headers get the target's host and lose hop-by-hop and framing
     headers (httpx recomputes those); everything else is forwarded as is."""
-    out = proxyrules_strategy().reverse_proxy_headers(
-        Headers(headers), "https://api.target.com/path"
-    )
+    out = proxyrules_strategy().reverse_proxy_headers(Headers(headers), "https://api.target.com/path")
     for name, value in forwarded.items():
         assert out[name] == value
     for name in stripped:
         assert name not in out
 
 
-def test_proxy_rules_strategy_update_opentelemetry(
-    proxyrules_strategy, traced_request, span
-):
+def test_proxy_rules_strategy_update_opentelemetry(proxyrules_strategy, traced_request, span):
     """Test OpenTelemetry span updates."""
     request = traced_request("/test")
     rule = Rule(pattern="/test", replacement="/target", method="GET", name="test_rule")
@@ -952,9 +887,7 @@ def test_proxy_rules_strategy_update_opentelemetry(
     span.set_attribute.assert_any_call("mockstack.proxyrules.rule_name", "test_rule")
     span.set_attribute.assert_any_call("mockstack.proxyrules.rule_method", "GET")
     span.set_attribute.assert_any_call("mockstack.proxyrules.rule_pattern", "/test")
-    span.set_attribute.assert_any_call(
-        "mockstack.proxyrules.rule_replacement", "/target"
-    )
+    span.set_attribute.assert_any_call("mockstack.proxyrules.rule_replacement", "/target")
     span.set_attribute.assert_any_call("mockstack.proxyrules.rewritten_url", "/target")
 
 
@@ -985,9 +918,7 @@ def test_maybe_update_response_headers_omits_content_length_for_204_304(status_c
     value must match what the 200 would have carried -- ``0`` would be a lie. Neither
     status should carry a content-length header at all.
     """
-    response_headers = httpx.Headers(
-        {"content-length": "1234", "content-type": "application/json"}
-    )
+    response_headers = httpx.Headers({"content-length": "1234", "content-type": "application/json"})
 
     updated_headers = maybe_update_response_headers(
         response_headers=response_headers,
@@ -1000,7 +931,7 @@ def test_maybe_update_response_headers_omits_content_length_for_204_304(status_c
 
 
 @pytest.mark.parametrize(
-    "upstream_headers,expected_encoding,expected_length",
+    ("upstream_headers", "expected_encoding", "expected_length"),
     [
         ({"content-length": "1234"}, None, "1234"),
         ({}, None, None),
@@ -1024,9 +955,7 @@ def test_maybe_update_response_headers_omits_content_length_for_204_304(status_c
         "decoded-coding-drops-length",
     ],
 )
-def test_maybe_update_response_headers_head_content_length(
-    upstream_headers, expected_encoding, expected_length
-):
+def test_maybe_update_response_headers_head_content_length(upstream_headers, expected_encoding, expected_length):
     """A HEAD response has no body, so the buffered length (0) says nothing; the
     upstream's Content-Length describes the GET representation and must survive (as must
     its absence). Once a coding is relabelled (a GET would be decoded) that length is the
@@ -1049,7 +978,7 @@ ZSTD_DECODED = "zstd" in SUPPORTED_DECODERS
 
 
 @pytest.mark.parametrize(
-    "encoding,expected",
+    ("encoding", "expected"),
     [
         ("gzip", "identity"),
         ("GZIP", "identity"),
@@ -1067,9 +996,7 @@ ZSTD_DECODED = "zstd" in SUPPORTED_DECODERS
         ("x-custom", "x-custom"),
     ],
 )
-def test_maybe_update_response_headers_relabels_only_decoded_encodings(
-    encoding, expected
-):
+def test_maybe_update_response_headers_relabels_only_decoded_encodings(encoding, expected):
     """Only codings httpx actually decoded may be removed from Content-Encoding; a
     coding it skipped must stay, or the client gets an encoded body labelled
     ``identity``. When nothing was decoded the value is left exactly as sent."""
@@ -1146,7 +1073,7 @@ def test_strip_hop_by_hop_removes_connection_listed_headers(factory):
 
 
 @pytest.mark.parametrize(
-    "value,expected",
+    ("value", "expected"),
     [
         ("ok", "ok"),
         ("  bad\x00name\x7f ", "bad name"),
@@ -1172,7 +1099,7 @@ def test_header_safe_strips_and_falls_back(value, expected):
 
 
 @pytest.mark.parametrize(
-    "name,expected",
+    ("name", "expected"),
     [(12345, "12345"), ("\r\n", "unnamed")],
     ids=["non-string-name", "name-sanitised-to-empty"],
 )

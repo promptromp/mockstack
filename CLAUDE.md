@@ -44,9 +44,13 @@ uv sync                                         # install
 uv run pytest -q --cov=mockstack                # unit tests; live tests are deselected
 uv run pytest -m slow mockstack/tests/live -v   # live socket tests
 uv run mypy mockstack
-uvx ruff check && uvx ruff format
+uvx ruff check && uvx ruff format --check
 cp README.md docs/ && uvx --with mkdocs-material mkdocs build --strict
 ```
+
+mockstack requires Python 3.13 or later; CI tests 3.13 and 3.14. Ruff (line length 120)
+and mypy are configured in `pyproject.toml`: production code must be fully annotated,
+and a `# noqa` names its rule code with the reason on the line above.
 
 If `VIRTUAL_ENV` points at another checkout, `unset VIRTUAL_ENV` first so `uv` uses
 this project's `.venv`.

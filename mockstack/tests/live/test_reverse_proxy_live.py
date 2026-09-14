@@ -9,6 +9,7 @@ import json
 import httpx
 import pytest
 
+
 pytestmark = pytest.mark.slow
 
 
@@ -110,8 +111,6 @@ def test_chunked_request_body_is_forwarded(proxy, upstream):
     )
     assert r.status_code == 200
     assert r.headers["x-mockstack-result"] == "proxy"
-    assert len(upstream.calls[-1]["body"]) == 10 * (
-        len('{"chunk":"') + 10_000 + len('"}\n')
-    )
+    assert len(upstream.calls[-1]["body"]) == 10 * (len('{"chunk":"') + 10_000 + len('"}\n'))
     assert "transfer-encoding" not in upstream.calls[-1]["headers"]
     assert "x-mockstack-rule" not in upstream.calls[-1]["headers"]

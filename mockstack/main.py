@@ -1,5 +1,9 @@
 """Application entrypoints."""
 
+import argparse
+from importlib import metadata
+
+import uvicorn
 from fastapi import FastAPI
 from pydantic_settings import CliApp, CliSettingsSource
 
@@ -28,14 +32,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     return app
 
 
-def run():
+def run() -> None:
     """run the mockstack server."""
-    import argparse
-
-    import uvicorn
-
     parser = argparse.ArgumentParser()
-    cli_settings = CliSettingsSource(CliSettings, root_parser=parser)
+    cli_settings: CliSettingsSource[argparse.ArgumentParser] = CliSettingsSource(CliSettings, root_parser=parser)
     settings = CliApp.run(CliSettings, cli_settings_source=cli_settings)
 
     app = create_app(settings=settings)
@@ -43,9 +43,8 @@ def run():
     uvicorn.run(app, host=settings.host, port=settings.port)
 
 
-def version():
+def version() -> None:
     """display mockstack version."""
-    from importlib.metadata import version
-
-    pkg_version = version("mockstack")
-    print(f"mockstack v{pkg_version}")
+    pkg_version = metadata.version("mockstack")
+    # Command-line output.
+    print(f"mockstack v{pkg_version}")  # noqa: T201

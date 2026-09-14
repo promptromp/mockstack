@@ -8,6 +8,7 @@ the passthrough rules to reverse-proxy to.
 import uvicorn
 from fastapi import FastAPI, Request
 
+
 app = FastAPI()
 
 

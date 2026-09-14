@@ -1,6 +1,6 @@
 """FastAPI application lifecycle management."""
 
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from logging import DEBUG, config
 
@@ -13,7 +13,7 @@ from mockstack.display import announce
 def logging_dict_config_from(settings: Settings) -> dict:
     """Get the logging config from the settings."""
 
-    def enable_debug_logging(settings: Settings):
+    def enable_debug_logging(settings: Settings) -> None:
         """Enable verbose debug logging."""
         settings.logging["handlers"]["console"]["level"] = DEBUG
 
@@ -30,7 +30,7 @@ def lifespan_provider(
     """Provide the lifespan context manager."""
 
     @asynccontextmanager
-    async def lifespan(app: FastAPI):
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         """FastAPI application lifespan management.
 
         This is the context manager that FastAPI will use to manage the lifecycle of the application.

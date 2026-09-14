@@ -1,9 +1,10 @@
 """Identifiers helpers."""
 
 import itertools
+from collections.abc import Iterable, Iterator
 
 
-def prefixes(iterable, reverse=False):
+def prefixes[T](iterable: Iterable[T], reverse: bool = False) -> Iterator[tuple[T, ...]]:
     """Return an iterator of the prefixes of the iterable.
 
     Examples:
@@ -62,23 +63,21 @@ def looks_like_id(segment: str) -> bool:
     if any(c in segment for c in "_./+@"):
         return False
 
-    N = len(segment)
+    length = len(segment)
 
     # Check for UUID format (with or without dashes)
-    if N == 36:
+    if length == 36:
         # UUID with dashes
         parts = segment.lower().split("-")
-        if len(parts) == 5 and all(
-            all(c in "0123456789abcdef" for c in p) for p in parts
-        ):
+        if len(parts) == 5 and all(all(c in "0123456789abcdef" for c in p) for p in parts):
             lengths = [len(p) for p in parts]
             if lengths == [8, 4, 4, 4, 12]:
                 return True
-    elif N == 32:
+    elif length == 32:
         # UUID without dashes
         return all(c in "0123456789abcdefABCDEF" for c in segment)
 
     # Check for even length numeric or hex
-    return (N % 2 == 0 and segment.isdigit()) or (
-        N % 2 == 0 and all(c in "0123456789abcdefABCDEF" for c in segment)
+    return (length % 2 == 0 and segment.isdigit()) or (
+        length % 2 == 0 and all(c in "0123456789abcdefABCDEF" for c in segment)
     )

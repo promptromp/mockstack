@@ -6,7 +6,7 @@ Thank you for your interest in contributing to mockstack! We welcome contributio
 
 ### Prerequisites
 
-- Python 3.11 or higher
+- Python 3.13 or higher (CI tests 3.13 and 3.14)
 - Git
 - A GitHub account
 
@@ -94,7 +94,7 @@ We welcome feature suggestions! Please use our **Feature Request** template when
 - Follow PEP 8 Python style guidelines. We use `ruff` for linting and formatting.
 - Use meaningful variable and function names
 - Write clear commit messages
-- Keep line length reasonable (ideally under 120 characters)
+- Keep lines within 120 characters (enforced by `ruff`)
 - Use type hints where appropriate
 
 ### Testing

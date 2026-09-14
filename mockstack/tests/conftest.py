@@ -140,9 +140,7 @@ def make_request() -> Callable[..., Request]:
         **scope: Any,
     ) -> Request:
         pairs = headers.items() if isinstance(headers, Mapping) else headers or ()
-        messages: list[Message] = [
-            {"type": "http.request", "body": body, "more_body": False}
-        ]
+        messages: list[Message] = [{"type": "http.request", "body": body, "more_body": False}]
 
         async def receive() -> Message:
             return messages.pop(0) if messages else {"type": "http.disconnect"}
@@ -153,10 +151,7 @@ def make_request() -> Callable[..., Request]:
                 "method": method,
                 "path": path,
                 "query_string": query,
-                "headers": [
-                    (name.lower().encode("latin-1"), value.encode("latin-1"))
-                    for name, value in pairs
-                ],
+                "headers": [(name.lower().encode("latin-1"), value.encode("latin-1")) for name, value in pairs],
                 **scope,
             },
             receive=receive,
@@ -166,7 +161,7 @@ def make_request() -> Callable[..., Request]:
 
 
 @pytest.fixture(scope="session")
-def write_rules(tmp_path_factory) -> Callable[[list[dict[str, Any]]], Path]:
+def write_rules(tmp_path_factory: pytest.TempPathFactory) -> Callable[[list[dict[str, Any]]], Path]:
     """Factory: write ``rules`` as a proxyrules rules file and return its path.
 
     Each call writes a new ``rules.yml`` in its own temporary directory. Session-scoped
@@ -182,7 +177,7 @@ def write_rules(tmp_path_factory) -> Callable[[list[dict[str, Any]]], Path]:
 
 
 @pytest.fixture
-def write_template(tmp_path) -> Callable[[str, str], Path]:
+def write_template(tmp_path: Path) -> Callable[[str, str], Path]:
     """Factory: write ``content`` to ``relative_path`` under ``tmp_path``; return the path."""
 
     def _write(relative_path: str, content: str) -> Path:

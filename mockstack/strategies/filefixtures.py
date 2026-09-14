@@ -4,6 +4,7 @@ import logging
 import os
 from functools import cached_property
 from pathlib import Path
+from typing import Any
 
 from fastapi import HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
@@ -28,7 +29,7 @@ class FileFixturesStrategy(BaseStrategy, CreateMixin):
 
     logger = logging.getLogger("FileFixturesStrategy")
 
-    def __init__(self, settings: Settings, *args, **kwargs):
+    def __init__(self, settings: Settings, *args: Any, **kwargs: Any) -> None:
         super().__init__(settings, *args, **kwargs)
 
         if settings.templates_dir is None:
@@ -94,19 +95,16 @@ class FileFixturesStrategy(BaseStrategy, CreateMixin):
         if looks_like_a_search(request):
             # Searching for resources with a complex query that cannot be expressed in a URI.
             return self._response_from_template(request, request_json=request_json)
-        elif looks_like_a_command(request):
+        if looks_like_a_command(request):
             # Executing a 'command' of some sort, like a workflow or a batch job.
             # We return a 201 CREATED status code with response from template.
-            return self._response_from_template(
-                request, request_json=request_json, status_code=status.HTTP_201_CREATED
-            )
-        else:
-            # simulate resource creation:
-            return await self._create(
-                request,
-                env=self.env,
-                created_resource_metadata=self.created_resource_metadata,
-            )
+            return self._response_from_template(request, request_json=request_json, status_code=status.HTTP_201_CREATED)
+        # simulate resource creation:
+        return await self._create(
+            request,
+            env=self.env,
+            created_resource_metadata=self.created_resource_metadata,
+        )
 
     async def _get(self, request: Request) -> Response:
         """Apply the strategy for GET requests.
@@ -146,9 +144,7 @@ class FileFixturesStrategy(BaseStrategy, CreateMixin):
         request_json: dict | None = None,
         status_code: int = status.HTTP_200_OK,
     ) -> Response:
-        for template_args in iter_possible_template_arguments(
-            request, request_json=request_json
-        ):
+        for template_args in iter_possible_template_arguments(request, request_json=request_json):
             filename = self.templates_dir / template_args["name"]
             self.logger.debug("Looking for template filename: %s", filename)
             if not os.path.exists(filename):
@@ -174,6 +170,4 @@ class FileFixturesStrategy(BaseStrategy, CreateMixin):
         """Update the opentelemetry span with the file fixtures details."""
         span = request.state.span
 
-        span.set_attribute(
-            "mockstack.filefixtures.template_name", template_args["name"]
-        )
+        span.set_attribute("mockstack.filefixtures.template_name", template_args["name"])

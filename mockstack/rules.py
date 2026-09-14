@@ -15,13 +15,12 @@ from jinja2 import Environment, StrictUndefined, Template
 from mockstack.constants import PROXYRULES_FILE_TEMPLATE_PREFIX
 from mockstack.templating import parse_template_name_segments_and_identifiers
 
+
 JINJA_DELIMITERS = ("{{", "{%")
 
 # Template context names owned by the strategy. They always win over path-inferred
 # identifiers, and a named group in ``pattern`` may not shadow them.
-RESERVED_CONTEXT_KEYS: Final = frozenset(
-    {"query", "headers", "path", "method", "request_json", "groups"}
-)
+RESERVED_CONTEXT_KEYS: Final = frozenset({"query", "headers", "path", "method", "request_json", "groups"})
 
 # Sentinel returned by ``lookup_path`` for an absent path, so a present JSON ``null``
 # (``None``) stays distinguishable from "not there".
@@ -157,16 +156,9 @@ class Rule:
         self.env = env
 
         # Header names are case-insensitive; normalise once so matching is a plain lookup.
-        self.headers = {
-            str(k).lower(): self._predicate_value(k, v)
-            for k, v in (headers or {}).items()
-        }
-        self.query = {
-            str(k): self._predicate_value(k, v) for k, v in (query or {}).items()
-        }
-        self.json = {
-            str(k): self._predicate_value(k, v) for k, v in (json or {}).items()
-        }
+        self.headers = {str(k).lower(): self._predicate_value(k, v) for k, v in (headers or {}).items()}
+        self.query = {str(k): self._predicate_value(k, v) for k, v in (query or {}).items()}
+        self.json = {str(k): self._predicate_value(k, v) for k, v in (json or {}).items()}
         self.body = str(body) if body is not None else None
 
         self._method = method.lower() if method is not None else None
@@ -178,10 +170,7 @@ class Rule:
 
         shadowed = sorted(RESERVED_CONTEXT_KEYS.intersection(self._pattern.groupindex))
         if shadowed:
-            raise ValueError(
-                f"rule {self.name!r}: named group {shadowed[0]!r} shadows a reserved "
-                "template variable"
-            )
+            raise ValueError(f"rule {self.name!r}: named group {shadowed[0]!r} shadows a reserved template variable")
 
         # The decision to render is made on the operator-authored `replacement`, never
         # on request-controlled data.
@@ -190,7 +179,8 @@ class Rule:
         if env is not None and self._is_template:
             template_env = env.overlay(undefined=StrictUndefined)
             if any(
-                token_type == "data" and _BACKREFERENCE_RE.search(value)
+                # "data" is a Jinja lexer token type (literal template text), not a password.
+                token_type == "data" and _BACKREFERENCE_RE.search(value)  # noqa: S105
                 for _, token_type, value in template_env.lex(replacement)
             ):
                 raise ValueError(
@@ -210,8 +200,8 @@ class Rule:
         return cls(
             pattern=data["pattern"],
             replacement=data["replacement"],
-            method=data.get("method", None),
-            name=data.get("name", None),
+            method=data.get("method"),
+            name=data.get("name"),
             headers=data.get("headers"),
             query=data.get("query"),
             body=data.get("body"),
@@ -258,9 +248,7 @@ class Rule:
 
         return True
 
-    def apply(
-        self, request: Request, payload: RequestPayload | None = None
-    ) -> RuleResult:
+    def apply(self, request: Request, payload: RequestPayload | None = None) -> RuleResult:
         """Apply the rule to the request.
 
         A Jinja replacement is rendered directly against the template context: regex
@@ -307,15 +295,9 @@ class Rule:
         strict undefined instead of rendering ``None``.
         """
         path = request.url.path
-        _, identifiers = parse_template_name_segments_and_identifiers(
-            path, default_identifier_key="id"
-        )
+        _, identifiers = parse_template_name_segments_and_identifiers(path, default_identifier_key="id")
         groups = match.groups() if match else ()
-        named = (
-            {k: v for k, v in match.groupdict().items() if v is not None}
-            if match
-            else {}
-        )
+        named = {k: v for k, v in match.groupdict().items() if v is not None} if match else {}
         return {
             **identifiers,
             **named,
@@ -328,9 +310,7 @@ class Rule:
         }
 
 
-def _mapping_matches(
-    predicates: Mapping[str, re.Pattern[str]], actual: Mapping[str, str]
-) -> bool:
+def _mapping_matches(predicates: Mapping[str, re.Pattern[str]], actual: Mapping[str, str]) -> bool:
     """True when every predicate regex fully matches the corresponding actual value."""
     for key, pattern in predicates.items():
         value = actual.get(key)

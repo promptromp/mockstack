@@ -9,6 +9,7 @@ from collections.abc import Iterator
 import httpx
 import pytest
 
+
 MOCKSTACK_URL = os.environ.get("MOCKSTACK_URL", "http://127.0.0.1:8000")
 
 

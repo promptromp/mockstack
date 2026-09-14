@@ -46,8 +46,9 @@ class Settings(BaseSettings):
     # whether to run in debug mode
     debug: CliImplicitFlag[bool] = False
 
-    # host to run the server on
-    host: str = "0.0.0.0"
+    # host to run the server on. Every interface by default, so the server is reachable
+    # from outside a container.
+    host: str = "0.0.0.0"  # noqa: S104
 
     # port to run the server on
     port: int = 8000
@@ -59,7 +60,7 @@ class Settings(BaseSettings):
     strategy: Literal["filefixtures", "proxyrules"] = "filefixtures"
 
     # base directory for templates used by strategies
-    templates_dir: DirectoryPath | None = None  # type: ignore[assignment]
+    templates_dir: DirectoryPath | None = None
 
     # whether to enable templates for POST requests.
     # By default, templates are not used for POSTs, and instead we try to
@@ -69,7 +70,7 @@ class Settings(BaseSettings):
     filefixtures_enable_templates_for_post: CliImplicitFlag[bool] = True
 
     # rules filename for proxyrules strategy
-    proxyrules_rules_filename: FilePath | None = None  # type: ignore[assignment]
+    proxyrules_rules_filename: FilePath | None = None
 
     # controls behavior of proxying. Whether to use HTTP status code redirects
     # or reverse proxy the request to the target URL "silently".
@@ -153,11 +154,9 @@ class Settings(BaseSettings):
         # TODO: make this validation dynamic based on the strategy classes themselves.
 
         if self.strategy == "proxyrules" and self.proxyrules_rules_filename is None:
-            raise ValueError(
-                "proxyrules_rules_filename is required when strategy is proxyrules"
-            )
+            raise ValueError("proxyrules_rules_filename is required when strategy is proxyrules")
 
-        elif self.strategy == "filefixtures" and self.templates_dir is None:
+        if self.strategy == "filefixtures" and self.templates_dir is None:
             raise ValueError("templates_dir is required when strategy is proxyrules")
 
         return self

@@ -6,7 +6,7 @@ from mockstack.identifiers import looks_like_id, prefixes
 
 
 @pytest.mark.parametrize(
-    "items,reverse,expected",
+    ("items", "reverse", "expected"),
     [
         ([1, 2, 3], False, [(1,), (1, 2), (1, 2, 3)]),
         ([1, 2, 3], True, [(1, 2, 3), (1, 2), (1,)]),
@@ -21,7 +21,7 @@ def test_prefixes(items, reverse, expected):
 
 
 @pytest.mark.parametrize(
-    "chunk,expected,reason",
+    ("chunk", "expected", "reason"),
     [
         # Even length numeric IDs
         ("1234", True, "Even length numeric"),

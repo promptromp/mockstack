@@ -10,6 +10,7 @@ servers are joined when the session ends.
 """
 
 import asyncio
+import contextlib
 import socket
 import string
 import threading
@@ -26,6 +27,7 @@ from fastapi.responses import JSONResponse
 from mockstack.config import Settings
 from mockstack.constants import ProxyRulesRedirectVia
 from mockstack.main import create_app
+
 
 STARTUP_TIMEOUT = 10.0
 SHUTDOWN_TIMEOUT = 10.0
@@ -71,9 +73,7 @@ class LiveServer:
         self.request_stop()
         self.thread.join(SHUTDOWN_TIMEOUT)
         if self.thread.is_alive():
-            raise RuntimeError(
-                f"server on {self.base_url} did not stop within {SHUTDOWN_TIMEOUT}s"
-            )
+            raise RuntimeError(f"server on {self.base_url} did not stop within {SHUTDOWN_TIMEOUT}s")
 
 
 def serve(app: FastAPI) -> LiveServer:
@@ -98,9 +98,7 @@ def serve(app: FastAPI) -> LiveServer:
         live.request_stop()
         thread.join(SHUTDOWN_TIMEOUT)
         sock.close()
-        reason = (
-            "failed to start" if finished else f"did not start in {STARTUP_TIMEOUT}s"
-        )
+        reason = "failed to start" if finished else f"did not start in {STARTUP_TIMEOUT}s"
         raise RuntimeError(f"server on {live.base_url} {reason}")
     return live
 
@@ -160,15 +158,11 @@ def upstream(_live_servers) -> Iterator[LiveServer]:
         # Registered before the catch-all: answers after three seconds, for timeouts,
         # unless the client (a timed-out proxy request) disconnects first, so no
         # request outlives the test that sent it.
-        try:
+        with contextlib.suppress(TimeoutError):
             await asyncio.wait_for(_client_disconnected(request), timeout=3)
-        except TimeoutError:
-            pass
         return {"source": "upstream", "path": "/slow"}
 
-    @app.api_route(
-        "/{p:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
-    )
+    @app.api_route("/{p:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"])
     async def echo(request: Request, p: str):
         body = await request.body()
         call = {
@@ -195,7 +189,7 @@ def _clear_upstream_calls(upstream: LiveServer) -> None:
 
 
 @pytest.fixture(scope="session")
-def proxyrules_settings(make_settings) -> Callable[..., Settings]:
+def proxyrules_settings(make_settings: Callable[..., Settings]) -> Callable[..., Settings]:
     """Factory: settings for a live proxyrules server on ``rules_file``.
 
     ``make_settings`` builds ``Settings`` only from the keyword arguments given here,
@@ -219,9 +213,7 @@ def proxyrules_settings(make_settings) -> Callable[..., Settings]:
 
 
 @pytest.fixture(scope="module")
-def mockstack_server(
-    _live_servers, proxyrules_settings, write_rules
-) -> Iterator[Callable[..., LiveServer]]:
+def mockstack_server(_live_servers, proxyrules_settings, write_rules) -> Iterator[Callable[..., LiveServer]]:
     """Factory: start mockstack for the rest of the module on a rules file or a list of
     rules; ``overrides`` go to ``proxyrules_settings``.
 
@@ -243,7 +235,7 @@ def mockstack_server(
 
 
 @pytest.fixture(scope="session")
-def render_rules(tmp_path_factory) -> Callable[..., Path]:
+def render_rules(tmp_path_factory: pytest.TempPathFactory) -> Callable[..., Path]:
     """Factory: an example's rules file with its ``${VAR}`` placeholders substituted,
     written to a new temporary ``rules.local.yml``.
 

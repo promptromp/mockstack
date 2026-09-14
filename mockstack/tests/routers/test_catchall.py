@@ -37,9 +37,7 @@ def test_catchall_router_provider(client, mock_strategy, method):
 
 
 @pytest.mark.parametrize("method", ["HEAD", "OPTIONS"])
-def test_catchall_router_routes_head_and_options_to_strategy(
-    client, mock_strategy, method
-):
+def test_catchall_router_routes_head_and_options_to_strategy(client, mock_strategy, method):
     """HEAD and OPTIONS must reach the strategy rather than get a router-level 405."""
     response = client.request(method, "/test/path")
 
@@ -49,9 +47,7 @@ def test_catchall_router_routes_head_and_options_to_strategy(
 
 
 @pytest.mark.parametrize("method", ["HEAD", "OPTIONS"])
-def test_catchall_router_filefixtures_still_rejects_head_and_options(
-    app, settings, method
-):
+def test_catchall_router_filefixtures_still_rejects_head_and_options(app, settings, method):
     """Routed to the filefixtures strategy (the ``app`` fixture's), HEAD and OPTIONS are
     still answered 405 -- now by the strategy itself rather than by the router."""
     catchall_router_provider(app, settings)

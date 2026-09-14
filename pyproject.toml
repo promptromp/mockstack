@@ -13,11 +13,12 @@ authors = [{ name = "Adam Ever-Hadani", email = "mockstack.contact@gmail.com" }]
 classifiers = [
   "Development Status :: 5 - Production/Stable",
   "Programming Language :: Python",
-  "Programming Language :: Python :: 3.11",
-  "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: Implementation :: CPython",
 ]
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 dependencies = [
     "colorama>=0.4.6",
     "fastapi[standard]>=0.141.1",
@@ -56,12 +57,33 @@ dev = [
     "types-pyyaml>=6.0.12.20260906",
 ]
 
+[tool.setuptools.packages.find]
+# Repository checkout (./mockstack) and Docker image (/app/src/mockstack); the explicit
+# include keeps untracked top-level directories such as mkdocs' site/ out of discovery.
+where = [".", "src"]
+include = ["mockstack", "mockstack.*"]
+
 [tool.setuptools_scm]
 # can be empty if no extra settings are needed, presence enables setuptools-scm
 
 [tool.mypy]
+python_version = "3.13"
 namespace_packages = true
 ignore_missing_imports = true
+check_untyped_defs = true
+disallow_untyped_defs = true
+no_implicit_optional = true
+strict_equality = true
+warn_redundant_casts = true
+warn_return_any = true
+warn_unreachable = true
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+# Production code is fully annotated. Tests rely on pytest fixtures and parametrized
+# arguments, so their definitions may stay unannotated (their bodies are still checked).
+module = ["mockstack.tests.*"]
+disallow_untyped_defs = false
 
 [tool.pytest.ini_options]
 asyncio_default_fixture_loop_scope = "function"
@@ -69,10 +91,77 @@ markers = [
     "slow: live tests that bind real sockets; run with -m slow",
 ]
 addopts = "-m 'not slow'"
+# strict_config, strict_markers, strict_xfail and strict_parametrization_ids.
+strict = true
+filterwarnings = [
+    # A warning raised from mockstack's own modules (tests included) is an error...
+    "error:::mockstack",
+    # ...except Starlette's deprecation of httpx in its test client, which it attributes
+    # to the module importing `starlette.testclient`.
+    "default:Using `httpx` with `starlette.testclient` is deprecated",
+]
 
 [tool.coverage.run]
 # Measure production code only: test modules, including the deselected live tests,
 # are not coverage targets.
 omit = ["mockstack/tests/*"]
 
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+
+[tool.ruff.format]
+quote-style = "double"
+
 [tool.ruff.lint]
+# `extend-select` layers these families on top of ruff's default rules; a plain
+# `select` would drop the defaults that are not named here.
+extend-select = [
+    "A",  # flake8-builtins
+    "ASYNC",  # flake8-async
+    "B",  # flake8-bugbear
+    "BLE",  # flake8-blind-except
+    "C4",  # flake8-comprehensions
+    "C90",  # mccabe complexity
+    "E",  # pycodestyle (incl. E501 line-too-long)
+    "F",  # Pyflakes
+    "G",  # flake8-logging-format
+    "I",  # isort
+    "N",  # pep8-naming
+    "PERF",  # perflint
+    "PIE",  # flake8-pie
+    "PLC",  # Pylint (Convention)
+    "PT",  # flake8-pytest-style
+    "RET",  # flake8-return
+    "RUF",  # Ruff-specific rules
+    "S",  # flake8-bandit
+    "SIM",  # flake8-simplify
+    "T",  # flake8-debugger and flake8-print
+    "TRY",  # tryceratops
+    "UP",  # pyupgrade
+]
+ignore = [
+    # Exception messages name the offending rule, setting or value; an exception class
+    # per message would add boilerplate without adding signal.
+    "TRY003",
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.isort]
+combine-as-imports = true
+known-first-party = ["mockstack"]
+lines-after-imports = 2
+no-lines-before = ["standard-library"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests assert with `assert` and build Jinja environments the way production does
+# (templates render JSON and other non-HTML bodies, so HTML autoescaping stays off).
+"mockstack/tests/**" = ["S101", "S701"]
+# Imported inside each test, after the fixture stubs the optional `ollama` dependency.
+"mockstack/tests/llm/test_ollama.py" = ["PLC0415"]
+# The cookbook's "copy into your test suite" snippet is pytest code.
+"examples/proxyrules-cookbook/06-asserting-in-tests/fixture_assertions.py" = ["S101"]
+# The LLM walkthrough notebook prints and asserts on the responses it shows.
+"examples/llm/*.ipynb" = ["S101", "T201"]

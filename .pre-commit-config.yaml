@@ -1,4 +1,6 @@
 fail_fast: true
+default_language_version:
+  python: python3
 repos:
 -   repo: local
     hooks:
@@ -31,13 +33,17 @@ repos:
       args: [ --fix ]
     # Run the formatter.
     - id: ruff-format
-- repo: https://github.com/pre-commit/mirrors-mypy
-  rev: v2.3.1
-  hooks:
-    - id: mypy
-      additional_dependencies: [types-pyyaml>=6.0.12]
 - repo: local
   hooks:
+  # mypy runs from the dev dependency group in uv.lock, exactly as CI runs it: the
+  # stricter checks need the real third-party packages installed, which an isolated
+  # hook environment would have to duplicate in `additional_dependencies`.
+  - id: mypy
+    name: mypy
+    entry: bash -ec "uv run mypy mockstack"
+    language: system
+    types: [python]
+    pass_filenames: false
   - id: pytest
     name: pytest [with coverage, without slow]
     entry: bash -ec "uv run python -m pytest --cov=mockstack mockstack/tests --cov-fail-under='90' -m 'not slow'"

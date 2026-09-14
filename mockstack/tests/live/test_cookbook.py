@@ -23,6 +23,7 @@ import httpx
 import pytest
 import yaml
 
+
 pytestmark = pytest.mark.slow
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -36,7 +37,9 @@ DOCS_MOCKSTACK_URL = "http://127.0.0.1:8000"
 # Recipe 1: serve fixtures to tagged test traffic, pass everything else through.
 R1_TAGGED = 'curl -i -H "X-Test-Run: ci-42" http://127.0.0.1:8000/projects/api/v1/project/proj-123'
 R1_UNTAGGED = "curl -i http://127.0.0.1:8000/projects/api/v1/project/proj-123"
-R1_TAGGED_WITHOUT_FIXTURE_RULE = 'curl -i -H "X-Test-Run: ci-42" "http://127.0.0.1:8000/projects/api/v1/projects?page=2"'
+R1_TAGGED_WITHOUT_FIXTURE_RULE = (
+    'curl -i -H "X-Test-Run: ci-42" "http://127.0.0.1:8000/projects/api/v1/projects?page=2"'
+)
 
 # Recipe 2: per-scenario fixture directories selected by a header.
 R2_HEALTHY = 'curl -i -H "X-Test-Scenario: healthy" http://127.0.0.1:8000/projects/api/v1/project/proj-123'
@@ -63,15 +66,9 @@ R4_OBJECT = """curl -i -H "Content-Type: application/json" -d '{"filter": {"cust
 
 # Recipe 5: query-parameter predicates.
 R5_PAGE = 'curl -i "http://127.0.0.1:8000/users/api/v1/users?page=2"'
-R5_FIRST_MATCHING_RULE = (
-    'curl -i "http://127.0.0.1:8000/users/api/v1/users?status=archived&page=2"'
-)
-R5_REPEATED_LAST_MATCHES = (
-    'curl -i "http://127.0.0.1:8000/users/api/v1/users?status=active&status=archived"'
-)
-R5_REPEATED_LAST_DIFFERS = (
-    'curl -i "http://127.0.0.1:8000/users/api/v1/users?status=archived&status=active"'
-)
+R5_FIRST_MATCHING_RULE = 'curl -i "http://127.0.0.1:8000/users/api/v1/users?status=archived&page=2"'
+R5_REPEATED_LAST_MATCHES = 'curl -i "http://127.0.0.1:8000/users/api/v1/users?status=active&status=archived"'
+R5_REPEATED_LAST_DIFFERS = 'curl -i "http://127.0.0.1:8000/users/api/v1/users?status=archived&status=active"'
 
 # Recipe 6: reading error results.
 R6_MISSING_FIXTURE = "curl -i http://127.0.0.1:8000/users/api/v1/users/user-2"
@@ -87,11 +84,7 @@ R7_REDIRECT = "curl -i http://127.0.0.1:8000/users/api/v1/users/user-2"
 R7_FOLLOW_REDIRECT = "curl -i -L http://127.0.0.1:8000/users/api/v1/users/user-2"
 R7_QUERY_KEPT = 'curl -i "http://127.0.0.1:8000/users/api/v1/users?page=2"'
 
-TESTED_CURLS = {
-    name: value
-    for name, value in dict(globals()).items()
-    if re.fullmatch(r"R\d_[A-Z0-9_]+", name)
-}
+TESTED_CURLS = {name: value for name, value in dict(globals()).items() if re.fullmatch(r"R\d_[A-Z0-9_]+", name)}
 
 
 def curl(command: str, base_url: str) -> httpx.Response:
@@ -134,9 +127,7 @@ def curl(command: str, base_url: str) -> httpx.Response:
     )
 
 
-def assert_result(
-    response: httpx.Response, status: int, result: str, rule: str | None
-) -> None:
+def assert_result(response: httpx.Response, status: int, result: str, rule: str | None) -> None:
     actual = (
         response.status_code,
         response.headers.get("x-mockstack-result"),
@@ -158,7 +149,8 @@ def cookbook(upstream, render_rules, mockstack_server) -> Callable[..., str]:
             FIXTURES_DIR=str(recipe_dir / "fixtures"),
             UPSTREAM_URL=upstream.base_url,
         )
-        return mockstack_server(rules_file, **overrides).base_url
+        base_url: str = mockstack_server(rules_file, **overrides).base_url
+        return base_url
 
     return _start
 
@@ -195,9 +187,7 @@ def test_recipe1_tagged_request_without_fixture_rule_passes_through(recipe1, ups
     r = curl(R1_TAGGED_WITHOUT_FIXTURE_RULE, recipe1)
     assert_result(r, 200, "proxy", "projects-passthrough")
     assert r.json()["path"] == "/api/v1/projects"
-    assert [(c["path"], c["query"]) for c in upstream.calls] == [
-        ("/api/v1/projects", {"page": "2"})
-    ]
+    assert [(c["path"], c["query"]) for c in upstream.calls] == [("/api/v1/projects", {"page": "2"})]
 
 
 # --- Recipe 2 ---------------------------------------------------------------
@@ -251,9 +241,7 @@ def test_recipe3_sales_facts_query_gets_fixture(recipe3, upstream):
     assert r.json() == {
         "columns": ["region", "total"],
         "rows": [["north", 1250.0], ["south", 980.5]],
-        "request": {
-            "query": "SELECT region, SUM(amount) AS total FROM sales_facts GROUP BY region"
-        },
+        "request": {"query": "SELECT region, SUM(amount) AS total FROM sales_facts GROUP BY region"},
     }
     assert upstream.calls == []
 
@@ -263,9 +251,7 @@ def test_recipe3_other_query_passes_through(recipe3, upstream):
     assert_result(r, 200, "proxy", "analytics-passthrough")
     assert r.json()["path"] == "/v1/sql"
     assert len(upstream.calls) == 1
-    assert json.loads(upstream.calls[0]["body"]) == {
-        "query": "SELECT id FROM orders LIMIT 10"
-    }
+    assert json.loads(upstream.calls[0]["body"]) == {"query": "SELECT id FROM orders LIMIT 10"}
 
 
 # --- Recipe 4 ---------------------------------------------------------------
@@ -348,9 +334,7 @@ def test_recipe5_repeated_parameter_uses_last_value(recipe5):
     assert r.json() == {"status": "archived", "users": ["user-9"]}
 
 
-def test_recipe5_repeated_parameter_with_other_last_value_passes_through(
-    recipe5, upstream
-):
+def test_recipe5_repeated_parameter_with_other_last_value_passes_through(recipe5, upstream):
     r = curl(R5_REPEATED_LAST_DIFFERS, recipe5)
     assert_result(r, 200, "proxy", "users-passthrough")
     assert r.json()["path"] == "/api/v1/users"
@@ -369,10 +353,9 @@ def recipe6(cookbook):
 
 
 def _load_fixture_assertions() -> ModuleType:
-    spec = importlib.util.spec_from_file_location(
-        "cookbook_fixture_assertions", FIXTURE_ASSERTIONS
-    )
-    assert spec is not None and spec.loader is not None
+    spec = importlib.util.spec_from_file_location("cookbook_fixture_assertions", FIXTURE_ASSERTIONS)
+    assert spec is not None
+    assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -380,9 +363,9 @@ def _load_fixture_assertions() -> ModuleType:
 
 def test_recipe6_snippet_passes_against_fixture(recipe6):
     """Run the snippet with pytest, as the page shows."""
-    completed = subprocess.run(
-        [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider"]
-        + [FIXTURE_ASSERTIONS.name],
+    # A fixed argument list: this interpreter running pytest on the shipped snippet.
+    completed = subprocess.run(  # noqa: S603
+        [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", FIXTURE_ASSERTIONS.name],
         cwd=FIXTURE_ASSERTIONS.parent,
         env={
             **os.environ,
@@ -431,9 +414,7 @@ def test_recipe6_replacement_error_is_500(recipe6):
 def test_recipe6_fixture_render_error_is_500(recipe6):
     r = curl(R6_FIXTURE_RENDER_ERROR, recipe6)
     assert_result(r, 500, "error", "order-echo")
-    assert r.json() == {
-        "error": "An internal error occurred while rendering the template."
-    }
+    assert r.json() == {"error": "An internal error occurred while rendering the template."}
 
 
 def test_recipe6_relative_replacement_is_500_not_502(recipe6, upstream):
@@ -524,9 +505,7 @@ def test_cookbook_page_embeds_every_recipe_file():
     recipe_files = [
         path
         for path in sorted(COOKBOOK_DIR.glob("0*/**/*"))
-        if path.is_file()
-        and "__pycache__" not in path.parts
-        and path.name != "rules.local.yml"
+        if path.is_file() and "__pycache__" not in path.parts and path.name != "rules.local.yml"
     ]
     assert recipe_files
     for path in recipe_files:

@@ -4,7 +4,7 @@ import logging
 import re
 from functools import cached_property
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any
 from urllib.parse import urlparse
 
 import httpx
@@ -25,10 +25,11 @@ from mockstack.constants import (
     ProxyRulesRedirectVia,
 )
 from mockstack.intent import looks_like_a_create
-from mockstack.rules import RequestPayload, Rule, TemplateRuleResult, URLRuleResult
+from mockstack.rules import RequestPayload, Rule, RuleResult, TemplateRuleResult, URLRuleResult
 from mockstack.strategies.base import BaseStrategy
 from mockstack.strategies.create_mixin import CreateMixin
 from mockstack.templating import templates_env_provider
+
 
 try:
     # Private httpx API: the content codings httpx decodes while reading a response
@@ -50,9 +51,6 @@ class UpstreamError(Exception):
         self.message = message
 
 
-HeadersT = TypeVar("HeadersT", MutableHeaders, ResponseHeaders)
-
-
 class InvalidUpstreamURLError(Exception):
     """A rewritten URL that httpx cannot send at all (not absolute, bad port, ...).
 
@@ -65,7 +63,9 @@ class InvalidUpstreamURLError(Exception):
         self.url = url
 
 
-def strip_hop_by_hop(headers: HeadersT) -> HeadersT:
+def strip_hop_by_hop[HeadersT: (MutableHeaders, ResponseHeaders)](
+    headers: HeadersT,
+) -> HeadersT:
     """Remove hop-by-hop headers in place (RFC 9110 §7.6.1) and return ``headers``.
 
     That is every name in ``HOP_BY_HOP_HEADERS`` plus every header listed in a
@@ -108,9 +108,7 @@ def maybe_update_response_headers(
             # httpx decoded these codings while reading the body; only the codings it
             # skipped still apply. Left untouched when nothing was decoded.
             _headers["content-encoding"] = ", ".join(remaining) or "identity"
-            body_was_decoded = any(
-                t != "identity" for t in tokens if t in DECODED_CONTENT_ENCODINGS
-            )
+            body_was_decoded = any(t != "identity" for t in tokens if t in DECODED_CONTENT_ENCODINGS)
 
     if status_code < 200 or status_code in (
         status.HTTP_204_NO_CONTENT,
@@ -174,15 +172,11 @@ def _header_safe(value: str) -> str:
     return value.encode("ascii", "backslashreplace").decode("ascii") or "unnamed"
 
 
-def with_result_headers(
-    response: Response, *, rule: Rule | None, result_type: str
-) -> Response:
+def with_result_headers(response: Response, *, rule: Rule | None, result_type: str) -> Response:
     """Stamp the response with which rule (if any) produced it and how. Never raises."""
     response.headers[RESULT_TYPE_HEADER] = result_type
     if rule is not None:
-        response.headers[RESULT_RULE_HEADER] = _header_safe(
-            str(rule.name or rule.pattern)
-        )
+        response.headers[RESULT_RULE_HEADER] = _header_safe(str(rule.name or rule.pattern))
     return response
 
 
@@ -200,7 +194,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
 
     logger = logging.getLogger("ProxyRulesStrategy")
 
-    def __init__(self, settings: Settings, *args, **kwargs):
+    def __init__(self, settings: Settings, *args: Any, **kwargs: Any) -> None:
         super().__init__(settings, *args, **kwargs)
         self.created_resource_metadata = settings.created_resource_metadata
         self.missing_resource_fields = settings.missing_resource_fields
@@ -238,7 +232,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         if self.rules_filename is None:
             raise ValueError("rules_filename is not set")
 
-        with open(self.rules_filename, "r") as file:
+        with open(self.rules_filename) as file:
             data = yaml.safe_load(file)
         return [self._rule_from_dict(rule) for rule in data["rules"]]
 
@@ -248,17 +242,11 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         try:
             return Rule.from_dict(data, env=self.env)
         except re.error as exc:
-            raise ValueError(
-                f"rule {name!r}: invalid regex {exc.pattern!r}: {exc}"
-            ) from exc
+            raise ValueError(f"rule {name!r}: invalid regex {exc.pattern!r}: {exc}") from exc
         except TemplateSyntaxError as exc:
-            raise ValueError(
-                f"rule {name!r}: invalid replacement template: {exc}"
-            ) from exc
+            raise ValueError(f"rule {name!r}: invalid replacement template: {exc}") from exc
 
-    def rule_for(
-        self, request: Request, payload: RequestPayload | None = None
-    ) -> Rule | None:
+    def rule_for(self, request: Request, payload: RequestPayload | None = None) -> Rule | None:
         try:
             return next(rule for rule in self.rules if rule.matches(request, payload))
         except StopIteration:
@@ -283,24 +271,19 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             if rule is None:
                 return await self.handle_missing_rule(request)
 
-            result = rule.apply(request, payload)
-            if isinstance(result, TemplateRuleResult):
-                self.logger.info(
-                    f"[rule:{rule.name}] template result: {result.template_path}"
-                )
-                return await self.handle_template_result(request, rule, result)
-            if isinstance(result, URLRuleResult):
-                self.logger.info(f"[rule:{rule.name}] url result: {result.url}")
-                return await self.handle_url_result(request, rule, result)
-            raise TypeError(f"Unknown result type: {type(result)}")
+            return await self.handle_result(request, rule, rule.apply(request, payload))
 
         except ClientDisconnect:
             raise
         except InvalidUpstreamURLError as exc:
-            self.logger.error(
-                f"[rule:{rule.name if rule else None}] invalid upstream URL "
-                f"{exc.url!r} for {request.method} {request.url.path}: "
-                f"{exc.__cause__!r}"
+            # A rules-file mistake: the cause is logged, and a traceback would add nothing.
+            self.logger.error(  # noqa: TRY400
+                "[rule:%s] invalid upstream URL %r for %s %s: %r",
+                rule.name if rule else None,
+                exc.url,
+                request.method,
+                request.url.path,
+                exc.__cause__,
             )
             return _error_response(
                 "mockstack: internal error",
@@ -309,14 +292,20 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             )
         except UpstreamError as exc:
             self.logger.warning(
-                f"[rule:{rule.name if rule else None}] {exc.message} for "
-                f"{request.method} {request.url.path}: {exc.__cause__!r}"
+                "[rule:%s] %s for %s %s: %r",
+                rule.name if rule else None,
+                exc.message,
+                request.method,
+                request.url.path,
+                exc.__cause__,
             )
             return _error_response(exc.message, status_code=exc.status_code, rule=rule)
         except Exception:
             self.logger.exception(
-                f"[rule:{rule.name if rule else None}] unhandled error applying "
-                f"strategy to {request.method} {request.url.path}"
+                "[rule:%s] unhandled error applying strategy to %s %s",
+                rule.name if rule else None,
+                request.method,
+                request.url.path,
             )
             return _error_response(
                 "mockstack: internal error",
@@ -324,15 +313,23 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
                 rule=rule,
             )
 
+    async def handle_result(self, request: Request, rule: Rule, result: RuleResult) -> Response:
+        """Hand the result of applying ``rule`` to the handler for its type."""
+        if isinstance(result, TemplateRuleResult):
+            self.logger.info("[rule:%s] template result: %s", rule.name, result.template_path)
+            return await self.handle_template_result(request, rule, result)
+        if isinstance(result, URLRuleResult):
+            self.logger.info("[rule:%s] url result: %s", rule.name, result.url)
+            return await self.handle_url_result(request, rule, result)
+        raise TypeError(f"Unknown result type: {type(result)}")
+
     async def handle_missing_rule(self, request: Request) -> Response:
         """Handle a missing rule."""
-        self.logger.warning(
-            f"No rule found for request: {request.method} {request.url.path}"
-        )
+        self.logger.warning("No rule found for request: %s %s", request.method, request.url.path)
 
         if self.simulate_create_on_missing and looks_like_a_create(request):
             self.logger.info(
-                f"Simulating resource creation for missing rule for {request.method} {request.url.path}"
+                "Simulating resource creation for missing rule for %s %s", request.method, request.url.path
             )
             response = await self._create(
                 request,
@@ -340,16 +337,13 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
                 created_resource_metadata=self.created_resource_metadata,
             )
             return with_result_headers(response, rule=None, result_type="create")
-        else:
-            response = JSONResponse(
-                content=self.missing_resource_fields,
-                status_code=status.HTTP_404_NOT_FOUND,
-            )
-            return with_result_headers(response, rule=None, result_type="missing")
+        response = JSONResponse(
+            content=self.missing_resource_fields,
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+        return with_result_headers(response, rule=None, result_type="missing")
 
-    async def handle_url_result(
-        self, request: Request, rule: Rule, result: URLRuleResult
-    ) -> Response:
+    async def handle_url_result(self, request: Request, rule: Rule, result: URLRuleResult) -> Response:
         """Handle URL results by redirecting to the target URL."""
         self.update_opentelemetry(request, rule, result.url)
 
@@ -375,9 +369,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             case _:
                 raise ValueError(f"Invalid redirect via value: {self.redirect_via=}")
 
-    async def handle_template_result(
-        self, request: Request, rule: Rule, result: TemplateRuleResult
-    ) -> Response:
+    async def handle_template_result(self, request: Request, rule: Rule, result: TemplateRuleResult) -> Response:
         """Handle template results by rendering the template file.
 
         Only a successful render is stamped ``template``; a missing fixture (404) or
@@ -391,17 +383,17 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             # values (headers, query, path segments, body). Reject any path traversal
             # attempt rather than resolving and possibly reading a file outside the
             # fixtures the rule author intended.
-            self.logger.error(
-                f"Rejected template path containing '..': {template_path}"
-            )
+            self.logger.error("Rejected template path containing '..': %s", template_path)
             return _error_response(
                 "Template file not found.",
                 status_code=status.HTTP_404_NOT_FOUND,
                 rule=rule,
             )
 
-        if not template_path.exists():
-            self.logger.error(f"Template file not found: {template_path}")
+        # Templates are small local files: checking and reading them synchronously is
+        # intentional here rather than adding an async-file dependency.
+        if not template_path.exists():  # noqa: ASYNC240
+            self.logger.error("Template file not found: %s", template_path)
             return _error_response(
                 "Template file not found.",
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -409,10 +401,8 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             )
 
         try:
-            # Read the template file content.
-            # Templates are small local files read once per request; the sync
-            # read is intentional here rather than adding an async-file dependency.
-            with open(template_path, "r") as f:  # noqa: ASYNC230
+            # Read the template file content (synchronously, as above).
+            with open(template_path) as f:  # noqa: ASYNC230
                 template_content = f.read()
 
             # Create a template from the content
@@ -438,7 +428,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             # Deliberate catch-all so template rendering errors (e.g. Jinja2 errors)
             # degrade to a 500 instead of crashing.
             # logger.exception: ERROR level, with the traceback (which names the error).
-            self.logger.exception(f"Error rendering template {template_path}")
+            self.logger.exception("Error rendering template %s", template_path)
             return _error_response(
                 "An internal error occurred while rendering the template.",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -452,9 +442,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         (e.g. a relative URL), and ``UpstreamError`` (504 on a timeout, 502 on any
         other transport or protocol failure) when the upstream cannot be reached.
         """
-        async with httpx.AsyncClient(
-            timeout=self.reverse_proxy_timeout, verify=self.verify_ssl_certificates
-        ) as client:
+        async with httpx.AsyncClient(timeout=self.reverse_proxy_timeout, verify=self.verify_ssl_certificates) as client:
             request_content = await request.body()
             request_headers = self.reverse_proxy_headers(request.headers, url=url)
             try:
@@ -476,9 +464,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
                     "mockstack: upstream request timed out",
                 ) from exc
             except httpx.HTTPError as exc:
-                raise UpstreamError(
-                    status.HTTP_502_BAD_GATEWAY, "mockstack: upstream request failed"
-                ) from exc
+                raise UpstreamError(status.HTTP_502_BAD_GATEWAY, "mockstack: upstream request failed") from exc
             content = resp.read()
 
         response_headers = maybe_update_response_headers(
@@ -488,14 +474,10 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             request_method=request.method,
         )
 
-        response = Response(
-            content=content, status_code=resp.status_code, media_type=None
-        )
+        response = Response(content=content, status_code=resp.status_code, media_type=None)
         # Copy the upstream headers item by item (not via a mapping) so repeated
         # headers such as Set-Cookie survive. Starlette expects lower-cased names.
-        response.raw_headers = [
-            (name.lower(), value) for name, value in response_headers.raw
-        ]
+        response.raw_headers = [(name.lower(), value) for name, value in response_headers.raw]
         return response
 
     def reverse_proxy_headers(self, headers: Headers, url: str) -> Headers:
@@ -527,9 +509,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         }
         return content_types.get(suffix, "text/plain")
 
-    def update_opentelemetry_template(
-        self, request: Request, rule: Rule, result: TemplateRuleResult
-    ) -> None:
+    def update_opentelemetry_template(self, request: Request, rule: Rule, result: TemplateRuleResult) -> None:
         """Update the opentelemetry span with template-specific details."""
         span = request.state.span
         if rule.name is not None:

@@ -10,7 +10,7 @@ from mockstack.templating import (
 
 
 @pytest.mark.parametrize(
-    "path,expected_results",
+    ("path", "expected_results"),
     [
         (
             "/api/v1/projects/1234",
@@ -123,7 +123,7 @@ def test_iter_possible_template_arguments(
     results = list(iter_possible_template_arguments(make_request(path)))
     assert len(results) == len(expected_results)
 
-    for actual, expected in zip(results, expected_results):
+    for actual, expected in zip(results, expected_results, strict=True):
         assert actual["name"] == expected["name"]
         assert actual["context"] == expected["context"]
         assert actual["media_type"] == expected["media_type"]
@@ -131,9 +131,7 @@ def test_iter_possible_template_arguments(
 
 def test_iter_possible_template_arguments_with_custom_media_type(make_request):
     """Test that custom media type from headers is respected."""
-    request = make_request(
-        "/api/v1/projects", headers={"content-type": "application/xml"}
-    )
+    request = make_request("/api/v1/projects", headers={"content-type": "application/xml"})
 
     results = list(iter_possible_template_arguments(request))
     assert len(results) == 2
@@ -156,7 +154,7 @@ def test_iter_possible_template_arguments_with_query_params(make_request):
 
 
 @pytest.mark.parametrize(
-    "path,expected_segments,expected_identifiers",
+    ("path", "expected_segments", "expected_identifiers"),
     [
         ("/api/v1/projects/1234", ["api", "v1", "projects"], {"projects": "1234"}),
         ("/api/v1/projects", ["api", "v1", "projects"], {}),
@@ -174,19 +172,15 @@ def test_iter_possible_template_arguments_with_query_params(make_request):
         "multiple-identifiers",
     ],
 )
-def test_parse_template_name_segments_and_identifiers(
-    path, expected_segments, expected_identifiers
-):
+def test_parse_template_name_segments_and_identifiers(path, expected_segments, expected_identifiers):
     """Test the parse_template_name_segments_and_identifiers function."""
-    name_segments, identifiers = parse_template_name_segments_and_identifiers(
-        path, default_identifier_key="id"
-    )
+    name_segments, identifiers = parse_template_name_segments_and_identifiers(path, default_identifier_key="id")
     assert name_segments == expected_segments
     assert identifiers == expected_identifiers
 
 
 @pytest.mark.parametrize(
-    "name_segments,identifiers,separator,extension,default_name,expected",
+    ("name_segments", "identifiers", "separator", "extension", "default_name", "expected"),
     [
         (
             ["api", "v1", "projects"],
@@ -223,9 +217,7 @@ def test_parse_template_name_segments_and_identifiers(
         "custom-separator-and-extension",
     ],
 )
-def test_iter_possible_template_filenames(
-    name_segments, identifiers, separator, extension, default_name, expected
-):
+def test_iter_possible_template_filenames(name_segments, identifiers, separator, extension, default_name, expected):
     """Test the iter_possible_template_filenames function."""
     filenames = iter_possible_template_filenames(
         name_segments,

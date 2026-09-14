@@ -3,9 +3,7 @@
 from mockstack.config import Settings
 
 
-def test_make_settings_ignores_mockstack_env_vars(
-    monkeypatch, make_settings, templates_dir
-):
+def test_make_settings_ignores_mockstack_env_vars(monkeypatch, make_settings, templates_dir):
     """A developer's exported ``MOCKSTACK__*`` environment variables must never leak
     into settings built by the shared ``make_settings`` fixture: otherwise a test
     could pass or fail depending on whatever happens to be set in the shell it runs

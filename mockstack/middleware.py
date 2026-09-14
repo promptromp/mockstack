@@ -1,10 +1,13 @@
 """Middleware definitionsfor the mockstack app."""
 
 import time
+from typing import cast
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from opentelemetry import trace
 from opentelemetry.propagate import extract
+from starlette.middleware.base import RequestResponseEndpoint
+from starlette.responses import StreamingResponse
 
 from mockstack.config import Settings
 from mockstack.constants import SENSITIVE_HEADERS
@@ -20,7 +23,7 @@ def middleware_provider(app: FastAPI, settings: Settings) -> None:
     """Instrument the middlewares to the mockstack app."""
 
     @app.middleware("http")
-    async def add_process_time_header(request: Request, call_next):
+    async def add_process_time_header(request: Request, call_next: RequestResponseEndpoint) -> Response:
         start_time = time.time()
         response = await call_next(request)
         process_time = time.time() - start_time
@@ -28,13 +31,11 @@ def middleware_provider(app: FastAPI, settings: Settings) -> None:
         return response
 
     @app.middleware("http")
-    async def instrument_opentelemetry(request: Request, call_next):
+    async def instrument_opentelemetry(request: Request, call_next: RequestResponseEndpoint) -> Response:
         tracer = trace.get_tracer(__name__)
         ctx = extract(request.headers)
         with tracer.start_as_current_span(span_name_for(request), context=ctx) as span:
-            span = with_request_attributes(
-                request, span, sensitive_headers=SENSITIVE_HEADERS
-            )
+            span = with_request_attributes(request, span, sensitive_headers=SENSITIVE_HEADERS)
 
             # Make the current opentelemetry span available to the request.
             # This is useful for strategies that need to add custom attributes
@@ -43,11 +44,11 @@ def middleware_provider(app: FastAPI, settings: Settings) -> None:
 
             response = await call_next(request)
 
-            span = with_response_attributes(
-                response, span, sensitive_headers=SENSITIVE_HEADERS
-            )
+            span = with_response_attributes(response, span, sensitive_headers=SENSITIVE_HEADERS)
 
             if settings.opentelemetry.capture_response_body:
-                response, span = await with_response_body(response, span)
+                # call_next answers with Starlette's streaming response, whose body is an
+                # async iterator just like StreamingResponse's.
+                response, span = await with_response_body(cast(StreamingResponse, response), span)
 
             return response

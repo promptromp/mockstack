@@ -8,6 +8,7 @@ body predicates) by ``test_example_eval_isolation.py``, which run the shipped ru
 import httpx
 import pytest
 
+
 pytestmark = pytest.mark.slow
 
 
@@ -26,7 +27,10 @@ def scenarios(tmp_path_factory, upstream, mockstack_server):
                 "method": "GET",
                 "pattern": r"^/projects/api/v1/project/(?P<id>[^/]+)$",
                 "headers": {"x-request-eval-scenario": ".*"},
-                "replacement": f"file://{root}/scenarios/{{{{ headers['x-request-eval-scenario'] }}}}/projects/project.{{{{ id }}}}.json.j2",
+                "replacement": (
+                    f"file://{root}/scenarios/{{{{ headers['x-request-eval-scenario'] }}}}"
+                    "/projects/project.{{ id }}.json.j2"
+                ),
             },
             {
                 "name": "passthrough",

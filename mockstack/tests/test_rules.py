@@ -20,7 +20,7 @@ from mockstack.rules import (
 
 
 @pytest.mark.parametrize(
-    "data,expected_method",
+    ("data", "expected_method"),
     [
         (
             {
@@ -61,7 +61,7 @@ def test_rule_from_dict_with_predicates():
 
 
 @pytest.mark.parametrize(
-    "rule_method,path,method,expected",
+    ("rule_method", "path", "method", "expected"),
     [
         (None, "/api/v1/projects/123", "GET", True),
         (None, "/api/v1/projects/123", "POST", True),
@@ -86,7 +86,7 @@ def test_rule_matches(make_request, rule_method, path, method, expected):
 
 
 @pytest.mark.parametrize(
-    "pattern,replacement,path,fragment,expected_url",
+    ("pattern", "replacement", "path", "fragment", "expected_url"),
     [
         (
             r"/api/v1/projects/(\d+)",
@@ -158,7 +158,7 @@ def test_rule_apply_template(make_request):
 
 
 @pytest.mark.parametrize(
-    "raw,text,parsed",
+    ("raw", "text", "parsed"),
     [
         (b'{"query": "SELECT 1"}', '{"query": "SELECT 1"}', {"query": "SELECT 1"}),
         (b'{"a": 1}', '{"a": 1}', {"a": 1}),
@@ -183,9 +183,7 @@ def test_request_payload_empty():
 
 
 def test_rule_apply_template_context_includes_request_json(make_request):
-    rule = Rule(
-        pattern=r"^/analytics/v2/sql$", replacement="file:///tmp/x.json", method="POST"
-    )
+    rule = Rule(pattern=r"^/analytics/v2/sql$", replacement="file:///tmp/x.json", method="POST")
     request = make_request(
         "/analytics/v2/sql",
         method="POST",
@@ -206,7 +204,7 @@ def test_rule_apply_without_payload_has_none_request_json(make_request):
 
 
 @pytest.mark.parametrize(
-    "rule_headers,request_headers,expected",
+    ("rule_headers", "request_headers", "expected"),
     [
         (
             {"x-request-eval-scenario": ".*"},
@@ -239,7 +237,7 @@ def test_rule_matches_headers(make_request, rule_headers, request_headers, expec
 
 
 @pytest.mark.parametrize(
-    "rule_query,query_string,expected",
+    ("rule_query", "query_string", "expected"),
     [
         ({"scenario": ".*"}, b"scenario=healthy", True),
         ({"scenario": ".*"}, b"", False),
@@ -271,7 +269,7 @@ def test_rule_without_predicates_matches_any_headers(make_request):
 
 
 @pytest.mark.parametrize(
-    "data,path,expected",
+    ("data", "path", "expected"),
     [
         ({"query": "SELECT 1"}, "query", "SELECT 1"),
         ({"filter": {"client": {"id": "c1"}}}, "filter.client.id", "c1"),
@@ -293,7 +291,7 @@ def test_lookup_path(data, path, expected):
 
 
 @pytest.mark.parametrize(
-    "data,path",
+    ("data", "path"),
     [
         ({"query": "x"}, "missing"),
         ({"items": []}, "items.0"),
@@ -307,13 +305,11 @@ def test_lookup_path_absent_returns_missing_sentinel(data, path):
 
 
 def _sql_payload(sql):
-    return RequestPayload.from_bytes(
-        json.dumps({"query": sql, "context": {"x": 1}}).encode()
-    )
+    return RequestPayload.from_bytes(json.dumps({"query": sql, "context": {"x": 1}}).encode())
 
 
 @pytest.mark.parametrize(
-    "predicate,payload,expected",
+    ("predicate", "payload", "expected"),
     [
         ({"body": r"FROM\s+sales"}, _sql_payload("SELECT * FROM sales WHERE 1"), True),
         ({"body": r"FROM\s+sales"}, _sql_payload("SELECT * FROM users"), False),
@@ -377,9 +373,7 @@ def _sql_payload(sql):
     ],
 )
 def test_rule_matches_body_predicates(make_request, predicate, payload, expected):
-    rule = Rule(
-        pattern=r"^/analytics/v2/sql$", replacement="", method="POST", **predicate
-    )
+    rule = Rule(pattern=r"^/analytics/v2/sql$", replacement="", method="POST", **predicate)
     request = make_request("/analytics/v2/sql", method="POST")
     assert rule.matches(request, payload) is expected
 
@@ -483,7 +477,7 @@ def test_template_context_groups_key_not_clobbered_by_heuristic_identifier(
 
 
 @pytest.mark.parametrize(
-    "name,expected",
+    ("name", "expected"),
     [(2024, "2024"), (None, None)],
     ids=["int-coerced-to-str", "none-stays-none"],
 )
@@ -528,7 +522,7 @@ def test_predicate_without_value_is_rejected_at_load(field):
 
 
 @pytest.mark.parametrize(
-    "field,value",
+    ("field", "value"),
     [
         ("pattern", "^/x/(unclosed$"),
         ("headers", {"x-foo": "(unclosed"}),
@@ -553,9 +547,7 @@ def test_named_group_shadowing_reserved_context_key_is_rejected(key):
 
 
 def test_reserved_context_keys():
-    assert RESERVED_CONTEXT_KEYS == frozenset(
-        {"query", "headers", "path", "method", "request_json", "groups"}
-    )
+    assert frozenset({"query", "headers", "path", "method", "request_json", "groups"}) == RESERVED_CONTEXT_KEYS
 
 
 @pytest.mark.parametrize(
@@ -633,7 +625,8 @@ def test_method_comparison_is_case_insensitive_but_attribute_is_preserved(
 def test_match_returns_the_path_match(make_request):
     rule = Rule(pattern=r"^/x/(?P<id>[^/]+)$", replacement="u")
     match = rule.match(make_request("/x/abc"))
-    assert match is not None and match.group("id") == "abc"
+    assert match is not None
+    assert match.group("id") == "abc"
     assert rule.match(make_request("/y")) is None
 
 
@@ -655,9 +648,7 @@ def test_reserved_context_keys_win_over_inferred_identifiers(make_request):
     """``/projects/headers/42`` infers an identifier keyed ``headers``; the reserved
     ``headers`` dict must still win."""
     rule = Rule(pattern=r"^/projects/.*$", replacement="file:///f.json")
-    result = rule.apply(
-        make_request("/projects/headers/42", headers={"x-scenario": "healthy"})
-    )
+    result = rule.apply(make_request("/projects/headers/42", headers={"x-scenario": "healthy"}))
     assert isinstance(result, TemplateRuleResult)
     assert result.template_context["headers"] == {"x-scenario": "healthy"}
 
@@ -710,10 +701,20 @@ def test_request_payload_is_parsed_lazily():
     assert payload.json == {"a": 1}
 
 
+def test_request_payload_json_treats_recursion_error_as_not_json(monkeypatch):
+    def too_deep(_text):
+        raise RecursionError("maximum recursion depth exceeded while decoding a JSON array")
+
+    monkeypatch.setattr("mockstack.rules.json.loads", too_deep)
+    assert RequestPayload(b"[[1]]").json is None
+
+
 def test_request_payload_deeply_nested_json_does_not_raise():
+    # Whether the parser accepts this depth depends on the interpreter and platform
+    # (Python 3.14 on Linux parses it); the contract is only that access never raises.
     depth = 100_000
     payload = RequestPayload(b"[" * depth + b"]" * depth)
-    assert payload.json is None
+    assert payload.json is None or isinstance(payload.json, list)
 
 
 def test_request_payload_equality_is_field_based():

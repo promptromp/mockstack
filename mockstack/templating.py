@@ -15,11 +15,13 @@ from mockstack.identifiers import looks_like_id, prefixes
 def templates_env_provider(templates_dir: Path | str | None = None) -> Environment:
     """Provide a Jinja2 environment for the templates."""
     # TODO refactor a bit to be more generic for optional dependencies.
-    from mockstack.llm import ollama
+    # The optional ollama integration loads when an environment is built, not on import.
+    from mockstack.llm import ollama  # noqa: PLC0415
 
     loader = FileSystemLoader(templates_dir) if templates_dir else None
 
-    env = Environment(loader=loader)
+    # Templates render JSON and other non-HTML bodies, so HTML autoescaping stays off.
+    env = Environment(loader=loader)  # noqa: S701
 
     env.filters["json_escape"] = json_escape
 
@@ -53,7 +55,7 @@ def iter_possible_template_arguments(
     default_template_name: str = "index.j2",
     template_file_separator: str = "-",
     template_file_extension: str = ".j2",
-) -> Generator[dict, None, None]:
+) -> Generator[dict]:
     """Infer the template arguments for a given request.
 
     This includes:
@@ -86,9 +88,7 @@ def iter_possible_template_arguments(
         "template_file_extension": template_file_extension,
         "default_template_name": default_template_name,
     }
-    for name in iter_possible_template_filenames(
-        name_segments, identifiers, **template_name_kwargs
-    ):
+    for name in iter_possible_template_filenames(name_segments, identifiers, **template_name_kwargs):
         yield {
             "name": name,
             "context": context,
@@ -123,7 +123,7 @@ def iter_possible_template_filenames(
     template_file_separator: str,
     template_file_extension: str,
     default_template_name: str,
-) -> Generator[str, None, None]:
+) -> Generator[str]:
     """Infer the template filename from the name segments and context.
 
     We have a cascade of possible filename formats:
@@ -139,9 +139,7 @@ def iter_possible_template_filenames(
     if name_segments:
         if identifiers:
             for prefix in prefixes(identifiers.values(), reverse=True):
-                yield (
-                    f"{template_file_separator.join(name_segments)}.{'.'.join(prefix)}{template_file_extension}"
-                )
+                yield (f"{template_file_separator.join(name_segments)}.{'.'.join(prefix)}{template_file_extension}")
 
         yield template_file_separator.join(name_segments) + template_file_extension
 
