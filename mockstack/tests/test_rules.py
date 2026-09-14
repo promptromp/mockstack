@@ -352,6 +352,8 @@ def _druid(sql):
         ({"json": {"context.missing": ".*"}}, _druid("x"), False),
         ({"json": {"query": ".*"}}, RequestPayload.empty(), False),
         ({"body": ".*"}, None, False),
+        ({"body": ".*"}, RequestPayload.empty(), False),
+        ({"body": ".*"}, RequestPayload.from_bytes(b"x"), True),
     ],
 )
 def test_rule_matches_body_predicates(predicate, payload, expected):

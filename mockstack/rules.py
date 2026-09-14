@@ -128,8 +128,8 @@ class Rule:
     def matches(self, request: Request, payload: RequestPayload | None = None) -> bool:
         """Check if the rule matches the request.
 
-        All configured predicates must hold (logical AND). ``payload`` is required for
-        ``body`` / ``json`` predicates; without it those predicates never match.
+        All configured predicates must hold (logical AND). ``body`` / ``json`` predicates
+        never match when ``payload`` is ``None`` or empty (no request body).
         """
         if self.method is not None and request.method.lower() != self.method.lower():
             # if rule is limited to a specific HTTP method, validate first.
@@ -147,7 +147,7 @@ class Rule:
         if self.body is None and not self.json:
             return True
 
-        if payload is None:
+        if payload is None or not payload.raw:
             return False
 
         if self.body is not None and re.search(self.body, payload.text) is None:
