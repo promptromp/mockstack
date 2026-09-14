@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
-from fastapi import Request, status
+from fastapi import Request, Response, status
 from fastapi.responses import RedirectResponse
 from starlette.datastructures import URL, Headers
 
@@ -378,6 +378,34 @@ async def test_proxy_rules_strategy_apply_simulate_create(settings, span):
     request.body = AsyncMock(return_value=b'{"name": "test"}')
     response = await strategy.apply(request)
     assert response.status_code == status.HTTP_201_CREATED
+    assert response.headers[RESULT_TYPE_HEADER] == "create"
+    assert RESULT_RULE_HEADER not in response.headers
+
+
+@pytest.mark.asyncio
+async def test_proxy_rules_strategy_apply_reverse_proxy_result_header(
+    settings_reverse_proxy, span
+):
+    """apply() under reverse-proxy settings stamps X-Mockstack-Result: proxy."""
+    strategy = ProxyRulesStrategy(settings_reverse_proxy)
+    request = Request(
+        scope={
+            "type": "http",
+            "method": "GET",
+            "path": "/api/v1/projects/123",
+            "query_string": b"",
+            "headers": [],
+        },
+        receive=_empty_body_receive,
+    )
+    request.state.span = span
+    with patch.object(
+        strategy,
+        "reverse_proxy",
+        AsyncMock(return_value=Response(content=b"{}", media_type="application/json")),
+    ):
+        response = await strategy.apply(request)
+    assert response.headers[RESULT_TYPE_HEADER] == "proxy"
 
 
 def test_proxy_rules_strategy_missing_rules_file(settings):
@@ -644,3 +672,71 @@ async def test_redirect_response_carries_result_headers(settings, span):
         response = await strategy.apply(request)
     assert response.headers[RESULT_RULE_HEADER] == r"^/api/(.*)"
     assert response.headers[RESULT_TYPE_HEADER] == "redirect"
+
+
+@pytest.mark.asyncio
+async def test_non_latin1_rule_name_is_sanitized_in_result_header(
+    settings, span, tmp_path
+):
+    """A rule name outside latin-1 must not crash header encoding (Starlette encodes
+    header values as latin-1); it is escaped to plain ASCII instead."""
+    template_file = tmp_path / "t.json"
+    template_file.write_text('{"ok": true}')
+    strategy = ProxyRulesStrategy(settings)
+    rule = Rule.from_dict(
+        {
+            "name": "日本語ルール",
+            "pattern": r"^/t$",
+            "replacement": f"file://{template_file}",
+        }
+    )
+    request = Request(
+        scope={
+            "type": "http",
+            "method": "GET",
+            "path": "/t",
+            "query_string": b"",
+            "headers": [],
+        },
+        receive=_empty_body_receive,
+    )
+    request.state.span = span
+    with patch.object(strategy, "rule_for", return_value=rule):
+        response = await strategy.apply(request)
+    assert response.status_code == 200
+    header_value = response.headers[RESULT_RULE_HEADER]
+    assert header_value != ""
+    header_value.encode("ascii")  # must not raise
+
+
+@pytest.mark.asyncio
+async def test_rule_name_with_crlf_is_sanitized_in_result_header(
+    settings, span, tmp_path
+):
+    """A rule name containing CR/LF must not leak them into the header value."""
+    template_file = tmp_path / "t.json"
+    template_file.write_text('{"ok": true}')
+    strategy = ProxyRulesStrategy(settings)
+    rule = Rule.from_dict(
+        {
+            "name": "bad\r\nname",
+            "pattern": r"^/t$",
+            "replacement": f"file://{template_file}",
+        }
+    )
+    request = Request(
+        scope={
+            "type": "http",
+            "method": "GET",
+            "path": "/t",
+            "query_string": b"",
+            "headers": [],
+        },
+        receive=_empty_body_receive,
+    )
+    request.state.span = span
+    with patch.object(strategy, "rule_for", return_value=rule):
+        response = await strategy.apply(request)
+    header_value = response.headers[RESULT_RULE_HEADER]
+    assert "\r" not in header_value
+    assert "\n" not in header_value
