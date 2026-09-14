@@ -4,7 +4,7 @@ import pytest
 from fastapi import Request
 from starlette.datastructures import URL
 
-from mockstack.rules import Rule, TemplateRuleResult, URLRuleResult
+from mockstack.rules import RequestPayload, Rule, TemplateRuleResult, URLRuleResult
 
 
 def test_rule_from_dict():
@@ -166,3 +166,27 @@ def test_rule_apply_template():
     # The context should contain the extracted project ID from the path
     assert "projects" in result.template_context
     assert result.template_context["projects"] == "1234"
+
+
+def test_request_payload_from_json_bytes():
+    payload = RequestPayload.from_bytes(b'{"query": "SELECT 1"}')
+    assert payload.text == '{"query": "SELECT 1"}'
+    assert payload.json == {"query": "SELECT 1"}
+
+
+def test_request_payload_from_non_json_bytes():
+    payload = RequestPayload.from_bytes(b"plain text")
+    assert payload.text == "plain text"
+    assert payload.json is None
+
+
+def test_request_payload_empty():
+    assert RequestPayload.empty() == RequestPayload.from_bytes(b"")
+    assert RequestPayload.empty().json is None
+    assert RequestPayload.empty().text == ""
+
+
+def test_request_payload_invalid_utf8_does_not_raise():
+    payload = RequestPayload.from_bytes(b"\xff\xfe")
+    assert "�" in payload.text
+    assert payload.json is None
