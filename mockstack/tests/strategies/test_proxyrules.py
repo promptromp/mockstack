@@ -9,7 +9,11 @@ from fastapi import Request, status
 from fastapi.responses import RedirectResponse
 from starlette.datastructures import URL, Headers
 
-from mockstack.constants import ProxyRulesRedirectVia
+from mockstack.constants import (
+    RESULT_RULE_HEADER,
+    RESULT_TYPE_HEADER,
+    ProxyRulesRedirectVia,
+)
 from mockstack.strategies.proxyrules import (
     ProxyRulesStrategy,
     Rule,
@@ -571,3 +575,72 @@ def test_maybe_update_response_headers_strips_transfer_encoding():
     assert "transfer-encoding" not in updated
     assert updated["content-length"] == "42"
     assert updated["content-type"] == "application/json"
+
+
+@pytest.mark.asyncio
+async def test_template_response_carries_result_headers(settings, span, tmp_path):
+    template_file = tmp_path / "t.json"
+    template_file.write_text('{"ok": true}')
+    strategy = ProxyRulesStrategy(settings)
+    rule = Rule.from_dict(
+        {"name": "t-rule", "pattern": r"^/t$", "replacement": f"file://{template_file}"}
+    )
+    request = Request(
+        scope={
+            "type": "http",
+            "method": "GET",
+            "path": "/t",
+            "query_string": b"",
+            "headers": [],
+        },
+        receive=_empty_body_receive,
+    )
+    request.state.span = span
+    with patch.object(strategy, "rule_for", return_value=rule):
+        response = await strategy.apply(request)
+    assert response.headers[RESULT_RULE_HEADER] == "t-rule"
+    assert response.headers[RESULT_TYPE_HEADER] == "template"
+
+
+@pytest.mark.asyncio
+async def test_missing_rule_response_carries_result_headers(settings, span):
+    strategy = ProxyRulesStrategy(settings)
+    request = Request(
+        scope={
+            "type": "http",
+            "method": "GET",
+            "path": "/nothing",
+            "query_string": b"",
+            "headers": [],
+        },
+        receive=_empty_body_receive,
+    )
+    request.state.span = span
+    with patch.object(strategy, "rule_for", return_value=None):
+        response = await strategy.apply(request)
+    assert response.status_code == 404
+    assert response.headers[RESULT_TYPE_HEADER] == "missing"
+    assert RESULT_RULE_HEADER not in response.headers
+
+
+@pytest.mark.asyncio
+async def test_redirect_response_carries_result_headers(settings, span):
+    strategy = ProxyRulesStrategy(settings)  # HTTP_TEMPORARY_REDIRECT in this fixture
+    rule = Rule.from_dict(
+        {"pattern": r"^/api/(.*)", "replacement": r"https://api.example/\1"}
+    )
+    request = Request(
+        scope={
+            "type": "http",
+            "method": "GET",
+            "path": "/api/x",
+            "query_string": b"",
+            "headers": [],
+        },
+        receive=_empty_body_receive,
+    )
+    request.state.span = span
+    with patch.object(strategy, "rule_for", return_value=rule):
+        response = await strategy.apply(request)
+    assert response.headers[RESULT_RULE_HEADER] == r"^/api/(.*)"
+    assert response.headers[RESULT_TYPE_HEADER] == "redirect"

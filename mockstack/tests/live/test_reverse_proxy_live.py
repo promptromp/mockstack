@@ -36,9 +36,11 @@ def test_fixed_length_body_is_forwarded(proxy, upstream):
     big = {"query": "SELECT 1", "pad": "x" * 200_000}
     r = httpx.post(f"{proxy.base_url}/upstream/api/v1/thing?a=1", json=big)
     assert r.status_code == 200
+    assert r.headers["x-mockstack-result"] == "proxy"
     assert len(upstream.calls) == 1
     assert json.loads(upstream.calls[-1]["body"]) == big
     assert upstream.calls[-1]["query"] == {"a": "1"}
+    assert "x-mockstack-rule" not in upstream.calls[-1]["headers"]
 
 
 def test_chunked_request_body_is_forwarded(proxy, upstream):
@@ -52,7 +54,9 @@ def test_chunked_request_body_is_forwarded(proxy, upstream):
         headers={"content-type": "application/octet-stream"},
     )
     assert r.status_code == 200
+    assert r.headers["x-mockstack-result"] == "proxy"
     assert len(upstream.calls[-1]["body"]) == 10 * (
         len('{"chunk":"') + 10_000 + len('"}\n')
     )
     assert "transfer-encoding" not in upstream.calls[-1]["headers"]
+    assert "x-mockstack-rule" not in upstream.calls[-1]["headers"]

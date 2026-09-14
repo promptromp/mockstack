@@ -43,6 +43,7 @@ def test_stamped_request_gets_fixture(server, upstream):
     )
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("application/json")
+    assert r.headers["x-mockstack-result"] == "template"
     assert r.json() == {"source": "fixture", "scenario": "healthy"}
     assert upstream.calls == []
 
@@ -50,8 +51,10 @@ def test_stamped_request_gets_fixture(server, upstream):
 def test_unstamped_request_falls_through_to_upstream(server, upstream):
     r = httpx.get(f"{server.base_url}/projects/api/v2/project/abc")
     assert r.status_code == 200
+    assert r.headers["x-mockstack-result"] == "proxy"
     assert r.json()["source"] == "upstream"
     assert upstream.calls[-1]["path"] == "/api/v2/project/abc"
+    assert "x-mockstack-rule" not in upstream.calls[-1]["headers"]
 
 
 @pytest.fixture
@@ -90,14 +93,17 @@ def test_analytics_query_selected_by_body(analytics, upstream):
         headers=stamped,
     )
     assert r.status_code == 200 and r.json() == {"source": "fixture", "sql": sql}
+    assert r.headers["x-mockstack-result"] == "template"
 
     other = httpx.post(
         f"{analytics.base_url}/analytics/analytics/v2/sql",
         json={"query": "SELECT 1 FROM users"},
         headers=stamped,
     )
+    assert other.headers["x-mockstack-result"] == "proxy"
     assert other.json()["source"] == "upstream"
     assert json.loads(upstream.calls[-1]["body"]) == {"query": "SELECT 1 FROM users"}
+    assert "x-mockstack-rule" not in upstream.calls[-1]["headers"]
 
 
 @pytest.fixture
@@ -135,6 +141,7 @@ def test_scenario_header_selects_fixture_directory(scenarios, scenario):
         headers={"X-Request-Eval-Scenario": scenario},
     )
     assert r.status_code == 200
+    assert r.headers["x-mockstack-result"] == "template"
     assert r.json() == {"scenario": scenario, "id": "abc"}
 
 
