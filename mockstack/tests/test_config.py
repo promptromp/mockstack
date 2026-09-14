@@ -1,6 +1,6 @@
 """Tests for mockstack.config: settings construction isolation."""
 
-from mockstack.config import Settings
+from mockstack.config import CliSettings, Settings
 
 
 def test_make_settings_ignores_mockstack_env_vars(monkeypatch, make_settings, templates_dir):
@@ -17,3 +17,32 @@ def test_make_settings_ignores_mockstack_env_vars(monkeypatch, make_settings, te
     assert isinstance(settings, Settings)
     assert settings.debug is False
     assert settings.proxyrules_reverse_proxy_timeout == 10.0
+
+
+def test_filefixtures_simulate_create_on_missing_env_var(monkeypatch, templates_dir):
+    """``MOCKSTACK__FILEFIXTURES_SIMULATE_CREATE_ON_MISSING`` flips the setting.
+
+    ``make_settings`` deliberately ignores ``MOCKSTACK__*`` environment variables
+    (see above), so this constructs ``Settings`` directly to observe the env var.
+    """
+    settings_default = Settings(templates_dir=templates_dir)
+    assert settings_default.filefixtures_simulate_create_on_missing is True
+
+    monkeypatch.setenv("MOCKSTACK__FILEFIXTURES_SIMULATE_CREATE_ON_MISSING", "false")
+    settings_disabled = Settings(templates_dir=templates_dir)
+    assert settings_disabled.filefixtures_simulate_create_on_missing is False
+
+
+def test_filefixtures_simulate_create_on_missing_cli_flag(templates_dir):
+    """The pydantic-settings-generated CLI flag flips the setting."""
+    settings_default = CliSettings(_cli_parse_args=["--templates-dir", templates_dir])
+    assert settings_default.filefixtures_simulate_create_on_missing is True
+
+    settings_disabled = CliSettings(
+        _cli_parse_args=[
+            "--templates-dir",
+            templates_dir,
+            "--no-filefixtures-simulate-create-on-missing",
+        ]
+    )
+    assert settings_disabled.filefixtures_simulate_create_on_missing is False

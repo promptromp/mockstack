@@ -29,6 +29,34 @@ def strategy_templates_for_post(settings_filefixtures, tmp_path):
     )
 
 
+@pytest.fixture
+def strategy_no_simulate_create(settings_filefixtures, tmp_path):
+    """Like ``strategy``, but with ``filefixtures_simulate_create_on_missing`` off."""
+    return FileFixturesStrategy(
+        settings_filefixtures.model_copy(
+            update={
+                "templates_dir": tmp_path,
+                "filefixtures_simulate_create_on_missing": False,
+            }
+        )
+    )
+
+
+@pytest.fixture
+def strategy_no_simulate_create_templates_for_post(settings_filefixtures, tmp_path):
+    """Like ``strategy_no_simulate_create``, but with
+    ``filefixtures_enable_templates_for_post`` also on."""
+    return FileFixturesStrategy(
+        settings_filefixtures.model_copy(
+            update={
+                "templates_dir": tmp_path,
+                "filefixtures_enable_templates_for_post": True,
+                "filefixtures_simulate_create_on_missing": False,
+            }
+        )
+    )
+
+
 def test_filefixtures_strategy_init(settings_filefixtures):
     """Test the FileFixturesStrategy initialization."""
     strategy = FileFixturesStrategy(settings_filefixtures)
@@ -130,6 +158,90 @@ async def test_file_fixtures_strategy_post_create(strategy, traced_request):
     response = await strategy.apply(request)
 
     assert response.status_code == status.HTTP_201_CREATED
+
+
+@pytest.mark.asyncio
+async def test_file_fixtures_strategy_post_create_simulate_create_disabled(
+    strategy_no_simulate_create, settings_filefixtures, traced_request
+):
+    """With ``filefixtures_simulate_create_on_missing`` off, a create-looking POST
+    with no matching template gets the same 404 missing-resource response as a GET
+    with no template, instead of a simulated create."""
+    request = traced_request(
+        "/api/v1/projects",
+        method="POST",
+        headers={"content-type": "application/json"},
+        body=b'{"name": "test project"}',
+    )
+
+    response = await strategy_no_simulate_create.apply(request)
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert (
+        json.loads(response.body.decode())
+        == settings_filefixtures.missing_resource_fields
+    )
+
+
+@pytest.mark.asyncio
+async def test_file_fixtures_strategy_post_create_simulate_create_disabled_with_template(
+    strategy_no_simulate_create_templates_for_post, traced_request, write_template
+):
+    """With ``filefixtures_simulate_create_on_missing`` off but a matching template
+    present (and templates-for-POST on), the template is rendered rather than 404ing
+    or simulating creation."""
+    write_template("api-v1-projects.j2", '{"status": "existing template"}')
+    request = traced_request(
+        "/api/v1/projects",
+        method="POST",
+        headers={"content-type": "application/json"},
+        body=b'{"name": "test project"}',
+    )
+
+    response = await strategy_no_simulate_create_templates_for_post.apply(request)
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.body.decode() == '{"status": "existing template"}'
+
+
+@pytest.mark.asyncio
+async def test_file_fixtures_strategy_post_search_simulate_create_disabled(
+    strategy_no_simulate_create, traced_request, write_template
+):
+    """Search-like POSTs are unaffected by ``filefixtures_simulate_create_on_missing``:
+    with a matching template, the template is still rendered."""
+    write_template("api-v1-projects-search.j2", '{"results": []}')
+    request = traced_request(
+        "/api/v1/projects/search",
+        method="POST",
+        headers={"content-type": "application/json"},
+        body=b'{"query": "test"}',
+    )
+
+    response = await strategy_no_simulate_create.apply(request)
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.body.decode() == '{"results": []}'
+
+
+@pytest.mark.asyncio
+async def test_file_fixtures_strategy_post_command_simulate_create_disabled(
+    strategy_no_simulate_create, traced_request, write_template
+):
+    """Command-like POSTs are unaffected by ``filefixtures_simulate_create_on_missing``:
+    with a matching template, the template is still rendered with a 201."""
+    write_template("api-v1-projects-123-run.j2", '{"status": "started"}')
+    request = traced_request(
+        "/api/v1/projects/123/run",
+        method="POST",
+        headers={"content-type": "application/json"},
+        body=b'{"action": "start"}',
+    )
+
+    response = await strategy_no_simulate_create.apply(request)
+
+    assert response.status_code == status.HTTP_201_CREATED
+    assert response.body.decode() == '{"status": "started"}'
 
 
 @pytest.mark.asyncio

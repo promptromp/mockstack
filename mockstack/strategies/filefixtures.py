@@ -37,6 +37,9 @@ class FileFixturesStrategy(BaseStrategy, CreateMixin):
 
         self.templates_dir = Path(settings.templates_dir)
         self.enable_templates_for_post = settings.filefixtures_enable_templates_for_post
+        self.simulate_create_on_missing = (
+            settings.filefixtures_simulate_create_on_missing
+        )
 
         self.created_resource_metadata = settings.created_resource_metadata
         self.missing_resource_fields = settings.missing_resource_fields
@@ -45,7 +48,8 @@ class FileFixturesStrategy(BaseStrategy, CreateMixin):
         return (
             f"[medium_purple]filefixtures[/medium_purple]\n "
             f"templates_dir: [medium_purple]{self.templates_dir}[/medium_purple].\n "
-            f"enable_templates_for_post: [medium_purple]{self.enable_templates_for_post}[/medium_purple]. "
+            f"enable_templates_for_post: [medium_purple]{self.enable_templates_for_post}[/medium_purple].\n "
+            f"simulate_create_on_missing: [medium_purple]{self.simulate_create_on_missing}[/medium_purple]. "
         )
 
     @cached_property
@@ -98,11 +102,18 @@ class FileFixturesStrategy(BaseStrategy, CreateMixin):
             # Executing a 'command' of some sort, like a workflow or a batch job.
             # We return a 201 CREATED status code with response from template.
             return self._response_from_template(request, request_json=request_json, status_code=status.HTTP_201_CREATED)
-        # simulate resource creation:
-        return await self._create(
-            request,
-            env=self.env,
-            created_resource_metadata=self.created_resource_metadata,
+        if self.simulate_create_on_missing:
+            # simulate resource creation:
+            return await self._create(
+                request,
+                env=self.env,
+                created_resource_metadata=self.created_resource_metadata,
+            )
+        # simulating creation is disabled: same 404 as a GET with no
+        # matching template.
+        return JSONResponse(
+            content=self.missing_resource_fields,
+            status_code=status.HTTP_404_NOT_FOUND,
         )
 
     async def _get(self, request: Request) -> Response:
