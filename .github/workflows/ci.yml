@@ -47,3 +47,19 @@ jobs:
       run: uv run pytest
     - name: Run live tests
       run: uv run pytest -m slow mockstack/tests/live -v
+
+  docs:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v6
+    - name: Install uv and set the python version
+      uses: astral-sh/setup-uv@v8.1.0
+      with:
+        python-version: "3.13"
+        version: "latest"
+    - name: Build docs strictly
+      run: |
+        cp README.md docs/
+        uvx --with mkdocs-material mkdocs build --strict
