@@ -41,11 +41,10 @@ The strategy intelligently handles POST requests based on the request context:
 
 Templates have access to the following context variables:
 
-- `request`: The FastAPI Request object
-- `request.body`: The parsed request body
-- `request.headers`: The request headers
-- `request.query_params`: The query parameters
-- `request.path_params`: The path parameters
+- `query`: The query parameters, as a dict
+- `headers`: The request headers, as a dict (names lower-cased)
+- `request_json`: The parsed JSON body of a POST request with a JSON content type; otherwise `None`
+- Identifiers inferred from the path: each ID-like segment is available under the name of the segment before it (`projects` for `/api/v1/projects/<uuid>`), or as `id` when nothing comes before it
 
 ## Resource Creation
 
@@ -78,15 +77,14 @@ settings = Settings(
 
 ## Example Template
 
-Here's an example template for a user resource:
+Here's an example template for a user resource, `api-v1-users.j2`, which serves
+`GET /api/v1/users/<uuid>`:
 
 ```jinja2
 {
-    "id": "{{ uuid4() }}",
-    "name": "{{ request.body.name }}",
-    "email": "{{ request.body.email }}",
-    "createdAt": "{{ utcnow().isoformat() }}",
-    "updatedAt": "{{ utcnow().isoformat() }}"
+    "id": {{ users | tojson }},
+    "name": "Test user",
+    "fields": {{ query.get("fields", "all") | tojson }}
 }
 ```
 
