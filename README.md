@@ -44,12 +44,13 @@ or install into a persistent environment and add it to the PATH with:
 
     uv tool install mockstack
 
+mockstack requires Python 3.13 or later; `uvx` and `uv tool install` pick a compatible interpreter, downloading one if needed.
 
 ## Usage
 
 See the [examples](https://github.com/promptromp/mockstack/blob/main/examples/) directory for complete examples with documentation.
 
-Available configuration options are [here](https://github.com/promptromp/mockstack/blob/main/mockstack/config.py).
+Available configuration options are described in the [Configuration](https://promptromp.github.io/mockstack/configuration/) reference, and defined [here](https://github.com/promptromp/mockstack/blob/main/mockstack/config.py).
 
 Setting individual options can be done either through an `.env` file, individual environment variables, or command-line arguments.
 
@@ -73,10 +74,10 @@ See also the included [.env.example](https://github.com/promptromp/mockstack/blo
 Out of the box, you get the following behavior when using the default `filefixtures` strategy:
 
 - The HTTP request `GET /someservice/api/v1/user/c27f5b2b-6e81-420d-a4e4-6426e1c32db8` will try to find `<templates_dir>/someservice-api-v1-user.c27f5b2b-6e81-420d-a4e4-6426e1c32db8.j2`,
-  and will fallback to `<templates_dir>/someservice-api-v1-user.j2` (and finally to `index.j2` if exists). These are j2 files that have access to request body context variables.
-- The HTTP request `POST /someservice/api/v2/item` with a JSON body will attempt to intelligently simulate the creation of a resource, returning the appropriate status code and will echo back the provided request resource, after injecting additional metadata fields based on strategy configuration. This is useful for services that expect fields such as `id` and `created_at` on returned created resources. This fallback can be turned off with `filefixtures_simulate_create_on_missing=false`, in which case a create-looking POST with no matching template gets a 404 instead.
-- HTTP requests for `DELETE` / `PUT` / `PATCH` are a no-op by default, simply returning the appropriate status code.
-- The HTTP request `POST /someservice/api/v2/embedding_search` will be handled as a search request rather than a resource creation, returning an appropriate http status code and mock results based on user-configurable formatting.
+  and will fallback to `<templates_dir>/someservice-api-v1-user.j2` (and finally to `index.j2` if exists). These are j2 files that have access to request context variables (query parameters, headers, the JSON body and the identifiers in the path).
+- The HTTP request `POST /someservice/api/v2/item` with a JSON body will attempt to intelligently simulate the creation of a resource, returning the appropriate status code and will echo back the provided request resource, after injecting additional metadata fields based on strategy configuration. This is useful for services that expect fields such as `id` and `created_at` on returned created resources. Templates are tried first, so a template matching the path (`index.j2` included) answers the POST instead, unless `filefixtures_enable_templates_for_post=false`. This fallback can be turned off with `filefixtures_simulate_create_on_missing=false`, in which case a create-looking POST with no matching template gets a 404 instead.
+- HTTP requests for `DELETE` / `PUT` / `PATCH` are a no-op by default, simply returning the appropriate status code (204). `HEAD` and `OPTIONS` requests are answered 405.
+- The HTTP request `POST /someservice/api/v2/embedding_search` will be handled as a search request rather than a resource creation: it is answered from its template (`someservice-api-v2-embedding_search.j2`), or with a 404 when there is none.
 
 Overall, the design philosophy is that things "just work". The framework attempts to intelligently deduce the intent of the request as much as possible and act accordingly,
 while leaving room for advanced users to go in and customize behavior using the configuration options.
@@ -119,22 +120,27 @@ Live tests start real mockstack and upstream servers on loopback sockets, includ
 
     uv run pytest -m slow mockstack/tests/live
 
-Linting, formatting, static type checks etc. are all managed via [pre-commit](https://pre-commit.com/) hooks. These will run automatically on every commit. You can invoke these manually on all files with:
+Linting, formatting, static type checks and the unit tests (with a 90% coverage threshold) are all managed via [pre-commit](https://pre-commit.com/) hooks. Install them once and they will run automatically on every commit:
 
-    pre-commit run --all-files
+    uvx pre-commit install
+
+You can invoke these manually on all files with:
+
+    uvx pre-commit run --all-files
 
 
 ## Contributing
 
-If you are contributing to development, you will want to clone this project, and can then install it locally with:
+If you are contributing to development, you will want to clone this project, and can then install it locally (`uv sync` installs the project in editable mode, together with its development dependencies) with:
 
     gh repo clone promptromp/mockstack
     cd mockstack/
     uv sync
-    uv pip install -e .
 
 Run in development mode (for live-reload of changes when developing):
 
     uv run uvicorn --factory mockstack.main:create_app --reload
 
 Note that when you run using the uvicorn CLI, you will need to set any configuration via `.env` file or environment variables.
+
+See [CONTRIBUTING.md](https://github.com/promptromp/mockstack/blob/main/CONTRIBUTING.md) for the full development workflow.
