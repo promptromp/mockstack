@@ -7,7 +7,7 @@ import httpx
 import pytest
 from fastapi import Request, status
 from fastapi.responses import RedirectResponse
-from starlette.datastructures import Headers, URL
+from starlette.datastructures import URL, Headers
 
 from mockstack.constants import ProxyRulesRedirectVia
 from mockstack.strategies.proxyrules import (

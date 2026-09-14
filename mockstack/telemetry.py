@@ -1,7 +1,6 @@
 """OpenTelemetry integration."""
 
 from importlib import metadata
-from typing import List, Tuple
 
 from fastapi import FastAPI, Request
 from opentelemetry import trace
@@ -10,7 +9,7 @@ from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.trace import Span
-from starlette.responses import StreamingResponse, Response
+from starlette.responses import Response, StreamingResponse
 
 from mockstack.config import Settings
 
@@ -21,9 +20,10 @@ def span_name_for(request: Request) -> str:
 
 
 def with_request_attributes(
-    request: Request, span: Span, *, sensitive_headers: List[str] = []
+    request: Request, span: Span, *, sensitive_headers: list[str] | None = None
 ) -> Span:
     """Add request attributes to the span."""
+    sensitive_headers = sensitive_headers or []
     span.set_attribute("http.method", request.method)
     span.set_attribute("http.url", str(request.url))
     span.set_attribute("http.scheme", request.url.scheme)
@@ -55,9 +55,10 @@ def with_request_attributes(
 
 
 def with_response_attributes(
-    response: Response, span: Span, *, sensitive_headers: List[str] = []
+    response: Response, span: Span, *, sensitive_headers: list[str] | None = None
 ) -> Span:
     """Add response attributes to the span."""
+    sensitive_headers = sensitive_headers or []
     # Response attributes
     span.set_attribute("http.status_code", response.status_code)
     span.set_attribute(
@@ -76,7 +77,7 @@ def with_response_attributes(
 
 async def with_response_body(
     response: StreamingResponse, span: Span
-) -> Tuple[Response, Span]:
+) -> tuple[Response, Span]:
     """Add the response body to the span."""
     body = await extract_body(response)
 

@@ -1,9 +1,9 @@
 """Templates related functionality."""
 
 from collections import OrderedDict
+from collections.abc import Generator
 from functools import partial
 from pathlib import Path
-from typing import Generator
 
 from fastapi import Request
 from jinja2 import Environment, FileSystemLoader
@@ -81,19 +81,19 @@ def iter_possible_template_arguments(
         **identifiers,
     )
 
-    template_name_kwargs = dict(
-        template_file_separator=template_file_separator,
-        template_file_extension=template_file_extension,
-        default_template_name=default_template_name,
-    )
+    template_name_kwargs = {
+        "template_file_separator": template_file_separator,
+        "template_file_extension": template_file_extension,
+        "default_template_name": default_template_name,
+    }
     for name in iter_possible_template_filenames(
         name_segments, identifiers, **template_name_kwargs
     ):
-        yield dict(
-            name=name,
-            context=context,
-            media_type=media_type,
-        )
+        yield {
+            "name": name,
+            "context": context,
+            "media_type": media_type,
+        }
 
 
 def parse_template_name_segments_and_identifiers(

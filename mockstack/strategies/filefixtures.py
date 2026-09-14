@@ -89,7 +89,7 @@ class FileFixturesStrategy(BaseStrategy, CreateMixin):
                     # If the template is not found, we try to create the resource with logic below.
                     pass
                 else:
-                    raise e
+                    raise
 
         if looks_like_a_search(request):
             # Searching for resources with a complex query that cannot be expressed in a URI.

@@ -1,8 +1,8 @@
 """FastAPI application lifecycle management."""
 
+from collections.abc import Callable
 from contextlib import asynccontextmanager
 from logging import DEBUG, config
-from typing import Callable
 
 from fastapi import FastAPI
 

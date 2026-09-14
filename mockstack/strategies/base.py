@@ -16,7 +16,6 @@ class BaseStrategy(ABC):
     @abstractmethod
     async def apply(self, request: Request) -> Response:
         """Apply the strategy to the request and response."""
-        pass
 
     def update_opentelemetry(self, request: Request, *args, **kwargs) -> None:
         """Update the opentelemetry span with strategy-specific attributes.
@@ -25,4 +24,3 @@ class BaseStrategy(ABC):
         When OpenTelemetry is not enabled, this span will exist but will not be reported.
 
         """
-        pass

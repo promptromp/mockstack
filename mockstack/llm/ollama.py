@@ -1,10 +1,7 @@
 """Ollama integration"""
 
-from typing import List, Dict
-
 try:
-    from ollama import chat
-    from ollama import ChatResponse
+    from ollama import ChatResponse, chat
 
     IS_OLLAMA_AVAILABLE = True
 except ImportError:
@@ -19,7 +16,7 @@ if IS_OLLAMA_AVAILABLE:
 
         def __call__(
             self,
-            messages: List[Dict[str, str]],
+            messages: list[dict[str, str]],
             max_tokens: int = 4096,
             temperature: float = 0.7,
         ) -> str:
@@ -36,7 +33,7 @@ if IS_OLLAMA_AVAILABLE:
         return response["message"]["content"]
 
     def ollama(
-        messages: List[Dict[str, str]],
+        messages: list[dict[str, str]],
         model: str = "llama3.2",
         *args,
         **kwargs,

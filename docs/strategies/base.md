@@ -44,6 +44,7 @@ Example:
 from mockstack.strategies.base import BaseStrategy
 from fastapi import Request, Response
 
+
 class CustomStrategy(BaseStrategy):
     async def apply(self, request: Request) -> Response:
         # Implement your custom logic here

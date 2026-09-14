@@ -21,7 +21,7 @@ settings = Settings(
     proxyrules_rules_filename="/path/to/rules.yaml",
     proxyrules_redirect_via="REVERSE_PROXY",  # or "HTTP_TEMPORARY_REDIRECT" or "HTTP_PERMANENT_REDIRECT"
     proxyrules_reverse_proxy_timeout=10.0,
-    proxyrules_simulate_create_on_missing=False
+    proxyrules_simulate_create_on_missing=False,
 )
 ```
 

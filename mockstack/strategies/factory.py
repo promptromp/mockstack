@@ -1,7 +1,5 @@
 """Factory for creating strategies."""
 
-from typing import Type
-
 from fastapi import FastAPI
 
 from mockstack.config import Settings
@@ -23,7 +21,7 @@ def name_for(cls: type[BaseStrategy]) -> str:
     return getattr(cls, "name", cls.__name__.replace("Strategy", "").lower())
 
 
-def available_strategies() -> dict[str, Type[BaseStrategy]]:
+def available_strategies() -> dict[str, type[BaseStrategy]]:
     """Get all available strategies."""
     return {name_for(subclass): subclass for subclass in BaseStrategy.__subclasses__()}  # type: ignore[type-abstract]
 

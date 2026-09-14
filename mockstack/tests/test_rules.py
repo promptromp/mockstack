@@ -39,7 +39,6 @@ def test_rule_from_dict_without_method():
         (r"/api/v1/projects/\d+", "/api/v1/projects/123", "POST", True),
         (r"/api/v1/projects/\d+", "/api/v1/projects/abc", "GET", False),
         (r"/api/v1/projects/\d+", "/api/v1/users/123", "GET", False),
-        (r"/api/v1/projects/\d+", "/api/v1/projects/123", "POST", True),
     ],
 )
 def test_rule_matches(pattern, path, method, expected):

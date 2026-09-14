@@ -2,7 +2,6 @@
 
 from enum import StrEnum
 
-
 ENV_PREFIX = "mockstack__"
 ENV_FILE = ".env"
 ENV_NESTED_DELIMITER = "__"
