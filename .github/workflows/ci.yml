@@ -45,3 +45,5 @@ jobs:
         uv run mypy mockstack
     - name: Run tests
       run: uv run pytest
+    - name: Run live tests
+      run: uv run pytest -m slow mockstack/tests/live -v

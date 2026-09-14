@@ -1,24 +1,34 @@
 """Unit tests for the proxyrules module."""
 
+import gzip
+import json
+import logging
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
+import yaml
 from fastapi import Request, Response, status
 from fastapi.responses import RedirectResponse
-from starlette.datastructures import URL, Headers
+from httpx._decoders import SUPPORTED_DECODERS
+from starlette.datastructures import URL, Headers, MutableHeaders
+from starlette.requests import ClientDisconnect
 
 from mockstack.constants import (
     RESULT_RULE_HEADER,
     RESULT_TYPE_HEADER,
     ProxyRulesRedirectVia,
 )
+from mockstack.rules import TemplateRuleResult, URLRuleResult
 from mockstack.strategies.proxyrules import (
     ProxyRulesStrategy,
     Rule,
+    UpstreamError,
     _header_safe,
     maybe_update_response_headers,
+    strip_hop_by_hop,
+    with_result_headers,
 )
 
 
@@ -215,6 +225,8 @@ async def test_apply_template_rejects_path_traversal(settings, span, tmp_path):
         assert response.status_code == status.HTTP_404_NOT_FOUND
         mock_open.assert_not_called()
         assert "passwd" not in response.body.decode()
+        assert response.headers[RESULT_TYPE_HEADER] == "error"
+        assert json.loads(response.body) == {"error": "Template file not found."}
 
 
 @pytest.mark.asyncio
@@ -343,8 +355,8 @@ async def test_proxy_rules_strategy_apply_permanent_redirect(settings, span):
 
 @pytest.mark.asyncio
 async def test_proxy_rules_strategy_apply_invalid_redirect_via(settings, span):
-    """An invalid redirect_via value raises ValueError internally, but apply() must
-    still return a stamped 502 rather than let it propagate to Starlette's
+    """An invalid redirect_via value is an internal failure: apply() answers it as a
+    stamped 500 ``error`` rather than letting it propagate to Starlette's
     ServerErrorMiddleware as a bare, unstamped 500.
     """
     settings.proxyrules_redirect_via = "invalid"
@@ -361,9 +373,10 @@ async def test_proxy_rules_strategy_apply_invalid_redirect_via(settings, span):
     )
     request.state.span = span
     response = await strategy.apply(request)
-    assert response.status_code == 502
+    assert response.status_code == 500
     assert response.headers[RESULT_TYPE_HEADER] == "error"
     assert RESULT_RULE_HEADER in response.headers
+    assert json.loads(response.body) == {"error": "mockstack: internal error"}
 
 
 @pytest.mark.asyncio
@@ -422,9 +435,8 @@ def test_proxy_rules_strategy_missing_rules_file(settings):
         strategy.load_rules()
 
 
-def test_proxy_rules_strategy_reverse_proxy_headers():
+def test_proxy_rules_strategy_reverse_proxy_headers(settings):
     """Test reverse proxy headers modification."""
-    settings = MagicMock()
     strategy = ProxyRulesStrategy(settings)
     headers = Headers(
         {"host": "example.com", "user-agent": "test", "accept": "application/json"}
@@ -469,7 +481,7 @@ async def test_proxy_rules_strategy_reverse_proxy(settings_reverse_proxy, span):
     """Test reverse proxy functionality."""
     mock_response = MagicMock()
     mock_response.status_code = 200
-    mock_response.headers = {"content-type": "application/json"}
+    mock_response.headers = httpx.Headers({"content-type": "application/json"})
     mock_response.read = MagicMock(return_value=b'{"message": "success"}')
 
     mock_client = AsyncMock()
@@ -536,6 +548,7 @@ def test_maybe_update_response_headers_updates_content_encoding():
         response_headers=response_headers,
         content_length=100,
         status_code=200,
+        request_method="GET",
     )
 
     assert updated_headers["content-encoding"] == "identity"
@@ -557,6 +570,7 @@ def test_maybe_update_response_headers_omits_content_length_for_204_304(status_c
         response_headers=response_headers,
         content_length=0,
         status_code=status_code,
+        request_method="GET",
     )
 
     assert "content-length" not in updated_headers
@@ -570,14 +584,15 @@ def test_maybe_update_response_headers_sets_content_length_for_200():
         response_headers=response_headers,
         content_length=42,
         status_code=200,
+        request_method="GET",
     )
 
     assert updated_headers["content-length"] == "42"
 
 
-def test_reverse_proxy_headers_strips_hop_by_hop_and_length():
+def test_reverse_proxy_headers_strips_hop_by_hop_and_length(settings):
     """Forwarded request headers must not carry framing headers; httpx recomputes them."""
-    strategy = ProxyRulesStrategy(MagicMock())
+    strategy = ProxyRulesStrategy(settings)
     headers = Headers(
         {
             "host": "example.com",
@@ -637,7 +652,10 @@ def test_maybe_update_response_headers_strips_transfer_encoding():
         {"transfer-encoding": "chunked", "content-type": "application/json"}
     )
     updated = maybe_update_response_headers(
-        response_headers=response_headers, content_length=42, status_code=200
+        response_headers=response_headers,
+        content_length=42,
+        status_code=200,
+        request_method="GET",
     )
     assert "transfer-encoding" not in updated
     assert updated["content-length"] == "42"
@@ -793,31 +811,780 @@ def test_header_safe_strips_all_ascii_control_characters():
     safe.encode("ascii")  # must not raise
 
 
+def _request_for(
+    path="/x", *, method="GET", headers=None, body=b"", receive=None, span=None
+):
+    """Request with a real ASGI receive channel carrying ``body``."""
+
+    async def _receive():
+        return {"type": "http.request", "body": body, "more_body": False}
+
+    request = Request(
+        scope={
+            "type": "http",
+            "method": method,
+            "path": path,
+            "query_string": b"",
+            "headers": headers or [],
+        },
+        receive=receive or _receive,
+    )
+    if span is not None:
+        request.state.span = span
+    return request
+
+
 @pytest.mark.asyncio
 async def test_apply_stamps_502_on_upstream_connect_error(settings_reverse_proxy, span):
-    """An httpx.ConnectError/ReadTimeout out of reverse_proxy must not propagate to
+    """A connection failure inside the real reverse_proxy must not propagate to
     Starlette's ServerErrorMiddleware as a bare, unstamped 500 -- 'upstream
     unreachable' is the single most common eval failure and the one case the
     fail-loud mechanism must still cover.
     """
     strategy = ProxyRulesStrategy(settings_reverse_proxy)
-    request = Request(
-        scope={
-            "type": "http",
-            "method": "GET",
-            "path": "/api/v1/projects/123",
-            "query_string": b"",
-            "headers": [],
-        },
-        receive=_empty_body_receive,
-    )
-    request.state.span = span
+    request = _request_for("/api/v1/projects/123", span=span)
     with patch.object(
-        strategy,
-        "reverse_proxy",
-        AsyncMock(side_effect=httpx.ConnectError("boom")),
+        httpx.AsyncClient, "send", AsyncMock(side_effect=httpx.ConnectError("boom"))
     ):
         response = await strategy.apply(request)
     assert response.status_code == 502
     assert response.headers[RESULT_TYPE_HEADER] == "error"
     assert RESULT_RULE_HEADER in response.headers
+    assert json.loads(response.body) == {"error": "mockstack: upstream request failed"}
+
+
+@pytest.mark.asyncio
+async def test_apply_stamps_504_on_upstream_timeout(settings_reverse_proxy, span):
+    strategy = ProxyRulesStrategy(settings_reverse_proxy)
+    request = _request_for("/api/v1/projects/123", span=span)
+    with patch.object(
+        httpx.AsyncClient, "send", AsyncMock(side_effect=httpx.ReadTimeout("slow"))
+    ):
+        response = await strategy.apply(request)
+    assert response.status_code == 504
+    assert response.headers[RESULT_TYPE_HEADER] == "error"
+    assert RESULT_RULE_HEADER in response.headers
+    assert json.loads(response.body) == {
+        "error": "mockstack: upstream request timed out"
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "exc,status_code",
+    [
+        (httpx.ConnectTimeout("t"), 504),
+        (httpx.ReadTimeout("t"), 504),
+        (httpx.ConnectError("c"), 502),
+        (httpx.RemoteProtocolError("p"), 502),
+    ],
+)
+async def test_reverse_proxy_translates_httpx_errors(
+    settings_reverse_proxy, exc, status_code
+):
+    strategy = ProxyRulesStrategy(settings_reverse_proxy)
+    with (
+        patch.object(httpx.AsyncClient, "send", AsyncMock(side_effect=exc)),
+        pytest.raises(UpstreamError) as info,
+    ):
+        await strategy.reverse_proxy(_request_for("/x"), "http://upstream.invalid/x")
+    assert info.value.status_code == status_code
+    assert info.value.__cause__ is exc
+
+
+@pytest.mark.asyncio
+async def test_upstream_error_is_logged_as_warning_without_traceback(
+    settings_reverse_proxy, span, caplog
+):
+    strategy = ProxyRulesStrategy(settings_reverse_proxy)
+    with (
+        patch.object(
+            httpx.AsyncClient, "send", AsyncMock(side_effect=httpx.ConnectError("c"))
+        ),
+        caplog.at_level(logging.WARNING, logger="ProxyRulesStrategy"),
+    ):
+        await strategy.apply(_request_for("/api/v1/projects/123", span=span))
+    records = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert [r.levelname for r in records] == ["WARNING"]
+    assert records[0].exc_info is None
+
+
+@pytest.mark.asyncio
+async def test_simulate_create_with_malformed_json_body_is_stamped_500(settings, span):
+    """The create path parses the body with ``request.json()`` (create_mixin is out of
+    scope here); a malformed body is an internal failure, answered as a stamped 500
+    ``error`` with no rule header since no rule matched.
+    """
+    settings.proxyrules_simulate_create_on_missing = True
+    strategy = ProxyRulesStrategy(settings)
+    request = _request_for(
+        "/nonexistent/path",
+        method="POST",
+        headers=[(b"content-type", b"application/json")],
+        body=b'{"name": ',
+        span=span,
+    )
+    response = await strategy.apply(request)
+    assert response.status_code == 500
+    assert response.headers[RESULT_TYPE_HEADER] == "error"
+    assert RESULT_RULE_HEADER not in response.headers
+    assert json.loads(response.body) == {"error": "mockstack: internal error"}
+
+
+@pytest.mark.asyncio
+async def test_client_disconnect_propagates(settings, span):
+    """A client that went away gets no answer; ClientDisconnect is not swallowed."""
+    strategy = ProxyRulesStrategy(settings)
+
+    async def disconnect():
+        return {"type": "http.disconnect"}
+
+    request = _request_for("/api/v1/projects/123", receive=disconnect, span=span)
+    with pytest.raises(ClientDisconnect):
+        await strategy.apply(request)
+
+
+@pytest.mark.asyncio
+async def test_missing_fixture_is_stamped_404_error_without_echoing_path(
+    settings, span, tmp_path, caplog
+):
+    missing = tmp_path / "secret-scenario" / "project.json.j2"
+    strategy = ProxyRulesStrategy(settings)
+    rule = Rule.from_dict(
+        {"name": "fixture-rule", "pattern": r"^/x$", "replacement": f"file://{missing}"}
+    )
+    with (
+        patch.object(strategy, "rule_for", return_value=rule),
+        caplog.at_level(logging.ERROR, logger="ProxyRulesStrategy"),
+    ):
+        response = await strategy.apply(_request_for("/x", span=span))
+    assert response.status_code == 404
+    assert response.headers[RESULT_TYPE_HEADER] == "error"
+    assert response.headers[RESULT_RULE_HEADER] == "fixture-rule"
+    assert json.loads(response.body) == {"error": "Template file not found."}
+    assert str(missing) in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_fixture_render_failure_is_stamped_500_error(settings, span, tmp_path):
+    template_file = tmp_path / "broken.json.j2"
+    template_file.write_text('{"x": {{ oops }')
+    strategy = ProxyRulesStrategy(settings)
+    rule = Rule.from_dict(
+        {
+            "name": "broken-rule",
+            "pattern": r"^/x$",
+            "replacement": f"file://{template_file}",
+        }
+    )
+    with patch.object(strategy, "rule_for", return_value=rule):
+        response = await strategy.apply(_request_for("/x", span=span))
+    assert response.status_code == 500
+    assert response.headers[RESULT_TYPE_HEADER] == "error"
+    assert response.headers[RESULT_RULE_HEADER] == "broken-rule"
+
+
+@pytest.mark.asyncio
+async def test_undefined_variable_in_replacement_is_stamped_500_error(
+    settings, span, caplog
+):
+    strategy = ProxyRulesStrategy(settings)
+    rule = Rule.from_dict(
+        {
+            "name": "scenario-rule",
+            "pattern": r"^/x$",
+            "replacement": "file:///fixtures/{{ headers['x-request-eval-scenario'] }}/f.json",
+        },
+        env=strategy.env,
+    )
+    with (
+        patch.object(strategy, "rule_for", return_value=rule),
+        caplog.at_level(logging.ERROR, logger="ProxyRulesStrategy"),
+    ):
+        response = await strategy.apply(_request_for("/x", span=span))
+    assert response.status_code == 500
+    assert response.headers[RESULT_TYPE_HEADER] == "error"
+    assert response.headers[RESULT_RULE_HEADER] == "scenario-rule"
+    assert json.loads(response.body) == {"error": "mockstack: internal error"}
+    errors = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert len(errors) == 1
+    assert "scenario-rule" in errors[0].getMessage()
+    assert errors[0].exc_info is not None
+
+
+@pytest.mark.asyncio
+async def test_unexpected_error_after_match_is_stamped_500_with_rule(settings, span):
+    strategy = ProxyRulesStrategy(settings)
+    rule = Rule.from_dict({"name": "boom-rule", "pattern": r"^/x$", "replacement": "u"})
+    with (
+        patch.object(strategy, "rule_for", return_value=rule),
+        patch.object(rule, "apply", side_effect=RuntimeError("boom")),
+    ):
+        response = await strategy.apply(_request_for("/x", span=span))
+    assert response.status_code == 500
+    assert response.headers[RESULT_TYPE_HEADER] == "error"
+    assert response.headers[RESULT_RULE_HEADER] == "boom-rule"
+
+
+@pytest.mark.asyncio
+async def test_result_log_line_omits_template_context(settings, span, tmp_path, caplog):
+    template_file = tmp_path / "t.json"
+    template_file.write_text('{"ok": true}')
+    strategy = ProxyRulesStrategy(settings)
+    rule = Rule.from_dict(
+        {"name": "t-rule", "pattern": r"^/t$", "replacement": f"file://{template_file}"}
+    )
+    request = _request_for(
+        "/t",
+        method="POST",
+        headers=[(b"x-secret-token", b"hunter2")],
+        body=b'{"query": "SELECT confidential"}',
+        span=span,
+    )
+    with (
+        patch.object(strategy, "rule_for", return_value=rule),
+        caplog.at_level(logging.INFO, logger="ProxyRulesStrategy"),
+    ):
+        response = await strategy.apply(request)
+    assert response.status_code == 200
+    assert str(template_file) in caplog.text
+    assert "template" in caplog.text
+    assert "hunter2" not in caplog.text
+    assert "confidential" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_result_log_line_for_url_result_logs_target_url(settings, span, caplog):
+    strategy = ProxyRulesStrategy(settings)
+    rule = Rule.from_dict(
+        {"name": "u-rule", "pattern": r"^/api/(.*)", "replacement": r"https://h/\1"}
+    )
+    request = _request_for(
+        "/api/x", headers=[(b"x-secret-token", b"hunter2")], span=span
+    )
+    with (
+        patch.object(strategy, "rule_for", return_value=rule),
+        caplog.at_level(logging.INFO, logger="ProxyRulesStrategy"),
+    ):
+        await strategy.apply(request)
+    assert "https://h/x" in caplog.text
+    assert "hunter2" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_handlers_stamp_their_own_result_type(settings, span, tmp_path):
+    strategy = ProxyRulesStrategy(settings)  # HTTP_TEMPORARY_REDIRECT
+    rule = Rule.from_dict({"name": "r", "pattern": r"^/x$", "replacement": "https://h"})
+    request = _request_for("/x", span=span)
+
+    redirect = await strategy.handle_url_result(
+        request, rule, URLRuleResult(url="https://h/x")
+    )
+    assert redirect.headers[RESULT_TYPE_HEADER] == "redirect"
+    assert redirect.headers[RESULT_RULE_HEADER] == "r"
+
+    template_file = tmp_path / "t.json"
+    template_file.write_text("{}")
+    rendered = await strategy.handle_template_result(
+        request,
+        rule,
+        TemplateRuleResult(template_path=str(template_file), template_context={}),
+    )
+    assert rendered.headers[RESULT_TYPE_HEADER] == "template"
+
+
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        ("ok", "ok"),
+        ("  bad\x00name\x7f ", "bad name"),
+        ("\r\n\t", "unnamed"),
+        ("", "unnamed"),
+        ("日本", "\\u65e5\\u672c"),
+    ],
+)
+def test_header_safe_strips_and_falls_back(value, expected):
+    assert _header_safe(value) == expected
+
+
+def test_with_result_headers_tolerates_non_string_rule_name():
+    rule = Rule(pattern=r"^/x$", replacement="u")
+    rule.name = 12345
+    response = with_result_headers(Response(), rule=rule, result_type="proxy")
+    assert response.headers[RESULT_RULE_HEADER] == "12345"
+
+
+def test_with_result_headers_falls_back_when_name_sanitises_to_empty():
+    rule = Rule(name="\r\n", pattern=r"^/x$", replacement="u")
+    response = with_result_headers(Response(), rule=rule, result_type="proxy")
+    assert response.headers[RESULT_RULE_HEADER] == "unnamed"
+
+
+def _starlette_headers(items):
+    return MutableHeaders(raw=[(k.lower().encode(), v.encode()) for k, v in items])
+
+
+@pytest.mark.parametrize("factory", [_starlette_headers, httpx.Headers])
+def test_strip_hop_by_hop_removes_connection_listed_headers(factory):
+    headers = factory(
+        [
+            ("Connection", "keep-alive, X-Custom-Hop"),
+            ("connection", "X-Second-Hop"),
+            ("x-custom-hop", "1"),
+            ("x-second-hop", "2"),
+            ("keep-alive", "timeout=5"),
+            ("transfer-encoding", "chunked"),
+            ("content-type", "application/json"),
+            ("x-kept", "yes"),
+        ]
+    )
+    strip_hop_by_hop(headers)
+    for name in (
+        "connection",
+        "x-custom-hop",
+        "x-second-hop",
+        "keep-alive",
+        "transfer-encoding",
+    ):
+        assert name not in headers
+    assert headers["content-type"] == "application/json"
+    assert headers["x-kept"] == "yes"
+
+
+def test_reverse_proxy_headers_strips_connection_listed_headers(settings):
+    strategy = ProxyRulesStrategy(settings)
+    headers = Headers(
+        raw=[
+            (b"host", b"example.com"),
+            (b"connection", b"keep-alive, X-Custom-Hop"),
+            (b"x-custom-hop", b"1"),
+            (b"x-kept", b"yes"),
+        ]
+    )
+    out = strategy.reverse_proxy_headers(headers, "https://api.target.com/p")
+    assert "x-custom-hop" not in out
+    assert "connection" not in out
+    assert out["x-kept"] == "yes"
+
+
+@pytest.mark.parametrize("upstream_length", ["1234", None])
+def test_maybe_update_response_headers_preserves_head_content_length(upstream_length):
+    """A HEAD response has no body, so the buffered length (0) says nothing; the
+    upstream's Content-Length describes the GET representation and must survive."""
+    raw = {"content-type": "application/json"}
+    if upstream_length is not None:
+        raw["content-length"] = upstream_length
+    updated = maybe_update_response_headers(
+        httpx.Headers(raw),
+        content_length=0,
+        status_code=200,
+        request_method="HEAD",
+    )
+    assert updated.get("content-length") == upstream_length
+
+
+# httpx only decodes the codings in SUPPORTED_DECODERS (br / zstd only when brotli /
+# zstandard are installed) and silently skips the rest.
+BROTLI_DECODED = "br" in SUPPORTED_DECODERS
+ZSTD_DECODED = "zstd" in SUPPORTED_DECODERS
+
+
+@pytest.mark.parametrize(
+    "encoding,expected",
+    [
+        ("gzip", "identity"),
+        ("GZIP", "identity"),
+        (" Deflate ", "identity"),
+        ("gzip, deflate", "identity"),
+        ("identity", "identity"),
+        ("br", "identity" if BROTLI_DECODED else "br"),
+        ("zstd", "identity" if ZSTD_DECODED else "zstd"),
+        ("gzip, br", "identity" if BROTLI_DECODED else "br"),
+        ("gzip, compress", "compress"),
+        ("compress", "compress"),
+        ("Compress", "Compress"),
+        ("dcb", "dcb"),
+        ("dcz", "dcz"),
+        ("x-custom", "x-custom"),
+    ],
+)
+def test_maybe_update_response_headers_relabels_only_decoded_encodings(
+    encoding, expected
+):
+    """Only codings httpx actually decoded may be removed from Content-Encoding; a
+    coding it skipped must stay, or the client gets an encoded body labelled
+    ``identity``. When nothing was decoded the value is left exactly as sent."""
+    updated = maybe_update_response_headers(
+        httpx.Headers({"content-encoding": encoding}),
+        content_length=3,
+        status_code=200,
+        request_method="GET",
+    )
+    assert updated["content-encoding"] == expected
+
+
+def test_head_drops_content_length_when_encoding_was_relabelled():
+    """On HEAD the upstream Content-Length is the *encoded* length; once the coding is
+    relabelled (a GET would be decoded) that length is wrong, so it is dropped."""
+    updated = maybe_update_response_headers(
+        httpx.Headers({"content-encoding": "gzip", "content-length": "1234"}),
+        content_length=0,
+        status_code=200,
+        request_method="HEAD",
+    )
+    assert updated["content-encoding"] == "identity"
+    assert "content-length" not in updated
+
+
+@pytest.mark.parametrize("encoding", ["compress", "identity"])
+def test_head_keeps_content_length_when_encoding_was_not_decoded(encoding):
+    """Nothing decoded (or only the no-op ``identity``): the upstream length stands."""
+    updated = maybe_update_response_headers(
+        httpx.Headers({"content-encoding": encoding, "content-length": "1234"}),
+        content_length=0,
+        status_code=200,
+        request_method="HEAD",
+    )
+    assert updated["content-encoding"] == encoding
+    assert updated["content-length"] == "1234"
+
+
+@pytest.mark.asyncio
+async def test_reverse_proxy_gzip_body_is_decoded_and_relabelled(
+    settings_reverse_proxy,
+):
+    raw = b'{"ok":true}'
+    upstream = httpx.Response(
+        200,
+        headers={"content-type": "application/json", "content-encoding": "gzip"},
+        content=gzip.compress(raw),
+    )
+    strategy = ProxyRulesStrategy(settings_reverse_proxy)
+    with patch.object(httpx.AsyncClient, "send", AsyncMock(return_value=upstream)):
+        response = await strategy.reverse_proxy(
+            _request_for("/x"), "http://upstream.invalid/x"
+        )
+    assert response.body == raw
+    assert response.headers["content-encoding"] == "identity"
+    assert response.headers["content-length"] == str(len(raw))
+
+
+@pytest.mark.asyncio
+async def test_reverse_proxy_undecoded_body_keeps_its_encoding(settings_reverse_proxy):
+    encoded = b"\x1f\x9d-lzw-compressed-bytes"
+    upstream = httpx.Response(
+        200, headers={"content-encoding": "compress"}, content=encoded
+    )
+    strategy = ProxyRulesStrategy(settings_reverse_proxy)
+    with patch.object(httpx.AsyncClient, "send", AsyncMock(return_value=upstream)):
+        response = await strategy.reverse_proxy(
+            _request_for("/x"), "http://upstream.invalid/x"
+        )
+    assert response.body == encoded
+    assert response.headers["content-encoding"] == "compress"
+    assert response.headers["content-length"] == str(len(encoded))
+
+
+def test_maybe_update_response_headers_strips_connection_listed_headers():
+    updated = maybe_update_response_headers(
+        httpx.Headers({"connection": "x-upstream-hop", "x-upstream-hop": "1"}),
+        content_length=0,
+        status_code=200,
+        request_method="GET",
+    )
+    assert "x-upstream-hop" not in updated
+    assert "connection" not in updated
+
+
+@pytest.mark.asyncio
+async def test_reverse_proxy_preserves_repeated_response_headers(
+    settings_reverse_proxy,
+):
+    body = b'{"ok":true}'
+    upstream = httpx.Response(
+        200,
+        headers=[
+            ("content-type", "application/json"),
+            ("set-cookie", "first=1; Path=/"),
+            ("set-cookie", "second=2; Path=/"),
+        ],
+        content=body,
+    )
+    strategy = ProxyRulesStrategy(settings_reverse_proxy)
+    with patch.object(httpx.AsyncClient, "send", AsyncMock(return_value=upstream)):
+        response = await strategy.reverse_proxy(
+            _request_for("/x"), "http://upstream.invalid/x"
+        )
+    assert [v for k, v in response.raw_headers if k == b"set-cookie"] == [
+        b"first=1; Path=/",
+        b"second=2; Path=/",
+    ]
+    assert response.headers["content-type"] == "application/json"
+    assert response.headers["content-length"] == str(len(body))
+    assert response.body == body
+
+
+@pytest.mark.asyncio
+async def test_reverse_proxy_head_keeps_upstream_content_length(
+    settings_reverse_proxy,
+):
+    upstream = httpx.Response(
+        200,
+        headers=[("content-type", "application/json"), ("content-length", "1234")],
+    )
+    strategy = ProxyRulesStrategy(settings_reverse_proxy)
+    with patch.object(httpx.AsyncClient, "send", AsyncMock(return_value=upstream)):
+        response = await strategy.reverse_proxy(
+            _request_for("/x", method="HEAD"), "http://upstream.invalid/x"
+        )
+    assert response.headers["content-length"] == "1234"
+    assert response.body == b""
+
+
+@pytest.mark.parametrize(
+    "rule,message",
+    [
+        (
+            {"name": "bad-regex", "pattern": "^/x/(unclosed$", "replacement": "u"},
+            r"rule 'bad-regex': invalid regex '\^/x/\(unclosed\$'",
+        ),
+        (
+            {
+                "name": "bad-header",
+                "pattern": "^/x$",
+                "headers": {"x-scenario": "[a-z"},
+                "replacement": "u",
+            },
+            r"rule 'bad-header': invalid regex '\[a-z'",
+        ),
+        (
+            {
+                "name": "shadowing",
+                "pattern": r"^/x/(?P<headers>[^/]+)$",
+                "replacement": "u",
+            },
+            r"rule 'shadowing': named group 'headers' shadows a reserved template",
+        ),
+        (
+            {
+                "name": "bad-template",
+                "pattern": "^/x$",
+                "replacement": "file:///{{ id .j",
+            },
+            r"rule 'bad-template': invalid replacement template",
+        ),
+        (
+            {
+                "name": 2024,
+                "pattern": "^/x$",
+                "headers": {"x-foo": None},
+                "replacement": "u",
+            },
+            r"rule '2024': predicate 'x-foo' has no value",
+        ),
+    ],
+    ids=[
+        "invalid-regex",
+        "invalid-predicate-regex",
+        "reserved-group",
+        "template-syntax",
+        "predicate-without-value",
+    ],
+)
+def test_invalid_rules_file_fails_at_startup_with_rule_name(
+    settings, tmp_path, rule, message
+):
+    """A bad rules file fails when the strategy is built (startup), naming the rule."""
+    rules_file = tmp_path / "rules.yml"
+    rules_file.write_text(yaml.safe_dump({"rules": [rule]}))
+    bad = settings.model_copy(update={"proxyrules_rules_filename": rules_file})
+    with pytest.raises(ValueError, match=message):
+        ProxyRulesStrategy(bad)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "target",
+    ["/target", "http://example.com:abc/"],
+    ids=["relative-url-unsupported-protocol", "invalid-url"],
+)
+async def test_invalid_upstream_url_is_internal_error(
+    settings_reverse_proxy, span, caplog, target
+):
+    """A replacement that is not a usable absolute URL is a rules-file mistake, not an
+    upstream failure: a stamped 500 ``error``, logged at ERROR with the rule name and
+    the target URL (not a 502 at WARNING)."""
+    strategy = ProxyRulesStrategy(settings_reverse_proxy)
+    rule = Rule.from_dict(
+        {"name": "bad-target", "pattern": r"^/x$", "replacement": target}
+    )
+    with (
+        patch.object(strategy, "rule_for", return_value=rule),
+        caplog.at_level(logging.WARNING, logger="ProxyRulesStrategy"),
+    ):
+        response = await strategy.apply(_request_for("/x", span=span))
+    assert response.status_code == 500
+    assert response.headers[RESULT_TYPE_HEADER] == "error"
+    assert response.headers[RESULT_RULE_HEADER] == "bad-target"
+    assert json.loads(response.body) == {"error": "mockstack: internal error"}
+    records = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert [r.levelname for r in records] == ["ERROR"]
+    assert "bad-target" in records[0].getMessage()
+    assert target in records[0].getMessage()
+
+
+@pytest.mark.asyncio
+async def test_fixture_render_failure_is_logged_with_traceback(
+    settings, span, tmp_path, caplog
+):
+    template_file = tmp_path / "broken.json.j2"
+    template_file.write_text('{"x": {{ oops }')
+    strategy = ProxyRulesStrategy(settings)
+    rule = Rule.from_dict(
+        {
+            "name": "broken-rule",
+            "pattern": r"^/x$",
+            "replacement": f"file://{template_file}",
+        }
+    )
+    with (
+        patch.object(strategy, "rule_for", return_value=rule),
+        caplog.at_level(logging.ERROR, logger="ProxyRulesStrategy"),
+    ):
+        await strategy.apply(_request_for("/x", span=span))
+    errors = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert len(errors) == 1
+    assert errors[0].exc_info is not None
+    assert str(template_file) in errors[0].getMessage()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "redirect_via,status_code",
+    [
+        (ProxyRulesRedirectVia.HTTP_TEMPORARY_REDIRECT, 307),
+        (ProxyRulesRedirectVia.HTTP_PERMANENT_REDIRECT, 301),
+    ],
+    ids=["307", "301"],
+)
+@pytest.mark.parametrize(
+    "replacement,query_string,expected_location",
+    [
+        (
+            r"https://api.example/\1",
+            b"status=open",
+            "https://api.example/projects/123?status=open",
+        ),
+        (
+            r"https://api.example/\1?source=mockstack",
+            b"status=open&page=2",
+            "https://api.example/projects/123?source=mockstack&status=open&page=2",
+        ),
+        (
+            r"https://api.example/\1?",
+            b"status=open",
+            "https://api.example/projects/123?status=open",
+        ),
+        (
+            r"https://api.example/\1#top",
+            b"status=open",
+            "https://api.example/projects/123?status=open#top",
+        ),
+        (
+            r"https://api.example/\1",
+            b"",
+            "https://api.example/projects/123",
+        ),
+    ],
+    ids=[
+        "query-appended",
+        "merged-with-existing-query",
+        "target-ending-in-question-mark",
+        "query-before-target-fragment",
+        "no-query-no-trailing-question-mark",
+    ],
+)
+async def test_redirect_location_keeps_query_string(
+    settings,
+    span,
+    redirect_via,
+    status_code,
+    replacement,
+    query_string,
+    expected_location,
+):
+    """The replacement is resolved from the path only; redirect modes must carry the
+    original query string over to ``Location`` (reverse proxy forwards it as params)."""
+    settings.proxyrules_redirect_via = redirect_via
+    strategy = ProxyRulesStrategy(settings)
+    rule = Rule.from_dict(
+        {
+            "name": "redirect-rule",
+            "pattern": r"^/api/v1/(.*)$",
+            "replacement": replacement,
+        }
+    )
+    request = Request(
+        scope={
+            "type": "http",
+            "method": "GET",
+            "path": "/api/v1/projects/123",
+            "query_string": query_string,
+            "headers": [],
+        },
+        receive=_empty_body_receive,
+    )
+    request.state.span = span
+    with patch.object(strategy, "rule_for", return_value=rule):
+        response = await strategy.apply(request)
+    assert response.status_code == status_code
+    assert response.headers["location"] == expected_location
+    assert response.headers[RESULT_TYPE_HEADER] == "redirect"
+
+
+def test_maybe_update_response_headers_drops_upstream_date_and_server():
+    """The ASGI server (uvicorn) always prepends its own ``date`` and ``server``
+    headers without checking the app's; forwarding the upstream's too would duplicate
+    them."""
+    updated = maybe_update_response_headers(
+        httpx.Headers(
+            [
+                ("Date", "Mon, 01 Jan 2024 00:00:00 GMT"),
+                ("Server", "upstream/1.0"),
+                ("content-type", "application/json"),
+            ]
+        ),
+        content_length=2,
+        status_code=200,
+        request_method="GET",
+    )
+    assert "date" not in updated
+    assert "server" not in updated
+    assert updated["content-type"] == "application/json"
+
+
+@pytest.mark.asyncio
+async def test_reverse_proxy_copies_headers_without_upstream_date_and_server(
+    settings_reverse_proxy,
+):
+    upstream = httpx.Response(
+        200,
+        headers=[
+            ("date", "Mon, 01 Jan 2024 00:00:00 GMT"),
+            ("server", "upstream/1.0"),
+            ("set-cookie", "first=1"),
+            ("set-cookie", "second=2"),
+            ("content-type", "application/json"),
+        ],
+        content=b"{}",
+    )
+    strategy = ProxyRulesStrategy(settings_reverse_proxy)
+    with patch.object(httpx.AsyncClient, "send", AsyncMock(return_value=upstream)):
+        response = await strategy.reverse_proxy(
+            _request_for("/x"), "http://upstream.invalid/x"
+        )
+    names = [name for name, _ in response.raw_headers]
+    assert b"date" not in names
+    assert b"server" not in names
+    assert names.count(b"set-cookie") == 2
+    assert response.headers["content-type"] == "application/json"
