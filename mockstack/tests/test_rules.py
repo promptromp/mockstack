@@ -190,3 +190,39 @@ def test_request_payload_invalid_utf8_does_not_raise():
     payload = RequestPayload.from_bytes(b"\xff\xfe")
     assert "�" in payload.text
     assert payload.json is None
+
+
+def test_rule_apply_template_context_includes_request_json():
+    rule = Rule(
+        pattern=r"^/druid/v2/sql$", replacement="file:///tmp/x.json", method="POST"
+    )
+    request = Request(
+        scope={
+            "type": "http",
+            "method": "POST",
+            "path": "/druid/v2/sql",
+            "query_string": b"",
+            "headers": [(b"x-request-eval-scenario", b"healthy")],
+        }
+    )
+    payload = RequestPayload.from_bytes(b'{"query": "SELECT 1"}')
+    result = rule.apply(request, payload)
+    assert isinstance(result, TemplateRuleResult)
+    assert result.template_context["request_json"] == {"query": "SELECT 1"}
+    assert result.template_context["headers"]["x-request-eval-scenario"] == "healthy"
+
+
+def test_rule_apply_without_payload_has_none_request_json():
+    rule = Rule(pattern=r"^/x$", replacement="file:///tmp/x.json")
+    request = Request(
+        scope={
+            "type": "http",
+            "method": "GET",
+            "path": "/x",
+            "query_string": b"",
+            "headers": [],
+        }
+    )
+    result = rule.apply(request)
+    assert isinstance(result, TemplateRuleResult)
+    assert result.template_context["request_json"] is None
