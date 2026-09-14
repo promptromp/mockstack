@@ -49,13 +49,25 @@ def maybe_update_response_headers(
     return _headers
 
 
+def _header_safe(value: str) -> str:
+    """Make an arbitrary string safe to use as an HTTP header value.
+
+    Starlette encodes header values as latin-1, so a rule ``name``/``pattern``
+    containing non-Latin-1 characters (e.g. CJK) would otherwise raise
+    ``UnicodeEncodeError`` when the response is sent. CR/LF are also stripped
+    (replaced with a space) since they are not valid inside a single header value.
+    """
+    value = value.replace("\r", " ").replace("\n", " ")
+    return value.encode("ascii", "backslashreplace").decode("ascii")
+
+
 def with_result_headers(
     response: Response, *, rule: Rule | None, result_type: str
 ) -> Response:
     """Stamp the response with which rule (if any) produced it and how."""
     response.headers[RESULT_TYPE_HEADER] = result_type
     if rule is not None:
-        response.headers[RESULT_RULE_HEADER] = rule.name or rule.pattern
+        response.headers[RESULT_RULE_HEADER] = _header_safe(rule.name or rule.pattern)
     return response
 
 
