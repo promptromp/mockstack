@@ -44,5 +44,7 @@ def test_chunked_request_body_is_forwarded(proxy, upstream):
         headers={"content-type": "application/octet-stream"},
     )
     assert r.status_code == 200
-    assert len(upstream.calls[-1]["body"]) == 10 * (len('{"chunk":"') + 10_000 + 2)
+    assert len(upstream.calls[-1]["body"]) == 10 * (
+        len('{"chunk":"') + 10_000 + len('"}\n')
+    )
     assert "transfer-encoding" not in upstream.calls[-1]["headers"]
