@@ -8,6 +8,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
@@ -17,6 +18,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from mockstack.config import OpenTelemetrySettings, Settings
+from mockstack.constants import ProxyRulesRedirectVia
 from mockstack.main import create_app
 
 
@@ -116,10 +118,21 @@ def write_rules(tmp_path: Path, rules: list[dict]) -> Path:
     return path
 
 
-def proxyrules_settings(rules_file: Path, **overrides) -> Settings:
-    return Settings(
-        strategy="proxyrules",
-        proxyrules_rules_filename=rules_file,
-        opentelemetry=OpenTelemetrySettings(enabled=False),
+def proxyrules_settings(rules_file: Path, **overrides: Any) -> Settings:
+    """Settings for a live proxyrules server that ignore the developer's environment.
+
+    ``_env_file=None`` skips any ``.env`` file, and every option the live tests rely
+    on is passed explicitly, so ``MOCKSTACK__*`` environment variables cannot change
+    it. ``overrides`` still take precedence.
+    """
+    options: dict[str, Any] = {
+        "strategy": "proxyrules",
+        "proxyrules_rules_filename": rules_file,
+        "proxyrules_redirect_via": ProxyRulesRedirectVia.REVERSE_PROXY,
+        "proxyrules_simulate_create_on_missing": False,
+        "opentelemetry": OpenTelemetrySettings(enabled=False),
         **overrides,
-    )
+    }
+    # pydantic-settings accepts `_env_file` at runtime; mypy's view of the model's
+    # synthesized __init__ only lists the declared fields.
+    return Settings(_env_file=None, **options)  # type: ignore[call-arg]
