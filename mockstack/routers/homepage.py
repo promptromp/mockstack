@@ -10,8 +10,9 @@ def homepage_router_provider(app: FastAPI, settings: Settings) -> APIRouter:
 
     router = APIRouter()
 
-    @router.get("/")
-    async def homepage():
+    # `response_model=None` keeps the route as it was before the return annotation.
+    @router.get("/", response_model=None)
+    async def homepage() -> dict[str, str]:
         """Root endpoint."""
         return {"Hello": "World"}
 

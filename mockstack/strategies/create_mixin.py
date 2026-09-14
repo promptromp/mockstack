@@ -54,7 +54,7 @@ class CreateMixin:
 
         """
 
-        def with_metadata(resource: dict, copy=True) -> dict:
+        def with_metadata(resource: dict, copy: bool = True) -> dict:
             """Inject metadata fields into the resource."""
             _resource = resource.copy() if copy else resource
             for key, value in created_resource_metadata.items():

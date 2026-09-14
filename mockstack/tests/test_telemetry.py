@@ -133,9 +133,10 @@ async def test_extract_body(chunks):
 
 
 def test_opentelemetry_provider_disabled(settings_filefixtures):
-    """Test OpenTelemetry provider when disabled."""
-    # Should not raise any errors and return None
-    assert opentelemetry_provider(FastAPI(), settings_filefixtures) is None
+    """Test OpenTelemetry provider when disabled: no tracer provider is configured."""
+    with patch("mockstack.telemetry.trace") as mock_trace:
+        opentelemetry_provider(FastAPI(), settings_filefixtures)
+    mock_trace.set_tracer_provider.assert_not_called()
 
 
 @patch("mockstack.telemetry.OTLPSpanExporter")

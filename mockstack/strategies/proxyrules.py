@@ -194,7 +194,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
 
     logger = logging.getLogger("ProxyRulesStrategy")
 
-    def __init__(self, settings: Settings, *args, **kwargs):
+    def __init__(self, settings: Settings, *args: Any, **kwargs: Any) -> None:
         super().__init__(settings, *args, **kwargs)
         self.created_resource_metadata = settings.created_resource_metadata
         self.missing_resource_fields = settings.missing_resource_fields

@@ -161,7 +161,7 @@ def make_request() -> Callable[..., Request]:
 
 
 @pytest.fixture(scope="session")
-def write_rules(tmp_path_factory) -> Callable[[list[dict[str, Any]]], Path]:
+def write_rules(tmp_path_factory: pytest.TempPathFactory) -> Callable[[list[dict[str, Any]]], Path]:
     """Factory: write ``rules`` as a proxyrules rules file and return its path.
 
     Each call writes a new ``rules.yml`` in its own temporary directory. Session-scoped
@@ -177,7 +177,7 @@ def write_rules(tmp_path_factory) -> Callable[[list[dict[str, Any]]], Path]:
 
 
 @pytest.fixture
-def write_template(tmp_path) -> Callable[[str, str], Path]:
+def write_template(tmp_path: Path) -> Callable[[str, str], Path]:
     """Factory: write ``content`` to ``relative_path`` under ``tmp_path``; return the path."""
 
     def _write(relative_path: str, content: str) -> Path:

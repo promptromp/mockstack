@@ -10,7 +10,7 @@ from mockstack.strategies.proxyrules import ProxyRulesStrategy
 
 
 @pytest.fixture
-def traced_request(make_request, span) -> Callable[..., Request]:
+def traced_request(make_request: Callable[..., Request], span) -> Callable[..., Request]:
     """Factory: ``make_request`` with ``request.state.span`` set, as the middleware does."""
 
     def _make(*args: Any, **kwargs: Any) -> Request:
@@ -39,7 +39,9 @@ def proxyrules_strategy(settings, write_rules) -> Callable[..., ProxyRulesStrate
 
 
 @pytest.fixture
-def apply_rule(proxyrules_strategy, traced_request) -> Callable[..., Awaitable[Response]]:
+def apply_rule(
+    proxyrules_strategy: Callable[..., ProxyRulesStrategy], traced_request
+) -> Callable[..., Awaitable[Response]]:
     """Factory: apply ``request`` (by default ``GET /x``) through a strategy whose rules
     file holds only ``rule``; ``settings_overrides`` go to ``proxyrules_strategy``."""
 

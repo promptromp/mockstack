@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from mockstack.config import Settings
 
 
-def announce(app: FastAPI, settings: Settings):
+def announce(app: FastAPI, settings: Settings) -> None:
     """Log the startup message with the active settings."""
     logger = logging.getLogger("uvicorn")
     extra = {"markup": True}

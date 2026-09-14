@@ -1,9 +1,10 @@
 """Identifiers helpers."""
 
 import itertools
+from collections.abc import Iterable, Iterator
 
 
-def prefixes(iterable, reverse=False):
+def prefixes[T](iterable: Iterable[T], reverse: bool = False) -> Iterator[tuple[T, ...]]:
     """Return an iterator of the prefixes of the iterable.
 
     Examples:

@@ -60,7 +60,7 @@ class Settings(BaseSettings):
     strategy: Literal["filefixtures", "proxyrules"] = "filefixtures"
 
     # base directory for templates used by strategies
-    templates_dir: DirectoryPath | None = None  # type: ignore[assignment]
+    templates_dir: DirectoryPath | None = None
 
     # whether to enable templates for POST requests.
     # By default, templates are not used for POSTs, and instead we try to
@@ -70,7 +70,7 @@ class Settings(BaseSettings):
     filefixtures_enable_templates_for_post: CliImplicitFlag[bool] = True
 
     # rules filename for proxyrules strategy
-    proxyrules_rules_filename: FilePath | None = None  # type: ignore[assignment]
+    proxyrules_rules_filename: FilePath | None = None
 
     # controls behavior of proxying. Whether to use HTTP status code redirects
     # or reverse proxy the request to the target URL "silently".

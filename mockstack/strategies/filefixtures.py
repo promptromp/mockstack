@@ -4,6 +4,7 @@ import logging
 import os
 from functools import cached_property
 from pathlib import Path
+from typing import Any
 
 from fastapi import HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
@@ -28,7 +29,7 @@ class FileFixturesStrategy(BaseStrategy, CreateMixin):
 
     logger = logging.getLogger("FileFixturesStrategy")
 
-    def __init__(self, settings: Settings, *args, **kwargs):
+    def __init__(self, settings: Settings, *args: Any, **kwargs: Any) -> None:
         super().__init__(settings, *args, **kwargs)
 
         if settings.templates_dir is None:

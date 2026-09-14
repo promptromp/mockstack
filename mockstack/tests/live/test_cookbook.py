@@ -149,7 +149,8 @@ def cookbook(upstream, render_rules, mockstack_server) -> Callable[..., str]:
             FIXTURES_DIR=str(recipe_dir / "fixtures"),
             UPSTREAM_URL=upstream.base_url,
         )
-        return mockstack_server(rules_file, **overrides).base_url
+        base_url: str = mockstack_server(rules_file, **overrides).base_url
+        return base_url
 
     return _start
 

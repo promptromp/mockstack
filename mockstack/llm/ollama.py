@@ -1,5 +1,8 @@
 """Ollama integration"""
 
+from typing import Any
+
+
 try:
     from ollama import ChatResponse, chat
 
@@ -30,13 +33,14 @@ if IS_OLLAMA_AVAILABLE:
 
     def content(response: ChatResponse) -> str:
         """Extract the message content from the LLM response."""
-        return response["message"]["content"]
+        message_content: str = response["message"]["content"]
+        return message_content
 
     def ollama(
         messages: list[dict[str, str]],
         model: str = "llama3.2",
-        *args,
-        **kwargs,
+        *args: Any,
+        **kwargs: Any,
     ) -> str:
         """Fluent interface for Ollama to be used in templates."""
 

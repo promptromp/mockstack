@@ -189,7 +189,7 @@ def _clear_upstream_calls(upstream: LiveServer) -> None:
 
 
 @pytest.fixture(scope="session")
-def proxyrules_settings(make_settings) -> Callable[..., Settings]:
+def proxyrules_settings(make_settings: Callable[..., Settings]) -> Callable[..., Settings]:
     """Factory: settings for a live proxyrules server on ``rules_file``.
 
     ``make_settings`` builds ``Settings`` only from the keyword arguments given here,
@@ -235,7 +235,7 @@ def mockstack_server(_live_servers, proxyrules_settings, write_rules) -> Iterato
 
 
 @pytest.fixture(scope="session")
-def render_rules(tmp_path_factory) -> Callable[..., Path]:
+def render_rules(tmp_path_factory: pytest.TempPathFactory) -> Callable[..., Path]:
     """Factory: an example's rules file with its ``${VAR}`` placeholders substituted,
     written to a new temporary ``rules.local.yml``.
 

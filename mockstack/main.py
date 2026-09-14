@@ -32,10 +32,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     return app
 
 
-def run():
+def run() -> None:
     """run the mockstack server."""
     parser = argparse.ArgumentParser()
-    cli_settings = CliSettingsSource(CliSettings, root_parser=parser)
+    cli_settings: CliSettingsSource[argparse.ArgumentParser] = CliSettingsSource(CliSettings, root_parser=parser)
     settings = CliApp.run(CliSettings, cli_settings_source=cli_settings)
 
     app = create_app(settings=settings)
@@ -43,7 +43,7 @@ def run():
     uvicorn.run(app, host=settings.host, port=settings.port)
 
 
-def version():
+def version() -> None:
     """display mockstack version."""
     pkg_version = metadata.version("mockstack")
     # Command-line output.
