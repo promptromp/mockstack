@@ -57,6 +57,12 @@ dev = [
     "types-pyyaml>=6.0.12.20260906",
 ]
 
+[tool.setuptools.packages.find]
+# Repository checkout (./mockstack) and Docker image (/app/src/mockstack); the explicit
+# include keeps untracked top-level directories such as mkdocs' site/ out of discovery.
+where = [".", "src"]
+include = ["mockstack", "mockstack.*"]
+
 [tool.setuptools_scm]
 # can be empty if no extra settings are needed, presence enables setuptools-scm
 
