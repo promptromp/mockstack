@@ -428,3 +428,59 @@ def test_replacement_without_env_is_not_rendered():
     result = rule.apply(_request(path="/x"))
     assert isinstance(result, TemplateRuleResult)
     assert result.template_path == "/f/{{ id }}.json"
+
+
+def test_backreference_replacement_never_renders_request_controlled_path_text():
+    """A plain backreference replacement is never treated as a Jinja template, even
+    when the request path itself contains Jinja delimiters -- the decision to render
+    is made on the operator-authored `replacement`, never on substituted request data.
+    """
+    rule = Rule(
+        pattern=r"^/projects/(.*)$",
+        replacement=r"https://projects.example/\1",
+        env=Environment(),
+    )
+    result = rule.apply(_request(path="/projects/{{ 7*7 }}"))
+    assert isinstance(result, URLRuleResult)
+    assert "49" not in result.url
+    assert "{{ 7*7 }}" in result.url
+
+
+def test_jinja_replacement_renders_positional_groups():
+    rule = Rule(
+        pattern=r"^/projects/(.*)$",
+        replacement="https://projects.example/{{ groups[0] }}",
+        env=Environment(),
+    )
+    result = rule.apply(_request(path="/projects/api/v2/project/abc"))
+    assert isinstance(result, URLRuleResult)
+    assert result.url == "https://projects.example/api/v2/project/abc"
+
+
+def test_jinja_replacement_does_not_reevaluate_captured_group_as_template():
+    """The captured group text reaches the template only as a context value, which
+    Jinja renders literally rather than re-parsing as template source.
+    """
+    rule = Rule(
+        pattern=r"^/projects/(.*)$",
+        replacement="https://projects.example/{{ groups[0] }}",
+        env=Environment(),
+    )
+    result = rule.apply(_request(path="/projects/{{ 7*7 }}"))
+    assert isinstance(result, URLRuleResult)
+    assert "49" not in result.url
+    assert "{{ 7*7 }}" in result.url
+
+
+def test_template_context_groups_key_not_clobbered_by_heuristic_identifier():
+    """A path like `/groups/42` yields a heuristic identifier keyed `groups` (the
+    filefixtures-style inference treats `42` as an id nested under the `groups`
+    path segment); the mandated `groups` tuple of positional regex groups must win.
+    """
+    rule = Rule(
+        pattern=r"^/groups/(\d+)$",
+        replacement="file:///f.json",
+    )
+    result = rule.apply(_request(path="/groups/42"))
+    assert isinstance(result, TemplateRuleResult)
+    assert result.template_context["groups"] == ("42",)

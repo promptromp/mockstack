@@ -145,3 +145,16 @@ def test_unknown_scenario_returns_404_not_upstream(scenarios, upstream):
     )
     assert r.status_code == 404
     assert upstream.calls == []
+
+
+def test_traversal_scenario_returns_404_not_upstream(scenarios, upstream):
+    """A scenario header carrying a ``..`` path traversal attempt must be rejected by
+    the strategy's own guard, not merely by the (still permissive, ``.*``) header
+    predicate -- proving the fixture directory can't be escaped via header content.
+    """
+    r = httpx.get(
+        f"{scenarios.base_url}/projects/api/v2/project/abc",
+        headers={"X-Request-Eval-Scenario": "../healthy"},
+    )
+    assert r.status_code == 404
+    assert upstream.calls == []

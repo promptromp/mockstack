@@ -176,7 +176,7 @@ class Rule:
             path += quote("#") + request.url.fragment
 
         template_context = self._create_template_context(request, payload)
-        result = self._render(self._url_for(path), template_context)
+        result = self._resolve_replacement(path, template_context)
 
         # Check if the replacement is a file template
         if result.startswith(PROXYRULES_FILE_TEMPLATE_PREFIX):
@@ -194,11 +194,23 @@ class Rule:
     def _url_for(self, path: str) -> str:
         return re.sub(self.pattern, self.replacement, path)
 
-    def _render(self, value: str, context: dict) -> str:
-        """Render Jinja expressions in a replacement, if any and if an environment is set."""
-        if self.env is None or not any(d in value for d in JINJA_DELIMITERS):
-            return value
-        return self.env.from_string(value).render(**context)
+    def _resolve_replacement(self, path: str, context: dict) -> str:
+        """Resolve ``self.replacement`` into the final URL/file path.
+
+        The decision to treat ``replacement`` as a Jinja template is made on
+        ``self.replacement`` itself (operator-authored text), never on request-controlled
+        data. When it contains Jinja delimiters and an environment is configured, the
+        *replacement string* is rendered directly against the template context -- regex
+        backreferences (``\\1``, ``\\g<name>``) are NOT expanded in that mode, since
+        ``re.sub`` never runs. Request data only ever reaches the template as context
+        values, which Jinja does not re-parse as template source. Otherwise, behaviour is
+        unchanged: ``re.sub`` performs the regex backreference substitution.
+        """
+        if self.env is not None and any(
+            d in self.replacement for d in JINJA_DELIMITERS
+        ):
+            return self.env.from_string(self.replacement).render(**context)
+        return self._url_for(path)
 
     def _create_template_context(
         self, request: Request, payload: RequestPayload
@@ -217,8 +229,8 @@ class Rule:
             "path": request.url.path,
             "method": request.method,
             "request_json": payload.json,
-            "groups": groups,
             **identifiers,
+            "groups": groups,
             **named,
         }
 

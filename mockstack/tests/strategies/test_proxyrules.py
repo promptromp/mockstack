@@ -176,6 +176,43 @@ async def test_proxy_rules_strategy_apply_template(settings, span, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_apply_template_rejects_path_traversal(settings, span, tmp_path):
+    """A rendered ``file://`` path containing ``..`` -- e.g. built in part from an
+    unconstrained request value such as a header matched by ``.*`` -- must never be
+    opened. It 404s without ever calling `open`, and the response body does not echo
+    back the rejected path.
+    """
+    strategy = ProxyRulesStrategy(settings)
+    rule = Rule.from_dict(
+        {
+            "pattern": r"^/x$",
+            "replacement": f"file://{tmp_path}/fixtures/../../../etc/passwd",
+        }
+    )
+
+    with (
+        patch.object(strategy, "rule_for", return_value=rule),
+        patch("builtins.open") as mock_open,
+    ):
+        request = Request(
+            scope={
+                "type": "http",
+                "method": "GET",
+                "path": "/x",
+                "query_string": b"",
+                "headers": [],
+            },
+            receive=_empty_body_receive,
+        )
+        request.state.span = span
+        response = await strategy.apply(request)
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        mock_open.assert_not_called()
+        assert "passwd" not in response.body.decode()
+
+
+@pytest.mark.asyncio
 async def test_apply_renders_request_json_from_body(settings, span, tmp_path):
     template_file = tmp_path / "sql.json"
     template_file.write_text('{"echo": {{ request_json.query | tojson }}}')
