@@ -16,9 +16,32 @@ from mockstack.constants import ProxyRulesRedirectVia
 from mockstack.strategies.filefixtures import FileFixturesStrategy
 
 
+class _EnvIsolatedSettings(Settings):
+    """``Settings`` that ignore environment variables and ``.env`` files entirely.
+
+    Passing ``_env_file=None`` only skips the ``.env`` file source; the
+    environment-variable source still runs and would pick up a developer's own
+    exported ``MOCKSTACK__*`` variables. Overriding ``settings_customise_sources``
+    to keep only ``init_settings`` means a test's ``Settings`` are built solely from
+    the keyword arguments given (and field defaults), never from the shell.
+    """
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls,
+        init_settings,
+        env_settings,
+        dotenv_settings,
+        file_secret_settings,
+    ):
+        return (init_settings,)
+
+
 @pytest.fixture(scope="session")
 def make_settings() -> Callable[..., Settings]:
-    """Factory: ``Settings`` that ignore any ``.env`` file and keep OpenTelemetry off.
+    """Factory: ``Settings`` that ignore ``MOCKSTACK__*`` environment variables and
+    any ``.env`` file, and keep OpenTelemetry off.
 
     ``overrides`` are passed to ``Settings`` and take precedence, including over
     ``opentelemetry``. Session-scoped so module-scoped live servers can use it too.
@@ -29,9 +52,7 @@ def make_settings() -> Callable[..., Settings]:
             "opentelemetry": OpenTelemetrySettings(enabled=False),
             **overrides,
         }
-        # pydantic-settings accepts `_env_file` at runtime; mypy's view of the model's
-        # synthesized __init__ only lists the declared fields.
-        return Settings(_env_file=None, **options)  # type: ignore[call-arg]
+        return _EnvIsolatedSettings(**options)
 
     return _make
 

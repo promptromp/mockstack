@@ -25,10 +25,22 @@ def proxy(upstream, mockstack_server):
     )
 
 
-def test_each_test_starts_without_recorded_upstream_calls(upstream):
-    """The session-wide upstream's calls are cleared before every live test, and server
-    readiness is not probed over HTTP, so no test sees another test's requests or a
-    readiness probe as a spurious first entry.
+def test_a_proxied_request_is_recorded_on_the_shared_upstream(proxy, upstream):
+    """Sets up the state the next test relies on: a proxied request leaves a call on
+    the session-wide ``upstream``."""
+    r = httpx.get(f"{proxy.base_url}/upstream/ping")
+    assert r.status_code == 200
+    assert len(upstream.calls) == 1
+
+
+def test_upstream_calls_are_cleared_before_the_next_test(upstream):
+    """Depends on running immediately after
+    ``test_a_proxied_request_is_recorded_on_the_shared_upstream`` in this module:
+    pytest collects and runs tests in file order (no randomization plugin is
+    installed), so that test's recorded call is still the only thing that could be on
+    ``upstream`` here. The autouse ``_clear_upstream_calls`` fixture must have reset it
+    by the time this test starts, and server readiness is not probed over HTTP, so no
+    readiness probe shows up as a spurious call either.
     """
     assert upstream.calls == []
 

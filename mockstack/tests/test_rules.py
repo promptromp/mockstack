@@ -280,6 +280,13 @@ def test_rule_without_predicates_matches_any_headers(make_request):
         # A present JSON null is None, which never equals the MISSING sentinel.
         ({"v": None}, "v", None),
     ],
+    ids=[
+        "top-level-scalar",
+        "nested-dict-path",
+        "list-index-path",
+        "top-level-int",
+        "present-none-value",
+    ],
 )
 def test_lookup_path(data, path, expected):
     assert lookup_path(data, path) == expected
@@ -343,6 +350,30 @@ def _sql_payload(sql):
             RequestPayload('{"obj": {"name": "café"}}'.encode()),
             True,
         ),
+    ],
+    ids=[
+        "body-regex-matches",
+        "body-regex-no-match",
+        "json-field-regex-matches",
+        "json-field-regex-not-full-match",
+        "json-nested-dotted-path-matches",
+        "json-nested-dotted-path-missing",
+        "empty-payload-no-match",
+        "none-payload-no-match",
+        "empty-payload-body-predicate-no-match",
+        "nonempty-body-predicate-matches",
+        "json-bool-lowercase-matches",
+        "json-bool-case-mismatch-no-match",
+        "json-null-value-wildcard-matches",
+        "json-null-value-literal-matches",
+        "json-null-value-mismatch-no-match",
+        "json-absent-field-no-match",
+        "json-float-matches",
+        "json-object-serialized-matches",
+        "json-object-key-order-normalized",
+        "json-string-matches",
+        "json-string-quoted-value-no-match",
+        "json-object-unicode-matches",
     ],
 )
 def test_rule_matches_body_predicates(make_request, predicate, payload, expected):

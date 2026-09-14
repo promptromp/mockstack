@@ -93,7 +93,10 @@ def serve(app: FastAPI) -> LiveServer:
 
     finished = server.startup_finished.wait(STARTUP_TIMEOUT)
     if not (finished and server.started and thread.is_alive()):
+        # Ask uvicorn to exit and give it a chance to actually stop before closing
+        # the socket out from under it or abandoning the thread unjoined.
         live.request_stop()
+        thread.join(SHUTDOWN_TIMEOUT)
         sock.close()
         reason = (
             "failed to start" if finished else f"did not start in {STARTUP_TIMEOUT}s"
@@ -114,8 +117,14 @@ def _live_servers() -> Iterator[list[LiveServer]]:
     yield servers
     for live in servers:
         live.request_stop()
+    errors: list[RuntimeError] = []
     for live in servers:
-        live.stop()
+        try:
+            live.stop()
+        except RuntimeError as exc:
+            errors.append(exc)
+    if errors:
+        raise ExceptionGroup("failed to stop live servers", errors)
 
 
 async def _client_disconnected(request: Request) -> None:
@@ -189,9 +198,10 @@ def _clear_upstream_calls(upstream: LiveServer) -> None:
 def proxyrules_settings(make_settings) -> Callable[..., Settings]:
     """Factory: settings for a live proxyrules server on ``rules_file``.
 
-    Every option the live tests rely on is passed explicitly, so ``MOCKSTACK__*``
-    environment variables cannot change it, and ``make_settings`` skips any ``.env``
-    file. ``overrides`` still take precedence.
+    ``make_settings`` builds ``Settings`` only from the keyword arguments given here,
+    ignoring any ``MOCKSTACK__*`` environment variable or ``.env`` file, so every
+    option the live tests rely on is passed explicitly below. ``overrides`` still
+    take precedence.
     """
 
     def _settings(rules_file: Path, **overrides: Any) -> Settings:
