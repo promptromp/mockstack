@@ -17,6 +17,8 @@ from mockstack.config import Settings
 from mockstack.constants import (
     CONTENT_ENCODING_COMPRESSED,
     HOP_BY_HOP_HEADERS,
+    RESULT_RULE_HEADER,
+    RESULT_TYPE_HEADER,
     ProxyRulesRedirectVia,
 )
 from mockstack.intent import looks_like_a_create
@@ -45,6 +47,28 @@ def maybe_update_response_headers(
     _headers["content-length"] = str(content_length)
 
     return _headers
+
+
+def _header_safe(value: str) -> str:
+    """Make an arbitrary string safe to use as an HTTP header value.
+
+    Starlette encodes header values as latin-1, so a rule ``name``/``pattern``
+    containing non-Latin-1 characters (e.g. CJK) would otherwise raise
+    ``UnicodeEncodeError`` when the response is sent. CR/LF are also stripped
+    (replaced with a space) since they are not valid inside a single header value.
+    """
+    value = value.replace("\r", " ").replace("\n", " ")
+    return value.encode("ascii", "backslashreplace").decode("ascii")
+
+
+def with_result_headers(
+    response: Response, *, rule: Rule | None, result_type: str
+) -> Response:
+    """Stamp the response with which rule (if any) produced it and how."""
+    response.headers[RESULT_TYPE_HEADER] = result_type
+    if rule is not None:
+        response.headers[RESULT_RULE_HEADER] = _header_safe(rule.name or rule.pattern)
+    return response
 
 
 class ProxyRulesStrategy(BaseStrategy, CreateMixin):
@@ -111,9 +135,16 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
 
         # Handle template results
         if isinstance(result, TemplateRuleResult):
-            return await self.handle_template_result(request, rule, result)
+            response = await self.handle_template_result(request, rule, result)
+            return with_result_headers(response, rule=rule, result_type="template")
         elif isinstance(result, URLRuleResult):
-            return await self.handle_url_result(request, rule, result)
+            response = await self.handle_url_result(request, rule, result)
+            result_type = (
+                "proxy"
+                if self.redirect_via == ProxyRulesRedirectVia.REVERSE_PROXY
+                else "redirect"
+            )
+            return with_result_headers(response, rule=rule, result_type=result_type)
         else:
             raise TypeError(f"Unknown result type: {type(result)}")
 
@@ -127,16 +158,18 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             self.logger.info(
                 f"Simulating resource creation for missing rule for {request.method} {request.url.path}"
             )
-            return await self._create(
+            response = await self._create(
                 request,
                 env=self.env,
                 created_resource_metadata=self.created_resource_metadata,
             )
+            return with_result_headers(response, rule=None, result_type="create")
         else:
-            return JSONResponse(
+            response = JSONResponse(
                 content=self.missing_resource_fields,
                 status_code=status.HTTP_404_NOT_FOUND,
             )
+            return with_result_headers(response, rule=None, result_type="missing")
 
     async def handle_url_result(
         self, request: Request, rule: Rule, result: URLRuleResult

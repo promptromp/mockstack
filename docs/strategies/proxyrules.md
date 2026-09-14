@@ -140,6 +140,17 @@ The strategy automatically adds the following OpenTelemetry attributes:
 - `mockstack.proxyrules.rule_replacement`: The replacement URL template
 - `mockstack.proxyrules.rewritten_url`: The final URL after applying the rule
 
+## Result headers
+
+Every response from the `proxyrules` strategy carries:
+
+| Header | Value |
+| --- | --- |
+| `X-Mockstack-Result` | `template`, `proxy`, `redirect`, `create` or `missing` |
+| `X-Mockstack-Rule` | The matched rule's `name` (or its `pattern` when unnamed); absent when no rule matched |
+
+Test harnesses should assert on these to turn a silently proxied request into a failure.
+
 ## Example Rules
 
 Here are some example rules:
