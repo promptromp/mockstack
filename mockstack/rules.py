@@ -40,6 +40,24 @@ class RequestPayload:
         return cls.from_bytes(b"")
 
 
+def lookup_path(data: Any, dotted: str) -> Any | None:
+    """Resolve a dotted path (``a.b.0.c``) inside parsed JSON. Returns None when absent."""
+    current = data
+    for segment in dotted.split("."):
+        if isinstance(current, Mapping):
+            if segment not in current:
+                return None
+            current = current[segment]
+        elif isinstance(current, list) and segment.isdigit():
+            index = int(segment)
+            if index >= len(current):
+                return None
+            current = current[index]
+        else:
+            return None
+    return current
+
+
 class RuleResult(ABC):
     """Base class for rule application results."""
 
@@ -80,6 +98,8 @@ class Rule:
         name: str | None = None,
         headers: Mapping[str, str] | None = None,
         query: Mapping[str, str] | None = None,
+        body: str | None = None,
+        json: Mapping[str, str] | None = None,
     ):
         self.pattern = pattern
         self.replacement = replacement
@@ -88,9 +108,11 @@ class Rule:
         # Header names are case-insensitive; normalise once so matching is a plain lookup.
         self.headers = {k.lower(): v for k, v in (headers or {}).items()}
         self.query = dict(query or {})
+        self.body = body
+        self.json = dict(json or {})
 
     @classmethod
-    def from_dict(cls, data: dict) -> Self:
+    def from_dict(cls, data: dict[str, Any]) -> Self:
         return cls(
             pattern=data["pattern"],
             replacement=data["replacement"],
@@ -98,13 +120,15 @@ class Rule:
             name=data.get("name", None),
             headers=data.get("headers"),
             query=data.get("query"),
+            body=data.get("body"),
+            json=data.get("json"),
         )
 
-    def matches(self, request: Request) -> bool:
+    def matches(self, request: Request, payload: RequestPayload | None = None) -> bool:
         """Check if the rule matches the request.
 
-        All configured predicates must hold (logical AND). Predicate values are regular
-        expressions matched against the whole value.
+        All configured predicates must hold (logical AND). ``body`` / ``json`` predicates
+        never match when ``payload`` is ``None`` or empty (no request body).
         """
         if self.method is not None and request.method.lower() != self.method.lower():
             # if rule is limited to a specific HTTP method, validate first.
@@ -116,7 +140,24 @@ class Rule:
         if not _mapping_matches(self.headers, request.headers):
             return False
 
-        return _mapping_matches(self.query, request.query_params)
+        if not _mapping_matches(self.query, request.query_params):
+            return False
+
+        if self.body is None and not self.json:
+            return True
+
+        if payload is None or not payload.raw:
+            return False
+
+        if self.body is not None and re.search(self.body, payload.text) is None:
+            return False
+
+        for dotted, pattern in self.json.items():
+            value = lookup_path(payload.json, dotted)
+            if value is None or re.fullmatch(pattern, str(value)) is None:
+                return False
+
+        return True
 
     def apply(
         self, request: Request, payload: RequestPayload | None = None

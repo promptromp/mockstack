@@ -89,9 +89,11 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             data = yaml.safe_load(file)
             return [Rule.from_dict(rule) for rule in data["rules"]]
 
-    def rule_for(self, request: Request) -> Rule | None:
+    def rule_for(
+        self, request: Request, payload: RequestPayload | None = None
+    ) -> Rule | None:
         try:
-            return next(rule for rule in self.rules if rule.matches(request))
+            return next(rule for rule in self.rules if rule.matches(request, payload))
         except StopIteration:
             return None
 
@@ -100,7 +102,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         # reverse proxy and create-mixin paths can safely read it again later.
         payload = RequestPayload.from_bytes(await request.body())
 
-        rule = self.rule_for(request)
+        rule = self.rule_for(request, payload)
         if rule is None:
             return await self.handle_missing_rule(request)
 
