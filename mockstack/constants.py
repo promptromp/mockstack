@@ -23,6 +23,20 @@ CONTENT_ENCODING_COMPRESSED = (
 )
 
 
+# Headers that describe a single hop and must not be forwarded by a proxy (RFC 9110 §7.6.1),
+# plus content-length, which httpx / Starlette recompute for the buffered body.
+HOP_BY_HOP_HEADERS = (
+    "connection",
+    "keep-alive",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "te",
+    "trailer",
+    "transfer-encoding",
+    "upgrade",
+)
+
+
 class ProxyRulesRedirectVia(StrEnum):
     """The type of redirect to use for the proxy rules strategy.
 

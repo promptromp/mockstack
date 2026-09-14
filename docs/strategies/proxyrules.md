@@ -60,6 +60,10 @@ The strategy supports three redirection methods:
     - Server forwards the request to the target service
     - Client is unaware of the redirection
     - Useful when you need to work with clients that do not handle HTTP redirects gracefully.
+    - Request and response bodies are fully buffered. Hop-by-hop headers
+      (`Connection`, `Transfer-Encoding`, `Upgrade`, ...) and `Content-Length`
+      are stripped and recomputed on each side, so chunked clients and
+      chunked upstreams both work.
 
 ## Resource Creation Simulation
 
