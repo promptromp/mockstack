@@ -368,3 +368,15 @@ def test_rule_from_dict_with_body_predicates():
     )
     assert rule.body == "abc"
     assert rule.json == {"a.b": "1"}
+
+
+def test_template_context_includes_regex_groups():
+    rule = Rule(
+        pattern=r"^/juvenal/api/v2/project/(?P<project_id>[^/]+)/section/(\d+)$",
+        replacement="file:///f.json",
+    )
+    request = _request(path="/juvenal/api/v2/project/proj-1/section/42")
+    result = rule.apply(request)
+    assert isinstance(result, TemplateRuleResult)
+    assert result.template_context["project_id"] == "proj-1"
+    assert result.template_context["groups"] == ("proj-1", "42")
