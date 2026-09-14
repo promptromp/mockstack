@@ -65,5 +65,9 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "slow: live tests that bind real sockets; run with -m slow",
+]
+addopts = "-m 'not slow'"
 
 [tool.ruff.lint]
