@@ -83,14 +83,13 @@ class FileFixturesStrategy(BaseStrategy, CreateMixin):
         """
         request_json = (await request.json()) if wants_json(request) else None
         if self.enable_templates_for_post:
-            try:
-                return self._response_from_template(request, request_json=request_json)
-            except HTTPException as e:
-                if e.status_code == status.HTTP_404_NOT_FOUND:
-                    # If the template is not found, we try to create the resource with logic below.
-                    pass
-                else:
-                    raise
+            rendered = self._render_matching_template(
+                request, request_json=request_json
+            )
+            if rendered is not None:
+                return rendered
+            # No matching template: fall through to the search/command/create
+            # logic below to try to infer intent from the request instead.
 
         if looks_like_a_search(request):
             # Searching for resources with a complex query that cannot be expressed in a URI.
@@ -144,6 +143,30 @@ class FileFixturesStrategy(BaseStrategy, CreateMixin):
         request_json: dict | None = None,
         status_code: int = status.HTTP_200_OK,
     ) -> Response:
+        """Render the best-matching template, or a 404 if none matches."""
+        rendered = self._render_matching_template(request, request_json=request_json, status_code=status_code)
+        if rendered is not None:
+            return rendered
+
+        # if we get here, we have no template to render.
+        return JSONResponse(
+            content=self.missing_resource_fields,
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+
+    def _render_matching_template(
+        self,
+        request: Request,
+        *,
+        request_json: dict | None = None,
+        status_code: int = status.HTTP_200_OK,
+    ) -> Response | None:
+        """Render the best-matching template, or ``None`` if no template matches.
+
+        Used by ``_response_from_template`` (which turns a ``None`` into a 404),
+        and directly by ``_post`` so it can fall back to search/command/create
+        logic instead of failing when no template exists.
+        """
         for template_args in iter_possible_template_arguments(request, request_json=request_json):
             filename = self.templates_dir / template_args["name"]
             self.logger.debug("Looking for template filename: %s", filename)
@@ -161,10 +184,7 @@ class FileFixturesStrategy(BaseStrategy, CreateMixin):
             )
 
         # if we get here, we have no template to render.
-        return JSONResponse(
-            content=self.missing_resource_fields,
-            status_code=status.HTTP_404_NOT_FOUND,
-        )
+        return None
 
     def update_opentelemetry(self, request: Request, template_args: dict) -> None:
         """Update the opentelemetry span with the file fixtures details."""

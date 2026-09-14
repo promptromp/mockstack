@@ -16,6 +16,19 @@ def strategy(settings_filefixtures, tmp_path):
     return FileFixturesStrategy(settings_filefixtures.model_copy(update={"templates_dir": tmp_path}))
 
 
+@pytest.fixture
+def strategy_templates_for_post(settings_filefixtures, tmp_path):
+    """Like ``strategy``, but with ``filefixtures_enable_templates_for_post`` on."""
+    return FileFixturesStrategy(
+        settings_filefixtures.model_copy(
+            update={
+                "templates_dir": tmp_path,
+                "filefixtures_enable_templates_for_post": True,
+            }
+        )
+    )
+
+
 def test_filefixtures_strategy_init(settings_filefixtures):
     """Test the FileFixturesStrategy initialization."""
     strategy = FileFixturesStrategy(settings_filefixtures)
@@ -117,6 +130,92 @@ async def test_file_fixtures_strategy_post_create(strategy, traced_request):
     response = await strategy.apply(request)
 
     assert response.status_code == status.HTTP_201_CREATED
+
+
+@pytest.mark.asyncio
+async def test_file_fixtures_strategy_post_create_templates_for_post_no_template(
+    strategy_templates_for_post, traced_request
+):
+    """POST create, with templates-for-POST enabled and no matching template, falls
+    back to simulating resource creation instead of 404ing (regression test)."""
+    request = traced_request(
+        "/api/v1/projects",
+        method="POST",
+        headers={"content-type": "application/json"},
+        body=b'{"name": "test project"}',
+    )
+
+    response = await strategy_templates_for_post.apply(request)
+
+    assert response.status_code == status.HTTP_201_CREATED
+    body = json.loads(response.body.decode())
+    assert body["name"] == "test project"
+    assert "id" in body
+    assert "createdAt" in body
+
+
+@pytest.mark.asyncio
+async def test_file_fixtures_strategy_post_templates_for_post_matching_template(
+    strategy_templates_for_post, traced_request, write_template
+):
+    """POST with templates-for-POST enabled and a matching template renders the
+    template rather than simulating resource creation."""
+    write_template("api-v1-projects.j2", '{"status": "existing template"}')
+    request = traced_request(
+        "/api/v1/projects",
+        method="POST",
+        headers={"content-type": "application/json"},
+        body=b'{"name": "test project"}',
+    )
+
+    response = await strategy_templates_for_post.apply(request)
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.body.decode() == '{"status": "existing template"}'
+
+
+@pytest.mark.asyncio
+async def test_file_fixtures_strategy_post_search_templates_for_post_no_template(
+    strategy_templates_for_post, settings_filefixtures, traced_request
+):
+    """Pin today's behavior: a search-like POST with templates-for-POST enabled and
+    no matching template still returns 404, not a created resource."""
+    request = traced_request(
+        "/api/v1/projects/search",
+        method="POST",
+        headers={"content-type": "application/json"},
+        body=b'{"query": "test"}',
+    )
+
+    response = await strategy_templates_for_post.apply(request)
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert (
+        json.loads(response.body.decode())
+        == settings_filefixtures.missing_resource_fields
+    )
+
+
+@pytest.mark.asyncio
+async def test_file_fixtures_strategy_post_command_templates_for_post_no_template(
+    strategy_templates_for_post, settings_filefixtures, traced_request
+):
+    """Pin today's behavior: a command-like POST with templates-for-POST enabled and
+    no matching template still returns 404, not a created resource."""
+    request = traced_request(
+        "/api/v1/projects/123/run",
+        method="POST",
+        headers={"content-type": "application/json"},
+        body=b'{"action": "start"}',
+    )
+
+    response = await strategy_templates_for_post.apply(request)
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert (
+        json.loads(response.body.decode())
+        == settings_filefixtures.missing_resource_fields
+    )
 
 
 @pytest.mark.asyncio

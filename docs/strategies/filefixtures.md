@@ -96,7 +96,7 @@ The strategy automatically adds the following OpenTelemetry attributes:
 
 ## Error Handling
 
-When no matching template is found, the strategy returns a 404 response with the following structure:
+When no matching template is found, the strategy returns a 404 response with the following structure. The exception is a POST that looks like resource creation: with `filefixtures_enable_templates_for_post` enabled, a missing template there falls back to simulating creation (see [Resource Creation](#resource-creation)) instead of 404ing.
 
 ```json
 {
