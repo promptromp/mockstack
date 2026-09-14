@@ -100,8 +100,11 @@ class Rule:
 
         return re.match(self.pattern, request.url.path) is not None
 
-    def apply(self, request: Request) -> RuleResult:
+    def apply(
+        self, request: Request, payload: RequestPayload | None = None
+    ) -> RuleResult:
         """Apply the rule to the request."""
+        payload = payload if payload is not None else RequestPayload.empty()
         path = f"{request.url.path}"
         if request.url.fragment:
             # If a URL fragment component is present, we URL encode it and include it in the path to proxy.
@@ -115,7 +118,7 @@ class Rule:
             file_path = result[len(PROXYRULES_FILE_TEMPLATE_PREFIX) - 1 :]
 
             # Create template context from request
-            template_context = self._create_template_context(request)
+            template_context = self._create_template_context(request, payload)
 
             return TemplateRuleResult(
                 template_path=file_path,
@@ -128,7 +131,9 @@ class Rule:
     def _url_for(self, path: str) -> str:
         return re.sub(self.pattern, self.replacement, path)
 
-    def _create_template_context(self, request: Request) -> dict:
+    def _create_template_context(
+        self, request: Request, payload: RequestPayload
+    ) -> dict:
         """Create template context from the request, using the same logic as templating.py."""
         path = request.url.path
         _, identifiers = parse_template_name_segments_and_identifiers(
@@ -139,5 +144,6 @@ class Rule:
             "headers": dict(request.headers),
             "path": request.url.path,
             "method": request.method,
+            "request_json": payload.json,
             **identifiers,
         }

@@ -17,6 +17,16 @@ from mockstack.strategies.proxyrules import (
 )
 
 
+async def _empty_body_receive():
+    """ASGI receive callable yielding an empty request body.
+
+    ``ProxyRulesStrategy.apply`` now reads ``request.body()`` unconditionally, so
+    requests built without a real ASGI ``receive`` channel need one to avoid
+    Starlette's "Receive channel has not been made available" error.
+    """
+    return {"type": "http.request", "body": b"", "more_body": False}
+
+
 def test_proxy_rules_strategy_load_rules(settings):
     """Test loading rules from the rules file."""
     strategy = ProxyRulesStrategy(settings)
@@ -71,7 +81,8 @@ async def test_proxy_rules_strategy_apply(settings, span):
             "path": "/api/v1/projects/123",
             "query_string": b"",
             "headers": [],
-        }
+        },
+        receive=_empty_body_receive,
     )
     request.state.span = span
     response = await strategy.apply(request)
@@ -90,7 +101,8 @@ async def test_proxy_rules_strategy_apply_with_fragment(settings, span):
             "path": "/api/v1/projects/123",
             "query_string": b"",
             "headers": [],
-        }
+        },
+        receive=_empty_body_receive,
     )
     # Set URL with fragment (fragments are client-side only in HTTP, but we test the logic)
     request._url = URL("http://testserver/api/v1/projects/123#section")
@@ -111,7 +123,8 @@ async def test_proxy_rules_strategy_apply_no_match(settings, span):
             "path": "/nonexistent/path",
             "query_string": b"",
             "headers": [],
-        }
+        },
+        receive=_empty_body_receive,
     )
     request.state.span = span
     response = await strategy.apply(request)
@@ -146,7 +159,8 @@ async def test_proxy_rules_strategy_apply_template(settings, span, tmp_path):
                 "path": "/api/v1/projects/1234",
                 "query_string": b"",
                 "headers": [],
-            }
+            },
+            receive=_empty_body_receive,
         )
         request.state.span = span
         response = await strategy.apply(request)
@@ -154,6 +168,40 @@ async def test_proxy_rules_strategy_apply_template(settings, span, tmp_path):
         assert response.status_code == 200
         assert response.media_type == "application/json"
         assert response.body.decode() == '{"projects": "1234", "name": "Project 1234"}'
+
+
+@pytest.mark.asyncio
+async def test_apply_renders_request_json_from_body(settings, span, tmp_path):
+    template_file = tmp_path / "sql.json"
+    template_file.write_text('{"echo": {{ request_json.query | tojson }}}')
+    strategy = ProxyRulesStrategy(settings)
+    rule = Rule.from_dict(
+        {
+            "pattern": r"^/analytics/v2/sql$",
+            "method": "POST",
+            "replacement": f"file://{template_file}",
+        }
+    )
+    body = b'{"query": "SELECT 1"}'
+
+    async def receive():
+        return {"type": "http.request", "body": body, "more_body": False}
+
+    request = Request(
+        scope={
+            "type": "http",
+            "method": "POST",
+            "path": "/analytics/v2/sql",
+            "query_string": b"",
+            "headers": [(b"content-type", b"application/json")],
+        },
+        receive=receive,
+    )
+    request.state.span = span
+    with patch.object(strategy, "rule_for", return_value=rule):
+        response = await strategy.apply(request)
+    assert response.status_code == 200
+    assert response.body == b'{"echo": "SELECT 1"}'
 
 
 def test_proxy_rules_strategy_get_content_type(settings):
@@ -221,7 +269,8 @@ async def test_proxy_rules_strategy_apply_permanent_redirect(settings, span):
             "path": "/api/v1/projects/123",
             "query_string": b"",
             "headers": [],
-        }
+        },
+        receive=_empty_body_receive,
     )
     request.state.span = span
     response = await strategy.apply(request)
@@ -242,7 +291,8 @@ async def test_proxy_rules_strategy_apply_invalid_redirect_via(settings, span):
             "path": "/api/v1/projects/123",
             "query_string": b"",
             "headers": [],
-        }
+        },
+        receive=_empty_body_receive,
     )
     request.state.span = span
     with pytest.raises(ValueError, match="Invalid redirect via value"):
