@@ -25,10 +25,18 @@ def proxy(tmp_path, upstream, mockstack_server):
     return mockstack_server(proxyrules_settings(rules))
 
 
+def test_readiness_probe_is_not_recorded(upstream):
+    """The `_serve()` readiness poll hits `/__ready` before tests run; it must not
+    be recorded as a call, otherwise every test would see it as a spurious first entry.
+    """
+    assert upstream.calls == []
+
+
 def test_fixed_length_body_is_forwarded(proxy, upstream):
     big = {"query": "SELECT 1", "pad": "x" * 200_000}
     r = httpx.post(f"{proxy.base_url}/upstream/api/v1/thing?a=1", json=big)
     assert r.status_code == 200
+    assert len(upstream.calls) == 1
     assert json.loads(upstream.calls[-1]["body"]) == big
     assert upstream.calls[-1]["query"] == {"a": "1"}
 
