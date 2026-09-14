@@ -39,6 +39,18 @@ HOP_BY_HOP_HEADERS = (
     "upgrade",
 )
 
+# Response headers a proxyrules fixture rule may not set in ``response_headers``: message
+# framing and connection headers, the ASGI server's own, and the result headers.
+MOCKSTACK_OWNED_RESPONSE_HEADERS = frozenset(
+    {
+        *HOP_BY_HOP_HEADERS,
+        "content-length",
+        *SERVER_SUPPLIED_RESPONSE_HEADERS,
+        RESULT_RULE_HEADER.lower(),
+        RESULT_TYPE_HEADER.lower(),
+    }
+)
+
 
 class ProxyRulesRedirectVia(StrEnum):
     """The type of redirect to use for the proxy rules strategy.

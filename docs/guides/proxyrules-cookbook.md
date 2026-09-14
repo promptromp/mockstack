@@ -416,3 +416,69 @@ Things to know before choosing redirect mode:
 - The client must be able to reach the upstream itself, and must follow redirects.
 - The original query string is kept: it is appended to the rewritten URL in
   `location` (with `&` if the replacement already has a query of its own).
+
+## 8. Fixture status codes and headers
+
+A fixture is answered with HTTP 200 unless its rule sets `status`, which makes it easy to
+test how a client handles a dependency that is down, throttled, or answers with a
+non-200 success. `response_headers` adds headers such as `Retry-After` or `Location`; a
+list value sends a header once per item, and a `Content-Type` replaces the type inferred
+from the file suffix. The response is still stamped `X-Mockstack-Result: template`: the
+status came from your fixture, so `error` keeps meaning that mockstack itself failed.
+
+```yaml title="08-status-and-headers/rules.yml"
+--8<-- "examples/proxyrules-cookbook/08-status-and-headers/rules.yml"
+```
+
+```jinja title="08-status-and-headers/fixtures/errors/unavailable.json.j2"
+--8<-- "examples/proxyrules-cookbook/08-status-and-headers/fixtures/errors/unavailable.json.j2"
+```
+
+```jinja title="08-status-and-headers/fixtures/errors/rate-limited.json.j2"
+--8<-- "examples/proxyrules-cookbook/08-status-and-headers/fixtures/errors/rate-limited.json.j2"
+```
+
+```jinja title="08-status-and-headers/fixtures/orders/created.json.j2"
+--8<-- "examples/proxyrules-cookbook/08-status-and-headers/fixtures/orders/created.json.j2"
+```
+
+```bash
+curl -i -H "X-Test-Scenario: outage" http://127.0.0.1:8000/orders/api/v1/orders/ord-1001
+# HTTP/1.1 503 Service Unavailable
+# retry-after: 30
+# x-mockstack-result: template
+# x-mockstack-rule: orders-outage
+# {"error": "service unavailable", "order_id": "ord-1001"}
+
+curl -i -H "X-Test-Scenario: throttled" http://127.0.0.1:8000/orders/api/v1/orders/ord-1001
+# HTTP/1.1 429 Too Many Requests
+# content-type: application/problem+json
+# retry-after: 5
+# x-mockstack-result: template
+# x-mockstack-rule: orders-rate-limited
+# {"type": "about:blank", "title": "Too Many Requests", "status": 429}
+
+curl -i -H "Content-Type: application/json" -d '{"customer": "cust-7"}' http://127.0.0.1:8000/orders/api/v1/orders
+# HTTP/1.1 201 Created
+# location: /orders/api/v1/orders/ord-1001
+# x-mockstack-result: template
+# x-mockstack-rule: order-created
+# {"id": "ord-1001", "status": "OPEN", "customer": "cust-7"}
+
+curl -i http://127.0.0.1:8000/orders/api/v1/orders/ord-1001
+# HTTP/1.1 200 OK
+# x-mockstack-result: proxy
+# x-mockstack-rule: orders-passthrough
+# {"source":"upstream","path":"/api/v1/orders/ord-1001","method":"GET",...}
+```
+
+Things to know:
+
+- The status and headers apply only once the fixture has rendered. A missing fixture is
+  still a 404 stamped `error`, without them.
+- A `204` or `304` is sent without a body, but its fixture file must still exist.
+- `status` and `response_headers` only work on `file:///` fixture rules: mockstack
+  refuses to start when a rule whose `replacement` is a URL sets them.
+- Headers that mockstack manages cannot be set: `Content-Length`, hop-by-hop headers
+  such as `Connection` and `Transfer-Encoding`, `Date`, `Server` and the
+  `X-Mockstack-*` result headers.

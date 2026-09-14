@@ -13,6 +13,7 @@ docs page. Each numbered directory holds one recipe's `rules.yml` and `fixtures/
 | `05-query-parameters` | Query-parameter predicates |
 | `06-asserting-in-tests` | Asserting in a test suite, and reading error results |
 | `07-redirect-mode` | Redirect mode versus reverse proxy |
+| `08-status-and-headers` | Fixture status codes and headers: error responses, `201 Created` |
 
 `mockstack/tests/live/test_cookbook.py` loads these exact files and runs every `curl`
 command from the docs page against them, so the files and the page cannot drift.

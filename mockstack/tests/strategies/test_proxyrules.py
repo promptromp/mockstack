@@ -115,6 +115,24 @@ def test_proxy_rules_strategy_missing_rules_file(proxyrules_strategy):
             },
             r"rule '2024': predicate 'x-foo' has no value",
         ),
+        (
+            {
+                "name": "bad-status",
+                "pattern": "^/x$",
+                "replacement": "file:///f.json",
+                "status": 700,
+            },
+            r"rule 'bad-status': status must be an integer from 200 to 599",
+        ),
+        (
+            {
+                "name": "headers-on-url",
+                "pattern": "^/x$",
+                "replacement": "https://upstream.example/x",
+                "response_headers": {"x-a": "1"},
+            },
+            r"rule 'headers-on-url': status and response_headers only apply to file:/// fixtures",
+        ),
     ],
     ids=[
         "invalid-regex",
@@ -122,6 +140,8 @@ def test_proxy_rules_strategy_missing_rules_file(proxyrules_strategy):
         "reserved-group",
         "template-syntax",
         "predicate-without-value",
+        "invalid-status",
+        "response-headers-on-url",
     ],
 )
 def test_invalid_rules_file_fails_at_startup_with_rule_name(proxyrules_strategy, rule, message):
@@ -1108,3 +1128,93 @@ def test_with_result_headers_stamps_header_safe_rule_name(name, expected):
     rule.name = name  # bypass the constructor's str coercion
     response = with_result_headers(Response(), rule=rule, result_type="proxy")
     assert response.headers[RESULT_RULE_HEADER] == expected
+
+
+# --- fixture status and response headers ---------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_fixture_rule_status_and_response_headers(apply_rule, write_template):
+    """A fixture served with its rule's status and headers is still stamped ``template``:
+    ``error`` stays reserved for mockstack's own failures."""
+    template_file = write_template("unavailable.json.j2", '{"error": "unavailable", "path": {{ path | tojson }}}')
+    response = await apply_rule(
+        {
+            "name": "outage",
+            "pattern": r"^/x$",
+            "replacement": f"file://{template_file}",
+            "status": 503,
+            "response_headers": {"Retry-After": 30, "Set-Cookie": ["a=1", "b=2"]},
+        }
+    )
+    assert response.status_code == 503
+    assert response.headers["content-type"] == "application/json"
+    assert response.headers["retry-after"] == "30"
+    assert response.headers.getlist("set-cookie") == ["a=1", "b=2"]
+    assert response.headers[RESULT_TYPE_HEADER] == "template"
+    assert response.headers[RESULT_RULE_HEADER] == "outage"
+    assert json.loads(response.body) == {"error": "unavailable", "path": "/x"}
+
+
+@pytest.mark.asyncio
+async def test_response_headers_content_type_replaces_the_suffix_content_type(apply_rule, write_template):
+    template_file = write_template("problem.json.j2", '{"title": "Forbidden"}')
+    response = await apply_rule(
+        {
+            "pattern": r"^/x$",
+            "replacement": f"file://{template_file}",
+            "status": 403,
+            "response_headers": {"Content-Type": "application/problem+json"},
+        }
+    )
+    assert response.status_code == 403
+    assert response.headers.getlist("content-type") == ["application/problem+json"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status_code", [204, 304])
+async def test_bodyless_fixture_status_sends_no_body(apply_rule, write_template, status_code):
+    """RFC 9110: a 204 or 304 has no content, whatever the fixture renders."""
+    template_file = write_template("ignored.json.j2", '{"ignored": true}')
+    response = await apply_rule(
+        {"pattern": r"^/x$", "replacement": f"file://{template_file}", "status": status_code},
+    )
+    assert response.status_code == status_code
+    assert response.body == b""
+    assert "content-length" not in response.headers
+    assert "content-type" not in response.headers
+    assert response.headers[RESULT_TYPE_HEADER] == "template"
+
+
+@pytest.mark.asyncio
+async def test_status_and_headers_do_not_apply_to_a_missing_fixture(apply_rule, tmp_path):
+    response = await apply_rule(
+        {
+            "name": "outage",
+            "pattern": r"^/x$",
+            "replacement": f"file://{tmp_path}/missing.json",
+            "status": 503,
+            "response_headers": {"Retry-After": "30"},
+        }
+    )
+    assert response.status_code == 404
+    assert response.headers[RESULT_TYPE_HEADER] == "error"
+    assert "retry-after" not in response.headers
+
+
+@pytest.mark.asyncio
+async def test_status_on_rule_whose_replacement_renders_a_url_is_stamped_500(apply_rule, caplog):
+    with caplog.at_level(logging.ERROR, logger="ProxyRulesStrategy"):
+        response = await apply_rule(
+            {
+                "name": "dynamic",
+                "pattern": r"^/(?P<rest>.*)$",
+                "replacement": "https://upstream.invalid/{{ rest }}",
+                "status": 503,
+            }
+        )
+    assert response.status_code == 500
+    assert response.headers[RESULT_TYPE_HEADER] == "error"
+    assert response.headers[RESULT_RULE_HEADER] == "dynamic"
+    assert json.loads(response.body) == {"error": "mockstack: internal error"}
+    assert "status and response_headers only apply to file:/// fixtures" in caplog.text

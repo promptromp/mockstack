@@ -748,3 +748,125 @@ def test_backreference_like_text_inside_jinja_comment_is_accepted(make_request):
     result = rule.apply(make_request("/x/abc"))
     assert isinstance(result, URLRuleResult)
     assert result.url == "abc"
+
+
+# --- fixture response status and headers -----------------------------------------------
+
+
+def test_rule_from_dict_with_status_and_response_headers():
+    """Header values are coerced to strings; a list value repeats the header."""
+    rule = Rule.from_dict(
+        {
+            "pattern": "^/x$",
+            "replacement": "file:///f.json",
+            "status": 503,
+            "response_headers": {"Retry-After": 30, "Set-Cookie": ["a=1", "b=2"]},
+        }
+    )
+    assert rule.status == 503
+    assert rule.response_headers == (("Retry-After", "30"), ("Set-Cookie", "a=1"), ("Set-Cookie", "b=2"))
+
+
+def test_rule_without_status_or_response_headers():
+    rule = Rule.from_dict({"pattern": "^/x$", "replacement": "file:///f.json"})
+    assert rule.status is None
+    assert rule.response_headers == ()
+
+
+@pytest.mark.parametrize(("value", "expected"), [(200, 200), (599, 599), ("503", 503)])
+def test_status_accepts_integers_and_numeric_strings(value, expected):
+    assert Rule(pattern="^/x$", replacement="file:///f.json", status=value).status == expected
+
+
+@pytest.mark.parametrize("value", [True, 100, 199, 600, "abc", " 503", "5e2", 503.0, [503]])
+def test_invalid_status_is_rejected_at_load(value):
+    with pytest.raises(ValueError, match=r"rule 'r1': status must be an integer from 200 to 599"):
+        Rule(name="r1", pattern="^/x$", replacement="file:///f.json", status=value)
+
+
+@pytest.mark.parametrize(
+    ("headers", "message"),
+    [
+        (["x-a: 1"], r"response_headers must be a mapping"),
+        ({"Bad Name": "1"}, r"invalid response header name 'Bad Name'"),
+        ({"": "1"}, r"invalid response header name ''"),
+        ({"x:y": "1"}, r"invalid response header name 'x:y'"),
+        ({"x-a": None}, r"response header 'x-a' has no value"),
+        ({"x-a": []}, r"response header 'x-a' has no value"),
+        ({"x-a": ["1", None]}, r"response header 'x-a' has no value"),
+        ({"x-a": {"nested": "1"}}, r"invalid response header value for 'x-a'"),
+        ({"x-a": [["1"]]}, r"invalid response header value for 'x-a'"),
+        ({"x-a": "a\r\nx-injected: 1"}, r"invalid response header value for 'x-a'"),
+        ({"x-a": "\x00"}, r"invalid response header value for 'x-a'"),
+        ({"x-a": "日本"}, r"invalid response header value for 'x-a'"),
+    ],
+)
+def test_invalid_response_headers_are_rejected_at_load(headers, message):
+    with pytest.raises(ValueError, match=rf"rule 'r1': {message}"):
+        Rule(name="r1", pattern="^/x$", replacement="file:///f.json", response_headers=headers)
+
+
+def test_response_header_value_may_contain_tabs_and_latin1():
+    rule = Rule(pattern="^/x$", replacement="file:///f.json", response_headers={"x-a": "a\tcafé"})
+    assert rule.response_headers == (("x-a", "a\tcafé"),)
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "Content-Length",
+        "transfer-encoding",
+        "connection",
+        "keep-alive",
+        "upgrade",
+        "date",
+        "Server",
+        "X-Mockstack-Result",
+        "x-mockstack-rule",
+    ],
+)
+def test_response_headers_owned_by_mockstack_are_rejected_at_load(name):
+    with pytest.raises(ValueError, match=rf"rule 'r1': response header '{name}' is set by mockstack"):
+        Rule(name="r1", pattern="^/x$", replacement="file:///f.json", response_headers={name: "1"})
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [{"status": 503}, {"response_headers": {"x-a": "1"}}],
+    ids=["status", "response_headers"],
+)
+@pytest.mark.parametrize("replacement", ["https://upstream.example/x", r"/api/\1"])
+def test_status_and_response_headers_on_url_replacement_are_rejected_at_load(fields, replacement):
+    with pytest.raises(
+        ValueError,
+        match=r"rule 'r1': status and response_headers only apply to file:/// fixtures",
+    ):
+        Rule(name="r1", pattern=r"^/x/(.*)$", replacement=replacement, **fields)
+
+
+def test_status_on_template_replacement_rendering_a_fixture_is_applied(make_request):
+    rule = Rule(
+        pattern=r"^/x/(?P<id>[^/]+)$",
+        replacement="file:///f/{{ id }}.json",
+        status=503,
+        env=Environment(),
+    )
+    result = rule.apply(make_request("/x/abc"))
+    assert isinstance(result, TemplateRuleResult)
+    assert result.template_path == "/f/abc.json"
+
+
+def test_status_on_template_replacement_rendering_a_url_fails_on_apply(make_request):
+    """Whether a rendered replacement is a fixture is only known per request."""
+    rule = Rule(
+        name="r1",
+        pattern=r"^/x/(?P<id>[^/]+)$",
+        replacement="https://upstream.example/{{ id }}",
+        response_headers={"x-a": "1"},
+        env=Environment(),
+    )
+    with pytest.raises(
+        ValueError,
+        match=r"rule 'r1': status and response_headers only apply to file:/// fixtures",
+    ):
+        rule.apply(make_request("/x/abc"))

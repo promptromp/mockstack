@@ -156,6 +156,9 @@ def with_query_string(url: str, query: str) -> str:
 
 _CONTROL_CHARACTERS_RE = re.compile(r"[\x00-\x1f\x7f]")
 
+# RFC 9110 §15.3.5 and §15.4.5: a 204 or 304 response has no content.
+_BODYLESS_STATUS_CODES = frozenset({status.HTTP_204_NO_CONTENT, status.HTTP_304_NOT_MODIFIED})
+
 
 def _header_safe(value: str) -> str:
     """Make an arbitrary string safe to use as an HTTP header value.
@@ -372,9 +375,13 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
     async def handle_template_result(self, request: Request, rule: Rule, result: TemplateRuleResult) -> Response:
         """Handle template results by rendering the template file.
 
-        Only a successful render is stamped ``template``; a missing fixture (404) or
-        a failed render (500) is stamped ``error``. Neither echoes the rendered path,
-        which may be built from request data, back to the client.
+        A rendered fixture is answered with the rule's ``status`` (200 by default) and
+        ``response_headers``, with no body for a 204 or 304, and a ``Content-Type`` in
+        ``response_headers`` replaces the one inferred from the file suffix. Only a
+        successful render is stamped ``template``; a missing fixture (404) or a failed
+        render (500) is stamped ``error``, without the rule's status or headers. Neither
+        echoes the rendered path, which may be built from request data, back to the
+        client.
         """
         template_path = Path(result.template_path)
 
@@ -411,17 +418,22 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             # Render the template with context
             rendered_content = template.render(**result.template_context)
 
-            # Determine content type based on file extension
-            content_type = self._get_content_type(template_path)
-
             # Update opentelemetry with template info
             self.update_opentelemetry_template(request, rule, result)
 
-            response = Response(
-                content=rendered_content,
-                media_type=content_type,
-                status_code=status.HTTP_200_OK,
-            )
+            status_code = rule.status if rule.status is not None else status.HTTP_200_OK
+            if status_code in _BODYLESS_STATUS_CODES:
+                response = Response(status_code=status_code)
+            else:
+                sets_content_type = any(name.lower() == "content-type" for name, _ in rule.response_headers)
+                response = Response(
+                    content=rendered_content,
+                    # Determine content type based on file extension
+                    media_type=None if sets_content_type else self._get_content_type(template_path),
+                    status_code=status_code,
+                )
+            for name, value in rule.response_headers:
+                response.headers.append(name, value)
             return with_result_headers(response, rule=rule, result_type="template")
 
         except Exception:
