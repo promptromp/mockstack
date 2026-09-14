@@ -21,7 +21,7 @@ settings = Settings(
     proxyrules_rules_filename="/path/to/rules.yaml",
     proxyrules_redirect_via="REVERSE_PROXY",  # or "HTTP_TEMPORARY_REDIRECT" or "HTTP_PERMANENT_REDIRECT"
     proxyrules_reverse_proxy_timeout=10.0,
-    proxyrules_simulate_create_on_missing=False
+    proxyrules_simulate_create_on_missing=False,
 )
 ```
 
@@ -60,6 +60,10 @@ The strategy supports three redirection methods:
     - Server forwards the request to the target service
     - Client is unaware of the redirection
     - Useful when you need to work with clients that do not handle HTTP redirects gracefully.
+    - Request and response bodies are fully buffered. Hop-by-hop headers
+      (`Connection`, `Transfer-Encoding`, `Upgrade`, ...) and `Content-Length`
+      are stripped and recomputed on each side, so chunked clients and
+      chunked upstreams both work.
 
 ## Resource Creation Simulation
 

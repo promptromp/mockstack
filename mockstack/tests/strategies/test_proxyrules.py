@@ -395,3 +395,36 @@ def test_maybe_update_response_headers_updates_content_encoding():
     assert updated_headers["content-encoding"] == "identity"
     assert updated_headers["content-type"] == "application/json"
     assert updated_headers["content-length"] == "100"
+
+
+def test_reverse_proxy_headers_strips_hop_by_hop_and_length():
+    """Forwarded request headers must not carry framing headers; httpx recomputes them."""
+    strategy = ProxyRulesStrategy(MagicMock())
+    headers = Headers(
+        {
+            "host": "example.com",
+            "transfer-encoding": "chunked",
+            "content-length": "5",
+            "connection": "keep-alive",
+            "x-request-eval-scenario": "healthy",
+        }
+    )
+    out = strategy.reverse_proxy_headers(headers, "https://api.target.com/p")
+    assert "transfer-encoding" not in out
+    assert "content-length" not in out
+    assert "connection" not in out
+    assert out["x-request-eval-scenario"] == "healthy"
+    assert out["host"] == "api.target.com"
+
+
+def test_maybe_update_response_headers_strips_transfer_encoding():
+    """Upstream chunked responses are buffered, so transfer-encoding must go and content-length be set."""
+    response_headers = httpx.Headers(
+        {"transfer-encoding": "chunked", "content-type": "application/json"}
+    )
+    updated = maybe_update_response_headers(
+        response_headers=response_headers, content_length=42
+    )
+    assert "transfer-encoding" not in updated
+    assert updated["content-length"] == "42"
+    assert updated["content-type"] == "application/json"

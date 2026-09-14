@@ -14,7 +14,11 @@ from jinja2 import Environment
 from starlette.datastructures import Headers
 
 from mockstack.config import Settings
-from mockstack.constants import CONTENT_ENCODING_COMPRESSED, ProxyRulesRedirectVia
+from mockstack.constants import (
+    CONTENT_ENCODING_COMPRESSED,
+    HOP_BY_HOP_HEADERS,
+    ProxyRulesRedirectVia,
+)
 from mockstack.intent import looks_like_a_create
 from mockstack.rules import Rule, TemplateRuleResult, URLRuleResult
 from mockstack.strategies.base import BaseStrategy
@@ -27,15 +31,18 @@ def maybe_update_response_headers(
     *,
     content_length: int,
 ) -> ResponseHeaders:
-    """Update the response headers if needed, e.g. to adjust for compression etc."""
+    """Update the response headers if needed, e.g. to adjust for compression and framing."""
     _headers = response_headers.copy()
 
+    for name in HOP_BY_HOP_HEADERS:
+        _headers.pop(name, None)
+
     if _headers.get("content-encoding") in CONTENT_ENCODING_COMPRESSED:
-        # If the response is compressed, we need to remove the content-encoding header
-        # since httpx will automatically decompress the response while proxying.
+        # httpx already decompressed the body while proxying.
         _headers["content-encoding"] = "identity"
-        # content length needs to be adjusted as well for uncompressed content.
-        _headers["content-length"] = str(content_length)
+
+    # We always return a fully buffered body, so the length is known.
+    _headers["content-length"] = str(content_length)
 
     return _headers
 
@@ -227,6 +234,11 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
     def reverse_proxy_headers(self, headers: Headers, url: str) -> Headers:
         """Mutate the request headers for the reverse proxy mode."""
         _headers = headers.mutablecopy()
+
+        for name in (*HOP_BY_HOP_HEADERS, "content-length"):
+            # We forward a fully buffered body; httpx sets the correct framing headers.
+            if name in _headers:
+                del _headers[name]
 
         # When reverse proxying, we must alter the Host header to the target URL.
         _headers["host"] = urlparse(url).netloc
