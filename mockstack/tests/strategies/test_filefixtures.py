@@ -273,3 +273,26 @@ def test_file_fixtures_strategy_update_opentelemetry(settings, span):
     span.set_attribute.assert_called_once_with(
         "mockstack.filefixtures.template_name", "test-template.j2"
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("method", ["HEAD", "OPTIONS"])
+async def test_file_fixtures_strategy_apply_rejects_head_and_options(
+    settings, span, method
+):
+    """The catch-all router routes HEAD and OPTIONS to the strategy; filefixtures keeps
+    answering anything but GET/POST/PATCH/PUT/DELETE with a 405."""
+    strategy = FileFixturesStrategy(settings)
+    request = Request(
+        scope={
+            "type": "http",
+            "method": method,
+            "path": "/api/v1/projects/123",
+            "query_string": b"",
+            "headers": [],
+        }
+    )
+    request.state.span = span
+    with pytest.raises(HTTPException) as info:
+        await strategy.apply(request)
+    assert info.value.status_code == status.HTTP_405_METHOD_NOT_ALLOWED

@@ -18,7 +18,6 @@ from starlette.requests import ClientDisconnect
 
 from mockstack.config import Settings
 from mockstack.constants import (
-    CONTENT_ENCODING_COMPRESSED,
     HOP_BY_HOP_HEADERS,
     RESULT_RULE_HEADER,
     RESULT_TYPE_HEADER,
@@ -29,6 +28,16 @@ from mockstack.rules import RequestPayload, Rule, TemplateRuleResult, URLRuleRes
 from mockstack.strategies.base import BaseStrategy
 from mockstack.strategies.create_mixin import CreateMixin
 from mockstack.templating import templates_env_provider
+
+try:
+    # Private httpx API: the content codings httpx decodes while reading a response
+    # (br / zstd only when brotli / zstandard are installed). Any other coding is
+    # skipped by httpx and reaches us still encoded.
+    from httpx._decoders import SUPPORTED_DECODERS as _HTTPX_DECODERS
+
+    DECODED_CONTENT_ENCODINGS = frozenset(_HTTPX_DECODERS)
+except ImportError:  # pragma: no cover - httpx moved its internals
+    DECODED_CONTENT_ENCODINGS = frozenset({"identity", "gzip", "deflate"})
 
 
 class UpstreamError(Exception):
@@ -74,12 +83,18 @@ def maybe_update_response_headers(
     _headers = response_headers.copy()
     strip_hop_by_hop(_headers)
 
+    body_was_decoded = False
     encoding = _headers.get("content-encoding")
     if encoding is not None:
-        tokens = [t.strip() for t in encoding.lower().split(",") if t.strip()]
-        if tokens and all(t in CONTENT_ENCODING_COMPRESSED for t in tokens):
-            # httpx already decompressed the body while proxying.
-            _headers["content-encoding"] = "identity"
+        tokens = [t.strip().lower() for t in encoding.split(",") if t.strip()]
+        remaining = [t for t in tokens if t not in DECODED_CONTENT_ENCODINGS]
+        if len(remaining) != len(tokens):
+            # httpx decoded these codings while reading the body; only the codings it
+            # skipped still apply. Left untouched when nothing was decoded.
+            _headers["content-encoding"] = ", ".join(remaining) or "identity"
+            body_was_decoded = any(
+                t != "identity" for t in tokens if t in DECODED_CONTENT_ENCODINGS
+            )
 
     if status_code < 200 or status_code in (
         status.HTTP_204_NO_CONTENT,
@@ -92,8 +107,11 @@ def maybe_update_response_headers(
         _headers.pop("content-length", None)
     elif request_method.upper() == "HEAD":
         # A HEAD response has no body; the upstream's Content-Length describes the
-        # representation a GET would return, so leave it (or its absence) untouched.
-        pass
+        # representation a GET would return, so leave it (or its absence) untouched --
+        # unless that representation is one we decode, in which case it is the encoded
+        # length and a GET through mockstack would report a different one.
+        if body_was_decoded:
+            _headers.pop("content-length", None)
     else:
         # We always return a fully buffered body, so the length is known.
         _headers["content-length"] = str(content_length)

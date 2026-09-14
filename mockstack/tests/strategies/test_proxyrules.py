@@ -1,5 +1,6 @@
 """Unit tests for the proxyrules module."""
 
+import gzip
 import json
 import logging
 from pathlib import Path
@@ -10,6 +11,7 @@ import pytest
 import yaml
 from fastapi import Request, Response, status
 from fastapi.responses import RedirectResponse
+from httpx._decoders import SUPPORTED_DECODERS
 from starlette.datastructures import URL, Headers, MutableHeaders
 from starlette.requests import ClientDisconnect
 
@@ -1181,18 +1183,37 @@ def test_maybe_update_response_headers_preserves_head_content_length(upstream_le
     assert updated.get("content-length") == upstream_length
 
 
+# httpx only decodes the codings in SUPPORTED_DECODERS (br / zstd only when brotli /
+# zstandard are installed) and silently skips the rest.
+BROTLI_DECODED = "br" in SUPPORTED_DECODERS
+ZSTD_DECODED = "zstd" in SUPPORTED_DECODERS
+
+
 @pytest.mark.parametrize(
     "encoding,expected",
     [
         ("gzip", "identity"),
         ("GZIP", "identity"),
-        ("gzip, br", "identity"),
         (" Deflate ", "identity"),
-        ("gzip, custom", "gzip, custom"),
+        ("gzip, deflate", "identity"),
         ("identity", "identity"),
+        ("br", "identity" if BROTLI_DECODED else "br"),
+        ("zstd", "identity" if ZSTD_DECODED else "zstd"),
+        ("gzip, br", "identity" if BROTLI_DECODED else "br"),
+        ("gzip, compress", "compress"),
+        ("compress", "compress"),
+        ("Compress", "Compress"),
+        ("dcb", "dcb"),
+        ("dcz", "dcz"),
+        ("x-custom", "x-custom"),
     ],
 )
-def test_maybe_update_response_headers_normalises_content_encoding(encoding, expected):
+def test_maybe_update_response_headers_relabels_only_decoded_encodings(
+    encoding, expected
+):
+    """Only codings httpx actually decoded may be removed from Content-Encoding; a
+    coding it skipped must stay, or the client gets an encoded body labelled
+    ``identity``. When nothing was decoded the value is left exactly as sent."""
     updated = maybe_update_response_headers(
         httpx.Headers({"content-encoding": encoding}),
         content_length=3,
@@ -1200,6 +1221,68 @@ def test_maybe_update_response_headers_normalises_content_encoding(encoding, exp
         request_method="GET",
     )
     assert updated["content-encoding"] == expected
+
+
+def test_head_drops_content_length_when_encoding_was_relabelled():
+    """On HEAD the upstream Content-Length is the *encoded* length; once the coding is
+    relabelled (a GET would be decoded) that length is wrong, so it is dropped."""
+    updated = maybe_update_response_headers(
+        httpx.Headers({"content-encoding": "gzip", "content-length": "1234"}),
+        content_length=0,
+        status_code=200,
+        request_method="HEAD",
+    )
+    assert updated["content-encoding"] == "identity"
+    assert "content-length" not in updated
+
+
+@pytest.mark.parametrize("encoding", ["compress", "identity"])
+def test_head_keeps_content_length_when_encoding_was_not_decoded(encoding):
+    """Nothing decoded (or only the no-op ``identity``): the upstream length stands."""
+    updated = maybe_update_response_headers(
+        httpx.Headers({"content-encoding": encoding, "content-length": "1234"}),
+        content_length=0,
+        status_code=200,
+        request_method="HEAD",
+    )
+    assert updated["content-encoding"] == encoding
+    assert updated["content-length"] == "1234"
+
+
+@pytest.mark.asyncio
+async def test_reverse_proxy_gzip_body_is_decoded_and_relabelled(
+    settings_reverse_proxy,
+):
+    raw = b'{"ok":true}'
+    upstream = httpx.Response(
+        200,
+        headers={"content-type": "application/json", "content-encoding": "gzip"},
+        content=gzip.compress(raw),
+    )
+    strategy = ProxyRulesStrategy(settings_reverse_proxy)
+    with patch.object(httpx.AsyncClient, "send", AsyncMock(return_value=upstream)):
+        response = await strategy.reverse_proxy(
+            _request_for("/x"), "http://upstream.invalid/x"
+        )
+    assert response.body == raw
+    assert response.headers["content-encoding"] == "identity"
+    assert response.headers["content-length"] == str(len(raw))
+
+
+@pytest.mark.asyncio
+async def test_reverse_proxy_undecoded_body_keeps_its_encoding(settings_reverse_proxy):
+    encoded = b"\x1f\x9d-lzw-compressed-bytes"
+    upstream = httpx.Response(
+        200, headers={"content-encoding": "compress"}, content=encoded
+    )
+    strategy = ProxyRulesStrategy(settings_reverse_proxy)
+    with patch.object(httpx.AsyncClient, "send", AsyncMock(return_value=upstream)):
+        response = await strategy.reverse_proxy(
+            _request_for("/x"), "http://upstream.invalid/x"
+        )
+    assert response.body == encoded
+    assert response.headers["content-encoding"] == "compress"
+    assert response.headers["content-length"] == str(len(encoded))
 
 
 def test_maybe_update_response_headers_strips_connection_listed_headers():

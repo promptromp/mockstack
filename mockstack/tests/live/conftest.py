@@ -14,7 +14,7 @@ import httpx
 import pytest
 import uvicorn
 import yaml
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 
 from mockstack.config import OpenTelemetrySettings, Settings
@@ -77,7 +77,14 @@ def upstream():
         response.set_cookie("second", "2")
         return response
 
-    @app.api_route("/{p:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
+    @app.api_route("/sized", methods=["GET", "HEAD"])
+    async def sized():
+        # Registered before the catch-all: a fixed 1234-byte body for GET and HEAD.
+        return Response(content=b"x" * 1234, media_type="application/octet-stream")
+
+    @app.api_route(
+        "/{p:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+    )
     async def echo(request: Request, p: str):
         body = await request.body()
         call = {

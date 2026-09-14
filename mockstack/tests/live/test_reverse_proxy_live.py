@@ -77,6 +77,28 @@ def test_repeated_set_cookie_headers_survive_reverse_proxy(proxy):
     assert cookies[1].startswith("second=2")
 
 
+def test_head_is_proxied_with_upstream_content_length(proxy, upstream):
+    """HEAD must reach the strategy (not a router 405) and keep the upstream's
+    Content-Length, which matches what the same GET returns."""
+    r = httpx.head(f"{proxy.base_url}/upstream/sized")
+    assert r.status_code == 200
+    assert r.headers["x-mockstack-result"] == "proxy"
+    assert r.headers["content-length"] == "1234"
+    assert r.content == b""
+
+    get = httpx.get(f"{proxy.base_url}/upstream/sized")
+    assert get.headers["content-length"] == "1234"
+    assert len(get.content) == 1234
+
+
+def test_options_is_proxied(proxy, upstream):
+    r = httpx.options(f"{proxy.base_url}/upstream/api/v1/thing")
+    assert r.status_code == 200
+    assert r.headers["x-mockstack-result"] == "proxy"
+    assert upstream.calls[-1]["method"] == "OPTIONS"
+    assert upstream.calls[-1]["path"] == "/api/v1/thing"
+
+
 def test_chunked_request_body_is_forwarded(proxy, upstream):
     def gen():
         for _ in range(10):

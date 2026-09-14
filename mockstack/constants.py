@@ -11,17 +11,6 @@ PROXYRULES_FILE_TEMPLATE_PREFIX = "file:///"
 
 SENSITIVE_HEADERS = ["authorization", "cookie", "set-cookie"]
 
-# See https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Encoding
-CONTENT_ENCODING_COMPRESSED = (
-    "gzip",
-    "compress",
-    "deflate",
-    "br",
-    "zstd",
-    "dcb",
-    "dcz",
-)
-
 
 # Response headers stamped by the proxyrules strategy so callers can assert which
 # rule served a request (and that a fixture, not the real upstream, answered).
