@@ -99,6 +99,16 @@ def test_options_is_proxied(proxy, upstream):
     assert upstream.calls[-1]["path"] == "/api/v1/thing"
 
 
+def test_proxied_response_has_single_date_and_server_headers(proxy, upstream):
+    """uvicorn adds its own date/server headers to every response; the upstream's must
+    not be forwarded on top of them."""
+    r = httpx.get(f"{proxy.base_url}/upstream/api/v1/thing")
+    assert r.status_code == 200
+    assert r.headers["x-mockstack-result"] == "proxy"
+    assert len(r.headers.get_list("date")) == 1
+    assert len(r.headers.get_list("server")) == 1
+
+
 def test_chunked_request_body_is_forwarded(proxy, upstream):
     def gen():
         for _ in range(10):

@@ -11,6 +11,11 @@ PROXYRULES_FILE_TEMPLATE_PREFIX = "file:///"
 
 SENSITIVE_HEADERS = ["authorization", "cookie", "set-cookie"]
 
+# Response headers the ASGI server supplies itself. uvicorn prepends its own `date` and
+# `server` to every response without checking the app's headers, so forwarding a proxied
+# upstream's copies would send each of them twice.
+SERVER_SUPPLIED_RESPONSE_HEADERS = ("date", "server")
+
 
 # Response headers stamped by the proxyrules strategy so callers can assert which
 # rule served a request (and that a fixture, not the real upstream, answered).

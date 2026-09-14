@@ -1456,3 +1456,135 @@ async def test_fixture_render_failure_is_logged_with_traceback(
     assert len(errors) == 1
     assert errors[0].exc_info is not None
     assert str(template_file) in errors[0].getMessage()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "redirect_via,status_code",
+    [
+        (ProxyRulesRedirectVia.HTTP_TEMPORARY_REDIRECT, 307),
+        (ProxyRulesRedirectVia.HTTP_PERMANENT_REDIRECT, 301),
+    ],
+    ids=["307", "301"],
+)
+@pytest.mark.parametrize(
+    "replacement,query_string,expected_location",
+    [
+        (
+            r"https://api.example/\1",
+            b"status=open",
+            "https://api.example/projects/123?status=open",
+        ),
+        (
+            r"https://api.example/\1?source=mockstack",
+            b"status=open&page=2",
+            "https://api.example/projects/123?source=mockstack&status=open&page=2",
+        ),
+        (
+            r"https://api.example/\1?",
+            b"status=open",
+            "https://api.example/projects/123?status=open",
+        ),
+        (
+            r"https://api.example/\1#top",
+            b"status=open",
+            "https://api.example/projects/123?status=open#top",
+        ),
+        (
+            r"https://api.example/\1",
+            b"",
+            "https://api.example/projects/123",
+        ),
+    ],
+    ids=[
+        "query-appended",
+        "merged-with-existing-query",
+        "target-ending-in-question-mark",
+        "query-before-target-fragment",
+        "no-query-no-trailing-question-mark",
+    ],
+)
+async def test_redirect_location_keeps_query_string(
+    settings,
+    span,
+    redirect_via,
+    status_code,
+    replacement,
+    query_string,
+    expected_location,
+):
+    """The replacement is resolved from the path only; redirect modes must carry the
+    original query string over to ``Location`` (reverse proxy forwards it as params)."""
+    settings.proxyrules_redirect_via = redirect_via
+    strategy = ProxyRulesStrategy(settings)
+    rule = Rule.from_dict(
+        {
+            "name": "redirect-rule",
+            "pattern": r"^/api/v1/(.*)$",
+            "replacement": replacement,
+        }
+    )
+    request = Request(
+        scope={
+            "type": "http",
+            "method": "GET",
+            "path": "/api/v1/projects/123",
+            "query_string": query_string,
+            "headers": [],
+        },
+        receive=_empty_body_receive,
+    )
+    request.state.span = span
+    with patch.object(strategy, "rule_for", return_value=rule):
+        response = await strategy.apply(request)
+    assert response.status_code == status_code
+    assert response.headers["location"] == expected_location
+    assert response.headers[RESULT_TYPE_HEADER] == "redirect"
+
+
+def test_maybe_update_response_headers_drops_upstream_date_and_server():
+    """The ASGI server (uvicorn) always prepends its own ``date`` and ``server``
+    headers without checking the app's; forwarding the upstream's too would duplicate
+    them."""
+    updated = maybe_update_response_headers(
+        httpx.Headers(
+            [
+                ("Date", "Mon, 01 Jan 2024 00:00:00 GMT"),
+                ("Server", "upstream/1.0"),
+                ("content-type", "application/json"),
+            ]
+        ),
+        content_length=2,
+        status_code=200,
+        request_method="GET",
+    )
+    assert "date" not in updated
+    assert "server" not in updated
+    assert updated["content-type"] == "application/json"
+
+
+@pytest.mark.asyncio
+async def test_reverse_proxy_copies_headers_without_upstream_date_and_server(
+    settings_reverse_proxy,
+):
+    upstream = httpx.Response(
+        200,
+        headers=[
+            ("date", "Mon, 01 Jan 2024 00:00:00 GMT"),
+            ("server", "upstream/1.0"),
+            ("set-cookie", "first=1"),
+            ("set-cookie", "second=2"),
+            ("content-type", "application/json"),
+        ],
+        content=b"{}",
+    )
+    strategy = ProxyRulesStrategy(settings_reverse_proxy)
+    with patch.object(httpx.AsyncClient, "send", AsyncMock(return_value=upstream)):
+        response = await strategy.reverse_proxy(
+            _request_for("/x"), "http://upstream.invalid/x"
+        )
+    names = [name for name, _ in response.raw_headers]
+    assert b"date" not in names
+    assert b"server" not in names
+    assert names.count(b"set-cookie") == 2
+    assert response.headers["content-type"] == "application/json"

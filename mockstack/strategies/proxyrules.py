@@ -21,6 +21,7 @@ from mockstack.constants import (
     HOP_BY_HOP_HEADERS,
     RESULT_RULE_HEADER,
     RESULT_TYPE_HEADER,
+    SERVER_SUPPLIED_RESPONSE_HEADERS,
     ProxyRulesRedirectVia,
 )
 from mockstack.intent import looks_like_a_create
@@ -94,6 +95,9 @@ def maybe_update_response_headers(
     """Update the response headers if needed, e.g. to adjust for compression and framing."""
     _headers = response_headers.copy()
     strip_hop_by_hop(_headers)
+    for name in SERVER_SUPPLIED_RESPONSE_HEADERS:
+        # The ASGI server adds its own; forwarding the upstream's would duplicate them.
+        _headers.pop(name, None)
 
     body_was_decoded = False
     encoding = _headers.get("content-encoding")
@@ -129,6 +133,27 @@ def maybe_update_response_headers(
         _headers["content-length"] = str(content_length)
 
     return _headers
+
+
+def with_query_string(url: str, query: str) -> str:
+    """Carry a request's raw query string over to a redirect target.
+
+    The replacement is resolved from the request path only, so redirect modes append
+    the original query themselves (reverse proxy forwards it as request params). The
+    query goes before any ``#fragment`` in the target, joined with ``&`` when the
+    target already has a query of its own (or directly when it already ends in ``?``
+    or ``&``). ``url`` is returned unchanged when ``query`` is empty.
+    """
+    if not query:
+        return url
+    base, hash_sign, fragment = url.partition("#")
+    if "?" not in base:
+        joiner = "?"
+    elif base.endswith(("?", "&")):
+        joiner = ""
+    else:
+        joiner = "&"
+    return f"{base}{joiner}{query}{hash_sign}{fragment}"
 
 
 _CONTROL_CHARACTERS_RE = re.compile(r"[\x00-\x1f\x7f]")
@@ -331,13 +356,15 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         match self.redirect_via:
             case ProxyRulesRedirectVia.HTTP_TEMPORARY_REDIRECT:
                 response: Response = RedirectResponse(
-                    url=result.url, status_code=status.HTTP_307_TEMPORARY_REDIRECT
+                    url=with_query_string(result.url, request.url.query),
+                    status_code=status.HTTP_307_TEMPORARY_REDIRECT,
                 )
                 return with_result_headers(response, rule=rule, result_type="redirect")
 
             case ProxyRulesRedirectVia.HTTP_PERMANENT_REDIRECT:
                 response = RedirectResponse(
-                    url=result.url, status_code=status.HTTP_301_MOVED_PERMANENTLY
+                    url=with_query_string(result.url, request.url.query),
+                    status_code=status.HTTP_301_MOVED_PERMANENTLY,
                 )
                 return with_result_headers(response, rule=rule, result_type="redirect")
 
