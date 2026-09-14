@@ -701,10 +701,20 @@ def test_request_payload_is_parsed_lazily():
     assert payload.json == {"a": 1}
 
 
+def test_request_payload_json_treats_recursion_error_as_not_json(monkeypatch):
+    def too_deep(_text):
+        raise RecursionError("maximum recursion depth exceeded while decoding a JSON array")
+
+    monkeypatch.setattr("mockstack.rules.json.loads", too_deep)
+    assert RequestPayload(b"[[1]]").json is None
+
+
 def test_request_payload_deeply_nested_json_does_not_raise():
+    # Whether the parser accepts this depth depends on the interpreter and platform
+    # (Python 3.14 on Linux parses it); the contract is only that access never raises.
     depth = 100_000
     payload = RequestPayload(b"[" * depth + b"]" * depth)
-    assert payload.json is None
+    assert payload.json is None or isinstance(payload.json, list)
 
 
 def test_request_payload_equality_is_field_based():
