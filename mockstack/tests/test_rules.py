@@ -1,13 +1,17 @@
 """Unit-tests for the rules module."""
 
 import json
+import re
+from unittest.mock import patch
 
 import pytest
 from fastapi import Request
-from jinja2 import Environment
+from jinja2 import Environment, TemplateSyntaxError, UndefinedError
 from starlette.datastructures import URL
 
 from mockstack.rules import (
+    MISSING,
+    RESERVED_CONTEXT_KEYS,
     RequestPayload,
     Rule,
     TemplateRuleResult,
@@ -321,14 +325,30 @@ def test_rule_without_predicates_matches_any_headers():
         ({"filter": {"client": {"id": "c1"}}}, "filter.client.id", "c1"),
         ({"items": [{"name": "a"}, {"name": "b"}]}, "items.1.name", "b"),
         ({"n": 5}, "n", 5),
-        ({"query": "x"}, "missing", None),
-        ({"items": []}, "items.0", None),
-        ("not a dict", "a", None),
-        (None, "a", None),
+        ({"v": None}, "v", None),
     ],
 )
 def test_lookup_path(data, path, expected):
     assert lookup_path(data, path) == expected
+
+
+@pytest.mark.parametrize(
+    "data,path",
+    [
+        ({"query": "x"}, "missing"),
+        ({"items": []}, "items.0"),
+        ({"items": ["a"]}, "items.x"),
+        ("not a dict", "a"),
+        (None, "a"),
+    ],
+)
+def test_lookup_path_absent_returns_missing_sentinel(data, path):
+    assert lookup_path(data, path) is MISSING
+
+
+def test_lookup_path_present_null_is_distinct_from_missing():
+    assert lookup_path({"v": None}, "v") is None
+    assert lookup_path({"v": None}, "v") is not MISSING
 
 
 def _sql_payload(sql):
@@ -354,6 +374,21 @@ def _sql_payload(sql):
         ({"body": ".*"}, None, False),
         ({"body": ".*"}, RequestPayload.empty(), False),
         ({"body": ".*"}, RequestPayload.from_bytes(b"x"), True),
+        ({"json": {"active": "true"}}, RequestPayload(b'{"active": true}'), True),
+        ({"json": {"active": "True"}}, RequestPayload(b'{"active": true}'), False),
+        ({"json": {"v": ".*"}}, RequestPayload(b'{"v": null}'), True),
+        ({"json": {"v": "null"}}, RequestPayload(b'{"v": null}'), True),
+        ({"json": {"v": "x"}}, RequestPayload(b'{"v": null}'), False),
+        ({"json": {"absent": ".*"}}, RequestPayload(b'{"v": null}'), False),
+        ({"json": {"n": r"1\.5"}}, RequestPayload(b'{"n": 1.5}'), True),
+        ({"json": {"obj": r'\{"a":1\}'}}, RequestPayload(b'{"obj": {"a": 1}}'), True),
+        (
+            {"json": {"obj": r'\{"a":1,"b":2\}'}},
+            RequestPayload(b'{"obj": {"b": 2, "a": 1}}'),
+            True,
+        ),
+        ({"json": {"s": "abc"}}, RequestPayload(b'{"s": "abc"}'), True),
+        ({"json": {"s": '"abc"'}}, RequestPayload(b'{"s": "abc"}'), False),
     ],
 )
 def test_rule_matches_body_predicates(predicate, payload, expected):
@@ -484,3 +519,249 @@ def test_template_context_groups_key_not_clobbered_by_heuristic_identifier():
     result = rule.apply(_request(path="/groups/42"))
     assert isinstance(result, TemplateRuleResult)
     assert result.template_context["groups"] == ("42",)
+
+
+# --- load-time validation and compilation -------------------------------------------
+
+
+def test_rule_name_is_coerced_to_str():
+    """YAML parses ``name: 2024`` as an int; the rule name must still be a string."""
+    rule = Rule.from_dict({"name": 2024, "pattern": "^/x$", "replacement": "u"})
+    assert rule.name == "2024"
+
+
+def test_rule_name_none_stays_none():
+    assert Rule(pattern="^/x$", replacement="u").name is None
+
+
+def test_predicate_values_are_coerced_to_str():
+    """YAML parses unquoted ``1``/``true`` as int/bool; predicates must still work."""
+    rule = Rule.from_dict(
+        {
+            "pattern": "^/x$",
+            "replacement": "u",
+            "headers": {"X-Version": 2},
+            "query": {"limit": 10},
+            "json": {"active": True},
+            "body": 123,
+        }
+    )
+    assert rule.headers == {"x-version": "2"}
+    assert rule.query == {"limit": "10"}
+    assert rule.json == {"active": "True"}
+    assert rule.body == "123"
+    request = _request(headers={"x-version": "2"}, query=b"limit=10")
+    assert rule.matches(request, RequestPayload(b'{"active": "True", "n": 123}'))
+
+
+@pytest.mark.parametrize("field", ["headers", "query", "json"])
+def test_predicate_without_value_is_rejected_at_load(field):
+    """``x-foo:`` with no value parses as None; that is a rules-file mistake."""
+    with pytest.raises(ValueError, match=r"rule 'r1': predicate 'x-foo' has no value"):
+        Rule.from_dict(
+            {
+                "name": "r1",
+                "pattern": "^/x$",
+                "replacement": "u",
+                field: {"x-foo": None},
+            }
+        )
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("pattern", "^/x/(unclosed$"),
+        ("headers", {"x-foo": "(unclosed"}),
+        ("query", {"q": "[unclosed"}),
+        ("json", {"a.b": "*bad"}),
+        ("body", "(unclosed"),
+    ],
+)
+def test_invalid_regex_is_rejected_at_construction(field, value):
+    data = {"pattern": "^/x$", "replacement": "u", field: value}
+    with pytest.raises(re.error):
+        Rule.from_dict(data)
+
+
+@pytest.mark.parametrize("key", sorted(RESERVED_CONTEXT_KEYS))
+def test_named_group_shadowing_reserved_context_key_is_rejected(key):
+    with pytest.raises(
+        ValueError,
+        match=rf"rule 'r1': named group '{key}' shadows a reserved template variable",
+    ):
+        Rule(name="r1", pattern=rf"^/x/(?P<{key}>[^/]+)$", replacement="u")
+
+
+def test_reserved_context_keys():
+    assert RESERVED_CONTEXT_KEYS == frozenset(
+        {"query", "headers", "path", "method", "request_json", "groups"}
+    )
+
+
+@pytest.mark.parametrize(
+    "replacement",
+    [
+        r"file:///fixtures/{{ headers['x-scenario'] }}/\1.json",
+        r"file:///fixtures/{{ id }}/\g<id>.json",
+        r"https://{{ id }}.example/\9",
+    ],
+)
+def test_template_replacement_with_backreference_is_rejected_at_load(replacement):
+    with pytest.raises(ValueError, match="backreference"):
+        Rule(
+            name="r1",
+            pattern=r"^/x/(?P<id>[^/]+)$",
+            replacement=replacement,
+            env=Environment(),
+        )
+
+
+def test_backreference_with_jinja_delimiters_is_allowed_without_env():
+    """Without an environment the replacement is never a template, so re.sub runs and
+    backreferences expand as usual; nothing to reject."""
+    rule = Rule(pattern=r"^/x/([^/]+)$", replacement=r"https://h/\1/{{ id }}")
+    result = rule.apply(_request(path="/x/abc"))
+    assert isinstance(result, URLRuleResult)
+    assert result.url == "https://h/abc/{{ id }}"
+
+
+def test_template_replacement_syntax_error_is_raised_at_load():
+    with pytest.raises(TemplateSyntaxError):
+        Rule(pattern=r"^/x$", replacement="file:///f/{{ id .json", env=Environment())
+
+
+def test_template_replacement_is_compiled_once_at_load():
+    env = Environment()
+    rule = Rule(
+        pattern=r"^/x/(?P<id>[^/]+)$",
+        replacement="file:///f/{{ id }}.json",
+        env=env,
+    )
+    with patch.object(Environment, "from_string", side_effect=AssertionError):
+        result = rule.apply(_request(path="/x/abc"))
+    assert isinstance(result, TemplateRuleResult)
+    assert result.template_path == "/f/abc.json"
+
+
+def test_template_replacement_uses_strict_undefined():
+    """A missing header in a rendered replacement must fail loudly, not render ''."""
+    rule = Rule(
+        pattern=r"^/x$",
+        replacement="file:///fixtures/{{ headers['x-missing'] }}/f.json",
+        env=Environment(),
+    )
+    with pytest.raises(UndefinedError):
+        rule.apply(_request(path="/x"))
+
+
+def test_strict_undefined_does_not_leak_into_the_shared_environment():
+    env = Environment()
+    Rule(pattern=r"^/x$", replacement="file:///{{ id }}", env=env)
+    assert env.from_string("[{{ nope }}]").render() == "[]"
+
+
+def test_method_comparison_is_case_insensitive_but_attribute_is_preserved():
+    rule = Rule(pattern=r"^/x$", replacement="u", method="get")
+    assert rule.method == "get"
+    assert rule.matches(_request(method="GET"))
+    assert not rule.matches(_request(method="POST"))
+
+
+def test_match_returns_the_path_match():
+    rule = Rule(pattern=r"^/x/(?P<id>[^/]+)$", replacement="u")
+    match = rule.match(_request(path="/x/abc"))
+    assert match is not None and match.group("id") == "abc"
+    assert rule.match(_request(path="/y")) is None
+
+
+def test_apply_runs_path_regex_once():
+    rule = Rule(
+        pattern=r"^/x/(?P<id>[^/]+)$",
+        replacement="file:///f/{{ id }}.json",
+        env=Environment(),
+    )
+    with patch.object(rule, "match", wraps=rule.match) as spy:
+        rule.apply(_request(path="/x/abc"))
+    assert spy.call_count == 1
+
+
+# --- template context precedence -----------------------------------------------------
+
+
+def test_reserved_context_keys_win_over_inferred_identifiers():
+    """``/projects/headers/42`` infers an identifier keyed ``headers``; the reserved
+    ``headers`` dict must still win."""
+    rule = Rule(pattern=r"^/projects/.*$", replacement="file:///f.json")
+    result = rule.apply(
+        _request(path="/projects/headers/42", headers={"x-scenario": "healthy"})
+    )
+    assert isinstance(result, TemplateRuleResult)
+    assert result.template_context["headers"] == {"x-scenario": "healthy"}
+
+
+def test_named_groups_override_inferred_identifiers():
+    rule = Rule(pattern=r"^/projects/(?P<projects>\d)\d*$", replacement="file:///f")
+    result = rule.apply(_request(path="/projects/42"))
+    assert isinstance(result, TemplateRuleResult)
+    assert result.template_context["projects"] == "4"
+
+
+def test_unmatched_optional_named_group_is_absent_from_context():
+    rule = Rule(pattern=r"^/p(?:/(?P<id>\d+))?$", replacement="file:///f.json")
+    result = rule.apply(_request(path="/p"))
+    assert isinstance(result, TemplateRuleResult)
+    assert "id" not in result.template_context
+    assert result.template_context["groups"] == (None,)
+
+
+def test_unmatched_optional_named_group_fails_loudly_in_template_replacement():
+    rule = Rule(
+        pattern=r"^/p(?:/(?P<id>\d+))?$",
+        replacement="file:///f/{{ id }}.json",
+        env=Environment(),
+    )
+    with pytest.raises(UndefinedError):
+        rule.apply(_request(path="/p"))
+
+
+def test_regex_replacement_does_not_build_template_context():
+    rule = Rule(pattern=r"^/projects/(.*)$", replacement=r"https://h/\1")
+    with patch(
+        "mockstack.rules.parse_template_name_segments_and_identifiers",
+        side_effect=AssertionError,
+    ):
+        result = rule.apply(_request(path="/projects/42"))
+    assert isinstance(result, URLRuleResult)
+    assert result.url == "https://h/42"
+
+
+# --- lazy, robust payload ------------------------------------------------------------
+
+
+def test_request_payload_single_field_constructor():
+    payload = RequestPayload(b'{"a": 1}')
+    assert payload.raw == b'{"a": 1}'
+    assert payload.text == '{"a": 1}'
+    assert payload.json == {"a": 1}
+
+
+def test_request_payload_is_parsed_lazily():
+    with patch("mockstack.rules.json.loads", side_effect=AssertionError):
+        payload = RequestPayload.from_bytes(b'{"a": 1}')
+    assert payload.json == {"a": 1}
+
+
+def test_request_payload_deeply_nested_json_does_not_raise():
+    depth = 100_000
+    payload = RequestPayload(b"[" * depth + b"]" * depth)
+    assert payload.json is None
+
+
+def test_request_payload_equality_is_field_based():
+    a = RequestPayload(b'{"a": 1}')
+    b = RequestPayload.from_bytes(b'{"a": 1}')
+    assert a.json == {"a": 1}  # populate the cache on one side only
+    assert a == b
+    assert hash(a) == hash(b)
+    assert RequestPayload.empty() == RequestPayload(b"")
