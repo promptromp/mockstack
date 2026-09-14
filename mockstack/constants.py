@@ -24,6 +24,12 @@ CONTENT_ENCODING_COMPRESSED = (
 )
 
 
+# Response headers stamped by the proxyrules strategy so callers can assert which
+# rule served a request (and that a fixture, not the real upstream, answered).
+RESULT_RULE_HEADER = "X-Mockstack-Rule"
+RESULT_TYPE_HEADER = "X-Mockstack-Result"
+
+
 # Headers that describe a single hop and must not be forwarded by a proxy (RFC 9110 §7.6.1),
 # plus content-length, which httpx / Starlette recompute for the buffered body.
 HOP_BY_HOP_HEADERS = (
