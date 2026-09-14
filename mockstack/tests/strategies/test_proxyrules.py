@@ -17,6 +17,7 @@ from mockstack.constants import (
 from mockstack.strategies.proxyrules import (
     ProxyRulesStrategy,
     Rule,
+    _header_safe,
     maybe_update_response_headers,
 )
 
@@ -342,7 +343,10 @@ async def test_proxy_rules_strategy_apply_permanent_redirect(settings, span):
 
 @pytest.mark.asyncio
 async def test_proxy_rules_strategy_apply_invalid_redirect_via(settings, span):
-    """Test applying a rule with invalid redirect_via value."""
+    """An invalid redirect_via value raises ValueError internally, but apply() must
+    still return a stamped 502 rather than let it propagate to Starlette's
+    ServerErrorMiddleware as a bare, unstamped 500.
+    """
     settings.proxyrules_redirect_via = "invalid"
     strategy = ProxyRulesStrategy(settings)
     request = Request(
@@ -356,8 +360,10 @@ async def test_proxy_rules_strategy_apply_invalid_redirect_via(settings, span):
         receive=_empty_body_receive,
     )
     request.state.span = span
-    with pytest.raises(ValueError, match="Invalid redirect via value"):
-        await strategy.apply(request)
+    response = await strategy.apply(request)
+    assert response.status_code == 502
+    assert response.headers[RESULT_TYPE_HEADER] == "error"
+    assert RESULT_RULE_HEADER in response.headers
 
 
 @pytest.mark.asyncio
@@ -529,11 +535,44 @@ def test_maybe_update_response_headers_updates_content_encoding():
     updated_headers = maybe_update_response_headers(
         response_headers=response_headers,
         content_length=100,
+        status_code=200,
     )
 
     assert updated_headers["content-encoding"] == "identity"
     assert updated_headers["content-type"] == "application/json"
     assert updated_headers["content-length"] == "100"
+
+
+@pytest.mark.parametrize("status_code", [204, 304])
+def test_maybe_update_response_headers_omits_content_length_for_204_304(status_code):
+    """RFC 9110 §8.6: a server MUST NOT send Content-Length on a 204, and on a 304 the
+    value must match what the 200 would have carried -- ``0`` would be a lie. Neither
+    status should carry a content-length header at all.
+    """
+    response_headers = httpx.Headers(
+        {"content-length": "1234", "content-type": "application/json"}
+    )
+
+    updated_headers = maybe_update_response_headers(
+        response_headers=response_headers,
+        content_length=0,
+        status_code=status_code,
+    )
+
+    assert "content-length" not in updated_headers
+
+
+def test_maybe_update_response_headers_sets_content_length_for_200():
+    """A normal 200 response still gets an accurate content-length."""
+    response_headers = httpx.Headers({"content-type": "application/json"})
+
+    updated_headers = maybe_update_response_headers(
+        response_headers=response_headers,
+        content_length=42,
+        status_code=200,
+    )
+
+    assert updated_headers["content-length"] == "42"
 
 
 def test_reverse_proxy_headers_strips_hop_by_hop_and_length():
@@ -598,7 +637,7 @@ def test_maybe_update_response_headers_strips_transfer_encoding():
         {"transfer-encoding": "chunked", "content-type": "application/json"}
     )
     updated = maybe_update_response_headers(
-        response_headers=response_headers, content_length=42
+        response_headers=response_headers, content_length=42, status_code=200
     )
     assert "transfer-encoding" not in updated
     assert updated["content-length"] == "42"
@@ -740,3 +779,45 @@ async def test_rule_name_with_crlf_is_sanitized_in_result_header(
     header_value = response.headers[RESULT_RULE_HEADER]
     assert "\r" not in header_value
     assert "\n" not in header_value
+
+
+def test_header_safe_strips_all_ascii_control_characters():
+    """Other ASCII control characters (NUL, VT, DEL) survive `backslashreplace` just
+    like a plain byte and h11 rejects them; they must be replaced with a space just
+    like CR/LF, not merely the ones the earlier CR/LF-only test happened to cover.
+    """
+    value = "bad\x00name\x0bwith\x7fcontrol\r\nchars"
+    safe = _header_safe(value)
+    for ch in safe:
+        assert ord(ch) >= 0x20 and ord(ch) != 0x7F
+    safe.encode("ascii")  # must not raise
+
+
+@pytest.mark.asyncio
+async def test_apply_stamps_502_on_upstream_connect_error(settings_reverse_proxy, span):
+    """An httpx.ConnectError/ReadTimeout out of reverse_proxy must not propagate to
+    Starlette's ServerErrorMiddleware as a bare, unstamped 500 -- 'upstream
+    unreachable' is the single most common eval failure and the one case the
+    fail-loud mechanism must still cover.
+    """
+    strategy = ProxyRulesStrategy(settings_reverse_proxy)
+    request = Request(
+        scope={
+            "type": "http",
+            "method": "GET",
+            "path": "/api/v1/projects/123",
+            "query_string": b"",
+            "headers": [],
+        },
+        receive=_empty_body_receive,
+    )
+    request.state.span = span
+    with patch.object(
+        strategy,
+        "reverse_proxy",
+        AsyncMock(side_effect=httpx.ConnectError("boom")),
+    ):
+        response = await strategy.apply(request)
+    assert response.status_code == 502
+    assert response.headers[RESULT_TYPE_HEADER] == "error"
+    assert RESULT_RULE_HEADER in response.headers

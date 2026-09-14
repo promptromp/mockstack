@@ -142,14 +142,17 @@ The strategy automatically adds the following OpenTelemetry attributes:
 
 ## Result headers
 
-Every response from the `proxyrules` strategy carries:
+Every response the `proxyrules` strategy returns -- including its own error
+responses -- carries:
 
 | Header | Value |
 | --- | --- |
-| `X-Mockstack-Result` | `template`, `proxy`, `redirect`, `create` or `missing` |
+| `X-Mockstack-Result` | `template`, `proxy`, `redirect`, `create`, `missing` or `error` |
 | `X-Mockstack-Rule` | The matched rule's `name` (or its `pattern` when unnamed); absent when no rule matched |
 
 Test harnesses should assert on these to turn a silently proxied request into a failure.
+An unstamped 5xx response means the ASGI layer itself failed (outside the strategy),
+not that `proxyrules` returned it.
 
 ## Example Rules
 
@@ -260,3 +263,12 @@ and fixtures for real.
 ## Error Handling
 
 When no matching rule is found and resource creation simulation is disabled, the strategy returns a 404 NOT FOUND response.
+
+When a matched rule fails -- an unreachable or slow upstream during reverse
+proxying, or an internal error such as an unrecognised `proxyrules_redirect_via`
+value -- `apply()` catches the failure itself and returns a 502 BAD GATEWAY response
+with body `{"error": "mockstack: upstream request failed or internal error"}`,
+stamped with `X-Mockstack-Result: error` and, when a rule had already matched,
+`X-Mockstack-Rule`. This keeps "upstream unreachable" -- the single most common
+evaluation-harness failure -- from surfacing as a bare, unstamped 500 out of
+Starlette's `ServerErrorMiddleware`.
