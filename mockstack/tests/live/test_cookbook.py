@@ -23,6 +23,7 @@ import httpx
 import pytest
 import yaml
 
+
 pytestmark = pytest.mark.slow
 
 REPO_ROOT = Path(__file__).resolve().parents[3]

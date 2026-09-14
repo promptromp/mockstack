@@ -27,6 +27,7 @@ from mockstack.config import Settings
 from mockstack.constants import ProxyRulesRedirectVia
 from mockstack.main import create_app
 
+
 STARTUP_TIMEOUT = 10.0
 SHUTDOWN_TIMEOUT = 10.0
 

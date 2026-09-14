@@ -30,6 +30,7 @@ from mockstack.strategies.proxyrules import (
     with_result_headers,
 )
 
+
 # Target URL for tests that call reverse_proxy directly; nothing is sent there, since
 # those tests patch httpx.AsyncClient.send (see `upstream_send`).
 UPSTREAM_URL = "http://upstream.invalid/x"
@@ -74,7 +75,7 @@ def test_proxy_rules_strategy_missing_rules_file(proxyrules_strategy):
 
 
 @pytest.mark.parametrize(
-    "rule,message",
+    ("rule", "message"),
     [
         (
             {"name": "bad-regex", "pattern": "^/x/(unclosed$", "replacement": "u"},
@@ -173,7 +174,7 @@ def test_rule_for_prefers_stamped_fixture_then_falls_through(proxyrules_strategy
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "redirect_via,status_code",
+    ("redirect_via", "status_code"),
     [
         (
             ProxyRulesRedirectVia.HTTP_TEMPORARY_REDIRECT,
@@ -208,7 +209,7 @@ async def test_proxy_rules_strategy_apply_with_fragment(proxyrules_strategy, tra
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "redirect_via,status_code",
+    ("redirect_via", "status_code"),
     [
         (ProxyRulesRedirectVia.HTTP_TEMPORARY_REDIRECT, 307),
         (ProxyRulesRedirectVia.HTTP_PERMANENT_REDIRECT, 301),
@@ -216,7 +217,7 @@ async def test_proxy_rules_strategy_apply_with_fragment(proxyrules_strategy, tra
     ids=["307", "301"],
 )
 @pytest.mark.parametrize(
-    "replacement,query_string,expected_location",
+    ("replacement", "query_string", "expected_location"),
     [
         (
             r"https://api.example/\1",
@@ -428,7 +429,7 @@ async def test_apply_renders_request_json_from_body(apply_rule, traced_request, 
 
 
 @pytest.mark.parametrize(
-    "filename,expected",
+    ("filename", "expected"),
     [
         ("file.json", "application/json"),
         ("file.xml", "application/xml"),
@@ -451,7 +452,7 @@ def test_proxy_rules_strategy_get_content_type(proxyrules_strategy, filename, ex
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "name,expected",
+    ("name", "expected"),
     [
         ("t-rule", "t-rule"),
         ("日本語ルール", "\\u65e5\\u672c\\u8a9e\\u30eb\\u30fc\\u30eb"),
@@ -637,7 +638,7 @@ async def test_proxy_rules_strategy_apply_reverse_proxy(apply_rule, traced_reque
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "error,status_code,message",
+    ("error", "status_code", "message"),
     [
         (httpx.ConnectError("boom"), 502, "mockstack: upstream request failed"),
         (httpx.ReadTimeout("slow"), 504, "mockstack: upstream request timed out"),
@@ -730,7 +731,7 @@ async def test_proxy_rules_strategy_reverse_proxy(reverse_proxy_strategy, make_r
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "exc,status_code",
+    ("exc", "status_code"),
     [
         (httpx.ConnectTimeout("t"), 504),
         (httpx.ReadTimeout("t"), 504),
@@ -750,7 +751,7 @@ async def test_reverse_proxy_translates_httpx_errors(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "encoding,upstream_body,expected_body,expected_encoding",
+    ("encoding", "upstream_body", "expected_body", "expected_encoding"),
     [
         ("gzip", gzip.compress(b'{"ok":true}'), b'{"ok":true}', "identity"),
         (
@@ -825,7 +826,7 @@ async def test_reverse_proxy_head_keeps_upstream_content_length(reverse_proxy_st
 
 
 @pytest.mark.parametrize(
-    "headers,forwarded,stripped",
+    ("headers", "forwarded", "stripped"),
     [
         (
             {"host": "example.com", "user-agent": "test", "accept": "application/json"},
@@ -928,7 +929,7 @@ def test_maybe_update_response_headers_omits_content_length_for_204_304(status_c
 
 
 @pytest.mark.parametrize(
-    "upstream_headers,expected_encoding,expected_length",
+    ("upstream_headers", "expected_encoding", "expected_length"),
     [
         ({"content-length": "1234"}, None, "1234"),
         ({}, None, None),
@@ -975,7 +976,7 @@ ZSTD_DECODED = "zstd" in SUPPORTED_DECODERS
 
 
 @pytest.mark.parametrize(
-    "encoding,expected",
+    ("encoding", "expected"),
     [
         ("gzip", "identity"),
         ("GZIP", "identity"),
@@ -1070,7 +1071,7 @@ def test_strip_hop_by_hop_removes_connection_listed_headers(factory):
 
 
 @pytest.mark.parametrize(
-    "value,expected",
+    ("value", "expected"),
     [
         ("ok", "ok"),
         ("  bad\x00name\x7f ", "bad name"),
@@ -1096,7 +1097,7 @@ def test_header_safe_strips_and_falls_back(value, expected):
 
 
 @pytest.mark.parametrize(
-    "name,expected",
+    ("name", "expected"),
     [(12345, "12345"), ("\r\n", "unnamed")],
     ids=["non-string-name", "name-sanitised-to-empty"],
 )

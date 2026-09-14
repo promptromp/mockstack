@@ -14,6 +14,7 @@ from pathlib import Path
 import httpx
 import pytest
 
+
 pytestmark = pytest.mark.slow
 
 EXAMPLE_DIR = Path(__file__).resolve().parents[3] / "examples" / "proxyrules-eval-isolation"

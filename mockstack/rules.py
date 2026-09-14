@@ -15,6 +15,7 @@ from jinja2 import Environment, StrictUndefined, Template
 from mockstack.constants import PROXYRULES_FILE_TEMPLATE_PREFIX
 from mockstack.templating import parse_template_name_segments_and_identifiers
 
+
 JINJA_DELIMITERS = ("{{", "{%")
 
 # Template context names owned by the strategy. They always win over path-inferred
@@ -198,8 +199,8 @@ class Rule:
         return cls(
             pattern=data["pattern"],
             replacement=data["replacement"],
-            method=data.get("method", None),
-            name=data.get("name", None),
+            method=data.get("method"),
+            name=data.get("name"),
             headers=data.get("headers"),
             query=data.get("query"),
             body=data.get("body"),

@@ -32,12 +32,11 @@ class CreateMixin:
                     created_resource_metadata=created_resource_metadata,
                 ),
             )
-        else:
-            # We return a 201 CREATED response with an empty body.
-            return Response(
-                status_code=status.HTTP_201_CREATED,
-                content=None,
-            )
+        # We return a 201 CREATED response with an empty body.
+        return Response(
+            status_code=status.HTTP_201_CREATED,
+            content=None,
+        )
 
     def _content(
         self,

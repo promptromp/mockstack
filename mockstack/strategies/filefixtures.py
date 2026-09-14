@@ -94,17 +94,16 @@ class FileFixturesStrategy(BaseStrategy, CreateMixin):
         if looks_like_a_search(request):
             # Searching for resources with a complex query that cannot be expressed in a URI.
             return self._response_from_template(request, request_json=request_json)
-        elif looks_like_a_command(request):
+        if looks_like_a_command(request):
             # Executing a 'command' of some sort, like a workflow or a batch job.
             # We return a 201 CREATED status code with response from template.
             return self._response_from_template(request, request_json=request_json, status_code=status.HTTP_201_CREATED)
-        else:
-            # simulate resource creation:
-            return await self._create(
-                request,
-                env=self.env,
-                created_resource_metadata=self.created_resource_metadata,
-            )
+        # simulate resource creation:
+        return await self._create(
+            request,
+            env=self.env,
+            created_resource_metadata=self.created_resource_metadata,
+        )
 
     async def _get(self, request: Request) -> Response:
         """Apply the strategy for GET requests.

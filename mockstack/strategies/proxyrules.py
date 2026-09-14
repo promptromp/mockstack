@@ -30,6 +30,7 @@ from mockstack.strategies.base import BaseStrategy
 from mockstack.strategies.create_mixin import CreateMixin
 from mockstack.templating import templates_env_provider
 
+
 try:
     # Private httpx API: the content codings httpx decodes while reading a response
     # (br / zstd only when brotli / zstandard are installed). Any other coding is
@@ -231,7 +232,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         if self.rules_filename is None:
             raise ValueError("rules_filename is not set")
 
-        with open(self.rules_filename, "r") as file:
+        with open(self.rules_filename) as file:
             data = yaml.safe_load(file)
         return [self._rule_from_dict(rule) for rule in data["rules"]]
 
@@ -321,12 +322,11 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
                 created_resource_metadata=self.created_resource_metadata,
             )
             return with_result_headers(response, rule=None, result_type="create")
-        else:
-            response = JSONResponse(
-                content=self.missing_resource_fields,
-                status_code=status.HTTP_404_NOT_FOUND,
-            )
-            return with_result_headers(response, rule=None, result_type="missing")
+        response = JSONResponse(
+            content=self.missing_resource_fields,
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+        return with_result_headers(response, rule=None, result_type="missing")
 
     async def handle_url_result(self, request: Request, rule: Rule, result: URLRuleResult) -> Response:
         """Handle URL results by redirecting to the target URL."""
@@ -387,7 +387,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             # Read the template file content.
             # Templates are small local files read once per request; the sync
             # read is intentional here rather than adding an async-file dependency.
-            with open(template_path, "r") as f:  # noqa: ASYNC230
+            with open(template_path) as f:  # noqa: ASYNC230
                 template_content = f.read()
 
             # Create a template from the content

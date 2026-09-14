@@ -20,7 +20,7 @@ from mockstack.rules import (
 
 
 @pytest.mark.parametrize(
-    "data,expected_method",
+    ("data", "expected_method"),
     [
         (
             {
@@ -61,7 +61,7 @@ def test_rule_from_dict_with_predicates():
 
 
 @pytest.mark.parametrize(
-    "rule_method,path,method,expected",
+    ("rule_method", "path", "method", "expected"),
     [
         (None, "/api/v1/projects/123", "GET", True),
         (None, "/api/v1/projects/123", "POST", True),
@@ -86,7 +86,7 @@ def test_rule_matches(make_request, rule_method, path, method, expected):
 
 
 @pytest.mark.parametrize(
-    "pattern,replacement,path,fragment,expected_url",
+    ("pattern", "replacement", "path", "fragment", "expected_url"),
     [
         (
             r"/api/v1/projects/(\d+)",
@@ -158,7 +158,7 @@ def test_rule_apply_template(make_request):
 
 
 @pytest.mark.parametrize(
-    "raw,text,parsed",
+    ("raw", "text", "parsed"),
     [
         (b'{"query": "SELECT 1"}', '{"query": "SELECT 1"}', {"query": "SELECT 1"}),
         (b'{"a": 1}', '{"a": 1}', {"a": 1}),
@@ -204,7 +204,7 @@ def test_rule_apply_without_payload_has_none_request_json(make_request):
 
 
 @pytest.mark.parametrize(
-    "rule_headers,request_headers,expected",
+    ("rule_headers", "request_headers", "expected"),
     [
         (
             {"x-request-eval-scenario": ".*"},
@@ -237,7 +237,7 @@ def test_rule_matches_headers(make_request, rule_headers, request_headers, expec
 
 
 @pytest.mark.parametrize(
-    "rule_query,query_string,expected",
+    ("rule_query", "query_string", "expected"),
     [
         ({"scenario": ".*"}, b"scenario=healthy", True),
         ({"scenario": ".*"}, b"", False),
@@ -269,7 +269,7 @@ def test_rule_without_predicates_matches_any_headers(make_request):
 
 
 @pytest.mark.parametrize(
-    "data,path,expected",
+    ("data", "path", "expected"),
     [
         ({"query": "SELECT 1"}, "query", "SELECT 1"),
         ({"filter": {"client": {"id": "c1"}}}, "filter.client.id", "c1"),
@@ -291,7 +291,7 @@ def test_lookup_path(data, path, expected):
 
 
 @pytest.mark.parametrize(
-    "data,path",
+    ("data", "path"),
     [
         ({"query": "x"}, "missing"),
         ({"items": []}, "items.0"),
@@ -309,7 +309,7 @@ def _sql_payload(sql):
 
 
 @pytest.mark.parametrize(
-    "predicate,payload,expected",
+    ("predicate", "payload", "expected"),
     [
         ({"body": r"FROM\s+sales"}, _sql_payload("SELECT * FROM sales WHERE 1"), True),
         ({"body": r"FROM\s+sales"}, _sql_payload("SELECT * FROM users"), False),
@@ -477,7 +477,7 @@ def test_template_context_groups_key_not_clobbered_by_heuristic_identifier(
 
 
 @pytest.mark.parametrize(
-    "name,expected",
+    ("name", "expected"),
     [(2024, "2024"), (None, None)],
     ids=["int-coerced-to-str", "none-stays-none"],
 )
@@ -522,7 +522,7 @@ def test_predicate_without_value_is_rejected_at_load(field):
 
 
 @pytest.mark.parametrize(
-    "field,value",
+    ("field", "value"),
     [
         ("pattern", "^/x/(unclosed$"),
         ("headers", {"x-foo": "(unclosed"}),
@@ -547,7 +547,7 @@ def test_named_group_shadowing_reserved_context_key_is_rejected(key):
 
 
 def test_reserved_context_keys():
-    assert RESERVED_CONTEXT_KEYS == frozenset({"query", "headers", "path", "method", "request_json", "groups"})
+    assert frozenset({"query", "headers", "path", "method", "request_json", "groups"}) == RESERVED_CONTEXT_KEYS
 
 
 @pytest.mark.parametrize(

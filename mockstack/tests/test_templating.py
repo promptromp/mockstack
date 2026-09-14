@@ -10,7 +10,7 @@ from mockstack.templating import (
 
 
 @pytest.mark.parametrize(
-    "path,expected_results",
+    ("path", "expected_results"),
     [
         (
             "/api/v1/projects/1234",
@@ -154,7 +154,7 @@ def test_iter_possible_template_arguments_with_query_params(make_request):
 
 
 @pytest.mark.parametrize(
-    "path,expected_segments,expected_identifiers",
+    ("path", "expected_segments", "expected_identifiers"),
     [
         ("/api/v1/projects/1234", ["api", "v1", "projects"], {"projects": "1234"}),
         ("/api/v1/projects", ["api", "v1", "projects"], {}),
@@ -180,7 +180,7 @@ def test_parse_template_name_segments_and_identifiers(path, expected_segments, e
 
 
 @pytest.mark.parametrize(
-    "name_segments,identifiers,separator,extension,default_name,expected",
+    ("name_segments", "identifiers", "separator", "extension", "default_name", "expected"),
     [
         (
             ["api", "v1", "projects"],

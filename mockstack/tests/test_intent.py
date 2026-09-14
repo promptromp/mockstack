@@ -9,6 +9,7 @@ from mockstack.intent import (
     wants_json,
 )
 
+
 SEARCH_PATHS = ["/api/_search", "/api/search", "/api/_query"]
 
 COMMAND_PATHS = [
@@ -27,7 +28,7 @@ CREATE_PATHS = [
 
 
 @pytest.mark.parametrize(
-    "content_type,expected",
+    ("content_type", "expected"),
     [
         ("application/json", True),
         ("text/json", True),
@@ -43,26 +44,26 @@ def test_wants_json_with_content_type(make_request, content_type, expected):
     assert wants_json(make_request(headers=headers)) is expected
 
 
-@pytest.mark.parametrize("path,expected", [("/api/data.json", True), ("/api/data", False)])
+@pytest.mark.parametrize(("path", "expected"), [("/api/data.json", True), ("/api/data", False)])
 def test_wants_json_with_path(make_request, path, expected):
     """Test wants_json with .json path."""
     assert wants_json(make_request(path)) is expected
 
 
-@pytest.mark.parametrize("path,expected", [*((path, True) for path in SEARCH_PATHS), ("/api/data", False)])
+@pytest.mark.parametrize(("path", "expected"), [*((path, True) for path in SEARCH_PATHS), ("/api/data", False)])
 def test_looks_like_a_search(make_request, path, expected):
     """Test looks_like_a_search with different paths."""
     assert looks_like_a_search(make_request(path)) is expected
 
 
-@pytest.mark.parametrize("path,expected", [*((path, True) for path in COMMAND_PATHS), ("/api/data", False)])
+@pytest.mark.parametrize(("path", "expected"), [*((path, True) for path in COMMAND_PATHS), ("/api/data", False)])
 def test_looks_like_a_command(make_request, path, expected):
     """Test looks_like_a_command with different paths."""
     assert looks_like_a_command(make_request(path)) is expected
 
 
 @pytest.mark.parametrize(
-    "method,path,expected",
+    ("method", "path", "expected"),
     [
         *(("POST", path, True) for path in CREATE_PATHS),
         # POSTs to search and command paths are not creates.
