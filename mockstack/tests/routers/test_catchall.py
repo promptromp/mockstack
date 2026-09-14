@@ -18,50 +18,34 @@ def mock_strategy():
     return strategy
 
 
-@pytest.mark.asyncio
-async def test_catchall_router_provider(app, settings, mock_strategy):
-    """Test that the catchall router provider sets up routes correctly."""
-    # Set up the app state with the mock strategy
+@pytest.fixture
+def client(app, settings, mock_strategy):
+    """A test client for an app whose catch-all router uses ``mock_strategy``."""
     app.state.strategy = mock_strategy
-
-    # Apply the router provider
     catchall_router_provider(app, settings)
-
-    # Create a test client
-    client = TestClient(app)
-
-    # Test each HTTP method
-    for method in ["GET", "POST", "PUT", "DELETE", "PATCH"]:
-        # Make the request using the test client
-        response = client.request(method, "/test/path")
-
-        # Verify the response
-        assert response.status_code == 200
-        assert response.json() == {"message": "Mock response"}
-
-        # Verify the strategy was called
-        mock_strategy.apply.assert_called_once()
-
-        # Reset the mock for the next iteration
-        mock_strategy.reset_mock()
+    return TestClient(app)
 
 
-@pytest.mark.asyncio
-async def test_catchall_router_routes_head_and_options_to_strategy(
-    app, settings, mock_strategy
+@pytest.mark.parametrize("method", ["GET", "POST", "PUT", "DELETE", "PATCH"])
+def test_catchall_router_provider(client, mock_strategy, method):
+    """Test that the catchall router provider sets up routes correctly."""
+    response = client.request(method, "/test/path")
+
+    assert response.status_code == 200
+    assert response.json() == {"message": "Mock response"}
+    mock_strategy.apply.assert_called_once()
+
+
+@pytest.mark.parametrize("method", ["HEAD", "OPTIONS"])
+def test_catchall_router_routes_head_and_options_to_strategy(
+    client, mock_strategy, method
 ):
     """HEAD and OPTIONS must reach the strategy rather than get a router-level 405."""
-    app.state.strategy = mock_strategy
-    catchall_router_provider(app, settings)
-    client = TestClient(app)
+    response = client.request(method, "/test/path")
 
-    for method in ["HEAD", "OPTIONS"]:
-        response = client.request(method, "/test/path")
-
-        assert response.status_code == 200
-        mock_strategy.apply.assert_called_once()
-        assert mock_strategy.apply.call_args.args[0].method == method
-        mock_strategy.reset_mock()
+    assert response.status_code == 200
+    mock_strategy.apply.assert_called_once()
+    assert mock_strategy.apply.call_args.args[0].method == method
 
 
 @pytest.mark.parametrize("method", ["HEAD", "OPTIONS"])

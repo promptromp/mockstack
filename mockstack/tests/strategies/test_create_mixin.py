@@ -2,10 +2,9 @@
 
 import json
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock
 
 import pytest
-from fastapi import Request, status
+from fastapi import status
 from jinja2 import Environment
 
 from mockstack.strategies.create_mixin import CreateMixin
@@ -39,21 +38,16 @@ def created_resource_metadata():
 
 
 @pytest.mark.asyncio
-async def test_create_with_json_request(strategy, env, created_resource_metadata, span):
+async def test_create_with_json_request(
+    strategy, env, created_resource_metadata, traced_request
+):
     """Test creating a resource with a JSON request."""
-    request = Request(
-        scope={
-            "type": "http",
-            "method": "POST",
-            "path": "/test",
-            "headers": [
-                (b"content-type", b"application/json"),
-                (b"x-user-id", b"test-user"),
-            ],
-        }
+    request = traced_request(
+        "/test",
+        method="POST",
+        headers={"content-type": "application/json", "x-user-id": "test-user"},
+        body=b'{"name": "test resource"}',
     )
-    request.state.span = span
-    request.json = AsyncMock(return_value={"name": "test resource"})
 
     response = await strategy._create(
         request,
@@ -72,18 +66,12 @@ async def test_create_with_json_request(strategy, env, created_resource_metadata
 
 @pytest.mark.asyncio
 async def test_create_with_non_json_request(
-    strategy, env, created_resource_metadata, span
+    strategy, env, created_resource_metadata, traced_request
 ):
     """Test creating a resource with a non-JSON request."""
-    request = Request(
-        scope={
-            "type": "http",
-            "method": "POST",
-            "path": "/test",
-            "headers": [(b"content-type", b"text/plain")],
-        }
+    request = traced_request(
+        "/test", method="POST", headers={"content-type": "text/plain"}
     )
-    request.state.span = span
 
     response = await strategy._create(
         request,
@@ -95,17 +83,9 @@ async def test_create_with_non_json_request(
     assert response.body == b""  # FastAPI Response with no content returns empty bytes
 
 
-def test_content_with_string_metadata(strategy, env, span):
+def test_content_with_string_metadata(strategy, env, traced_request):
     """Test content generation with string metadata."""
-    request = Request(
-        scope={
-            "type": "http",
-            "method": "POST",
-            "path": "/test",
-            "headers": [(b"x-user-id", b"test-user")],
-        }
-    )
-    request.state.span = span
+    request = traced_request("/test", method="POST", headers={"x-user-id": "test-user"})
 
     resource = {"name": "test"}
     metadata = {
@@ -125,18 +105,8 @@ def test_content_with_string_metadata(strategy, env, span):
     assert result["createdBy"] == "test-user"
 
 
-def test_content_with_dict_metadata(strategy, env, span):
+def test_content_with_dict_metadata(strategy, env, traced_request):
     """Test content generation with dictionary metadata."""
-    request = Request(
-        scope={
-            "type": "http",
-            "method": "POST",
-            "path": "/test",
-            "headers": [],
-        }
-    )
-    request.state.span = span
-
     resource = {"name": "test"}
     metadata = {
         "status": {"code": "OK", "message": None},
@@ -145,7 +115,7 @@ def test_content_with_dict_metadata(strategy, env, span):
     result = strategy._content(
         resource,
         env=env,
-        request=request,
+        request=traced_request("/test", method="POST"),
         created_resource_metadata=metadata,
     )
 
@@ -153,17 +123,9 @@ def test_content_with_dict_metadata(strategy, env, span):
     assert result["status"] == {"code": "OK", "message": None}
 
 
-def test_metadata_context(strategy, span):
+def test_metadata_context(strategy, traced_request):
     """Test metadata context generation."""
-    request = Request(
-        scope={
-            "type": "http",
-            "method": "POST",
-            "path": "/test",
-            "headers": [],
-        }
-    )
-    request.state.span = span
+    request = traced_request("/test", method="POST")
 
     context = strategy._metadata_context(request)
 
@@ -177,20 +139,12 @@ def test_metadata_context(strategy, span):
     assert context["request"] == request
 
 
-def test_create_mixin_update_opentelemetry(strategy, span):
+def test_create_mixin_update_opentelemetry(strategy, traced_request, span):
     """Test OpenTelemetry span updates."""
-    request = Request(
-        scope={
-            "type": "http",
-            "method": "POST",
-            "path": "/test",
-            "headers": [],
-        }
-    )
-    request.state.span = span
-
     metadata = {"id": "test-id", "status": "active"}
-    strategy._create_mixin_update_opentelemetry(request, metadata)
+    strategy._create_mixin_update_opentelemetry(
+        traced_request("/test", method="POST"), metadata
+    )
 
     span.set_attribute.assert_called_once_with(
         "mockstack.create_mixin.created_resource_metadata",

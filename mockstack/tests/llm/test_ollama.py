@@ -22,18 +22,29 @@ def mock_chat_response() -> dict:
 
 @pytest.fixture
 def mock_ollama_module():
-    """Mock the ollama module."""
+    """Mock the ollama module, and mark it available."""
     # TODO: Should probably remove this in favor making sure ollama optional package
     # is installed for running unit-tests, and instead mocking it as missing for the
     # "not available" test cases.
-    with patch.dict("sys.modules", {"ollama": MagicMock()}) as mocked_dict:
+    with (
+        patch.dict("sys.modules", {"ollama": MagicMock()}) as mocked_dict,
+        patch("mockstack.llm.ollama.IS_OLLAMA_AVAILABLE", True),
+    ):
         yield mocked_dict
+
+
+@pytest.fixture
+def mock_chat(mock_ollama_module, mock_chat_response):
+    """Patch ollama's ``chat`` to answer with ``mock_chat_response``."""
+    with patch(
+        "mockstack.llm.ollama.chat", MagicMock(return_value=mock_chat_response)
+    ) as chat:
+        yield chat
 
 
 class TestOllamaAvailable:
     """Test cases when Ollama is available."""
 
-    @patch("mockstack.llm.ollama.IS_OLLAMA_AVAILABLE", True)
     def test_ollama_llm_initialization(self, mock_ollama_module):
         """Test OllamaLLM initialization with default model."""
         from mockstack.llm.ollama import OllamaLLM
@@ -41,7 +52,6 @@ class TestOllamaAvailable:
         llm = OllamaLLM()
         assert llm.model == "llama3.2"
 
-    @patch("mockstack.llm.ollama.IS_OLLAMA_AVAILABLE", True)
     def test_ollama_llm_initialization_custom_model(self, mock_ollama_module):
         """Test OllamaLLM initialization with custom model."""
         from mockstack.llm.ollama import OllamaLLM
@@ -49,26 +59,19 @@ class TestOllamaAvailable:
         llm = OllamaLLM(model="custom-model")
         assert llm.model == "custom-model"
 
-    @patch("mockstack.llm.ollama.IS_OLLAMA_AVAILABLE", True)
-    def test_ollama_llm_call(
-        self, mock_ollama_module, mock_messages, mock_chat_response
-    ):
+    def test_ollama_llm_call(self, mock_chat, mock_messages):
         """Test OllamaLLM.__call__ method."""
         from mockstack.llm.ollama import OllamaLLM
 
-        mock_chat = MagicMock(return_value=mock_chat_response)
-        with patch("mockstack.llm.ollama.chat", mock_chat):
-            llm = OllamaLLM()
-            response = llm(mock_messages)
+        response = OllamaLLM()(mock_messages)
 
-            mock_chat.assert_called_once_with(
-                model="llama3.2",
-                messages=mock_messages,
-                options={"num_ctx": 4096, "temperature": 0.7},
-            )
-            assert response == "This is a test response"
+        mock_chat.assert_called_once_with(
+            model="llama3.2",
+            messages=mock_messages,
+            options={"num_ctx": 4096, "temperature": 0.7},
+        )
+        assert response == "This is a test response"
 
-    @patch("mockstack.llm.ollama.IS_OLLAMA_AVAILABLE", True)
     def test_content_function(self, mock_ollama_module, mock_chat_response):
         """Test content function extraction."""
         from mockstack.llm.ollama import content
@@ -76,20 +79,15 @@ class TestOllamaAvailable:
         result = content(mock_chat_response)
         assert result == "This is a test response"
 
-    @patch("mockstack.llm.ollama.IS_OLLAMA_AVAILABLE", True)
-    def test_ollama_function(
-        self, mock_ollama_module, mock_messages, mock_chat_response
-    ):
+    def test_ollama_function(self, mock_chat, mock_messages):
         """Test ollama function."""
         from mockstack.llm.ollama import ollama
 
-        mock_chat = MagicMock(return_value=mock_chat_response)
-        with patch("mockstack.llm.ollama.chat", mock_chat):
-            response = ollama(mock_messages)
+        response = ollama(mock_messages)
 
-            mock_chat.assert_called_once_with(
-                model="llama3.2",
-                messages=mock_messages,
-                options={"num_ctx": 4096, "temperature": 0.7},
-            )
-            assert response == "This is a test response"
+        mock_chat.assert_called_once_with(
+            model="llama3.2",
+            messages=mock_messages,
+            options={"num_ctx": 4096, "temperature": 0.7},
+        )
+        assert response == "This is a test response"

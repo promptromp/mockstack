@@ -3,10 +3,10 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from starlette.responses import Response, StreamingResponse
 
-from mockstack.config import OpenTelemetrySettings, Settings
+from mockstack.config import OpenTelemetrySettings
 from mockstack.telemetry import (
     extract_body,
     opentelemetry_provider,
@@ -17,39 +17,26 @@ from mockstack.telemetry import (
 )
 
 
-def test_span_name_for():
+def test_span_name_for(make_request):
     """Test span name generation."""
-    request = Request(
-        scope={
-            "type": "http",
-            "method": "GET",
-            "path": "/test/path",
-            "headers": [],  # Required by Starlette
-            "query_string": b"",  # Required by Starlette
-            "server": ("localhost", 8000),  # Required by Starlette
-        }
-    )
-    assert span_name_for(request) == "GET /test/path"
+    assert span_name_for(make_request("/test/path")) == "GET /test/path"
 
 
-def test_with_request_attributes():
+def test_with_request_attributes(make_request):
     """Test adding request attributes to span."""
-    request = Request(
-        scope={
-            "type": "http",
-            "method": "POST",
-            "path": "/test/path",
-            "scheme": "https",
-            "query_string": b"key=value&other=123",
-            "client": ("127.0.0.1", 12345),
-            "server": ("example.com", 8443),  # Required by Starlette
-            "headers": [
-                (b"user-agent", b"test-client"),
-                (b"authorization", b"Bearer token"),
-                (b"content-type", b"application/json"),
-                (b"host", b"example.com:8443"),  # Required for URL construction
-            ],
-        }
+    request = make_request(
+        "/test/path",
+        method="POST",
+        query=b"key=value&other=123",
+        headers={
+            "user-agent": "test-client",
+            "authorization": "Bearer token",
+            "content-type": "application/json",
+            "host": "example.com:8443",  # Required for URL construction
+        },
+        scheme="https",
+        client=("127.0.0.1", 12345),
+        server=("example.com", 8443),
     )
 
     span = MagicMock()
@@ -142,32 +129,21 @@ async def test_with_response_body():
 
 
 @pytest.mark.asyncio
-async def test_extract_body():
-    """Test extracting body from streaming response."""
-    # Test with bytes content
-    bytes_content = [b"part1", b"part2", b"part3"]
-    response = StreamingResponse(content=iter(bytes_content))
-    body = await extract_body(response)
-    assert body == "part1part2part3"
-
-    # Test with string content
-    str_content = ["part1", "part2", "part3"]
-    response = StreamingResponse(content=iter(str_content))
-    body = await extract_body(response)
+@pytest.mark.parametrize(
+    "chunks",
+    [[b"part1", b"part2", b"part3"], ["part1", "part2", "part3"]],
+    ids=["bytes", "str"],
+)
+async def test_extract_body(chunks):
+    """Test extracting body from a streaming response of bytes or str chunks."""
+    body = await extract_body(StreamingResponse(content=iter(chunks)))
     assert body == "part1part2part3"
 
 
-def test_opentelemetry_provider_disabled(templates_dir):
+def test_opentelemetry_provider_disabled(settings_filefixtures):
     """Test OpenTelemetry provider when disabled."""
-    app = FastAPI()
-    settings = Settings(
-        strategy="filefixtures",
-        templates_dir=templates_dir,
-        opentelemetry=OpenTelemetrySettings(enabled=False),
-    )
-
     # Should not raise any errors and return None
-    assert opentelemetry_provider(app, settings) is None
+    assert opentelemetry_provider(FastAPI(), settings_filefixtures) is None
 
 
 @patch("mockstack.telemetry.OTLPSpanExporter")
@@ -181,11 +157,11 @@ def test_opentelemetry_provider_enabled(
     mock_tracer_provider,
     mock_batch_processor,
     mock_otlp_exporter,
+    make_settings,
     templates_dir,
 ):
     """Test OpenTelemetry provider when enabled."""
-    app = FastAPI()
-    settings = Settings(
+    settings = make_settings(
         strategy="filefixtures",
         templates_dir=templates_dir,
         opentelemetry=OpenTelemetrySettings(
@@ -204,7 +180,7 @@ def test_opentelemetry_provider_enabled(
     mock_provider_instance = MagicMock()
     mock_tracer_provider.return_value = mock_provider_instance
 
-    opentelemetry_provider(app, settings)
+    opentelemetry_provider(FastAPI(), settings)
 
     # Verify tracer provider setup
     mock_tracer_provider.assert_called_once()

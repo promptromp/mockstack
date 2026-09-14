@@ -70,4 +70,9 @@ markers = [
 ]
 addopts = "-m 'not slow'"
 
+[tool.coverage.run]
+# Measure production code only: test modules, including the deselected live tests,
+# are not coverage targets.
+omit = ["mockstack/tests/*"]
+
 [tool.ruff.lint]

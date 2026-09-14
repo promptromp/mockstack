@@ -1,33 +1,46 @@
-"""Live reverse-proxy tests."""
+"""Live reverse-proxy tests.
+
+An unreachable upstream (a stamped 502) and a timed-out one (a stamped 504) are covered
+by ``test_cookbook.py`` (recipe 6).
+"""
 
 import json
 
 import httpx
 import pytest
 
-from mockstack.tests.live.conftest import proxyrules_settings, write_rules
-
 pytestmark = pytest.mark.slow
 
 
-@pytest.fixture
-def proxy(tmp_path, upstream, mockstack_server):
-    rules = write_rules(
-        tmp_path,
+@pytest.fixture(scope="module")
+def proxy(upstream, mockstack_server):
+    return mockstack_server(
         [
             {
                 "name": "upstream-passthrough",
                 "pattern": r"^/upstream/(.*)",
                 "replacement": f"{upstream.base_url}/\\1",
             }
-        ],
+        ]
     )
-    return mockstack_server(proxyrules_settings(rules))
 
 
-def test_readiness_probe_is_not_recorded(upstream):
-    """The `_serve()` readiness poll hits `/__ready` before tests run; it must not
-    be recorded as a call, otherwise every test would see it as a spurious first entry.
+def test_a_proxied_request_is_recorded_on_the_shared_upstream(proxy, upstream):
+    """Sets up the state the next test relies on: a proxied request leaves a call on
+    the session-wide ``upstream``."""
+    r = httpx.get(f"{proxy.base_url}/upstream/ping")
+    assert r.status_code == 200
+    assert len(upstream.calls) == 1
+
+
+def test_upstream_calls_are_cleared_before_the_next_test(upstream):
+    """Depends on running immediately after
+    ``test_a_proxied_request_is_recorded_on_the_shared_upstream`` in this module:
+    pytest collects and runs tests in file order (no randomization plugin is
+    installed), so that test's recorded call is still the only thing that could be on
+    ``upstream`` here. The autouse ``_clear_upstream_calls`` fixture must have reset it
+    by the time this test starts, and server readiness is not probed over HTTP, so no
+    readiness probe shows up as a spurious call either.
     """
     assert upstream.calls == []
 
@@ -41,30 +54,6 @@ def test_fixed_length_body_is_forwarded(proxy, upstream):
     assert json.loads(upstream.calls[-1]["body"]) == big
     assert upstream.calls[-1]["query"] == {"a": "1"}
     assert "x-mockstack-rule" not in upstream.calls[-1]["headers"]
-
-
-def test_upstream_unreachable_returns_stamped_502(tmp_path, mockstack_server):
-    """A passthrough rule whose replacement points at a port nothing listens on must
-    not surface as a bare, unstamped 500 from Starlette's ServerErrorMiddleware --
-    'upstream unreachable' is the single most common eval failure and apply() must
-    stamp it with the strategy's own X-Mockstack-* headers instead.
-    """
-    rules = write_rules(
-        tmp_path,
-        [
-            {
-                "name": "unreachable-passthrough",
-                "pattern": r"^/upstream/(.*)",
-                "replacement": r"http://127.0.0.1:1/\1",
-            }
-        ],
-    )
-    server = mockstack_server(proxyrules_settings(rules))
-    r = httpx.get(f"{server.base_url}/upstream/api/v1/thing")
-    assert r.status_code == 502
-    assert r.headers["x-mockstack-result"] == "error"
-    assert r.headers["x-mockstack-rule"] == "unreachable-passthrough"
-    assert r.json() == {"error": "mockstack: upstream request failed"}
 
 
 def test_repeated_set_cookie_headers_survive_reverse_proxy(proxy):
