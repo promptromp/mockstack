@@ -60,6 +60,12 @@ def upstream():
     live = LiveServer(base_url="")
     app = FastAPI()
 
+    @app.get("/__ready")
+    async def ready():
+        # Registered before the catch-all so the readiness probe never hits
+        # `echo()` below and never pollutes `live.calls`.
+        return {"status": "ready"}
+
     @app.api_route("/{p:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
     async def echo(request: Request, p: str):
         body = await request.body()
