@@ -7,11 +7,11 @@ The folder is comprised of the following:
 
 An `.env.example` file which you would rename `.env` and contains the relevant configuration options needed to run. When you have that file in the working directory when invoking mockstack it will automatically pick up the settings from this file.
 
-A `templates/` dir, pointed to by a configurationkey in the env file, which contains our templates.
+A `templates/` dir, pointed to by a configuration key in the env file, which contains our templates.
 We have a few example templates showcasing some of the capabilities of template-based mocking:
 
 * One template file shows how you can have Jinja2 templating conditionals in the template e.g. to handle different responses based on request query parameters.
 * Another template shows the naming convention for templates that depend on an identifier embedded in the request URL, e.g. `GET
     /someservice/api/v1/item/ae420979-33f3-4c99-bc42-9d7cdee5259e` would get routed to the template file `someservice-api-v1-item.ae420979-33f3-4c99-bc42-9d7cdee5259e.j2`.
 * Multiple identifiers in the path are also supported and would appear in filenames separated by dots, according to the order in which they appear in the URL.
-* The `MOCKSTACK__FILEFIXTURES_ENABLE_TEMPLATES_FOR_POST` setting (in `.env` or the environment) decides whether POST requests may use templates or go straight to simulating a creation. When templates are allowed, mockstack first tries to find a suitable template for the request based on the URL, and if none is found falls back to the create simulation behavior.
+* The `MOCKSTACK__FILEFIXTURES_ENABLE_TEMPLATES_FOR_POST` setting (in `.env` or the environment) decides whether POST requests may use templates or go straight to simulating a creation. When templates are allowed, mockstack first tries to find a suitable template for the request based on the URL, and if none is found falls back to the create simulation behavior. Set `MOCKSTACK__FILEFIXTURES_SIMULATE_CREATE_ON_MISSING=false` to answer such a POST with a 404 instead of simulating a creation.

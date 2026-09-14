@@ -7,6 +7,7 @@ Thank you for your interest in contributing to mockstack! We welcome contributio
 ### Prerequisites
 
 - Python 3.13 or higher (CI tests 3.13 and 3.14)
+- [uv](https://docs.astral.sh/uv/)
 - Git
 - A GitHub account
 
@@ -18,15 +19,16 @@ Thank you for your interest in contributing to mockstack! We welcome contributio
    git clone https://github.com/YOUR_USERNAME/mockstack.git
    cd mockstack
    ```
-3. Create a virtual environment:
-   ```bash
-   uv venv
-   source .venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
-4. Install the package in development mode:
+3. Install the package in development mode, with its development dependencies. `uv sync`
+   creates the `.venv` virtual environment itself:
    ```bash
    uv sync
-   pip install -e .
+   ```
+   Run commands in it with `uv run` (e.g. `uv run pytest`), or activate it with
+   `source .venv/bin/activate` (on Windows: `.venv\Scripts\activate`).
+4. Install the pre-commit hooks, which run ruff, mypy and the unit tests on every commit:
+   ```bash
+   uvx pre-commit install
    ```
 
 ## How to Contribute
@@ -38,7 +40,7 @@ If you find a bug, please create an issue using our **Bug Report** template. Thi
 - A clear description of the problem
 - Steps to reproduce the issue
 - Expected vs actual behavior
-- Your environment details (Python version, pytest version, etc.)
+- Your environment details (mockstack version, Python version, OS, etc.)
 - Any relevant code snippets or error messages
 
 ### Suggesting Features
@@ -70,7 +72,9 @@ We welcome feature suggestions! Please use our **Feature Request** template when
 
 4. **Run the test suite**:
    ```bash
-   pytest
+   uv run pytest                               # unit tests
+   uv run pytest -m slow mockstack/tests/live  # live tests against real servers on loopback sockets
+   uvx pre-commit run --all-files              # ruff, mypy, and the unit tests with a 90% coverage threshold
    ```
 
 5. **Commit your changes**:
@@ -91,11 +95,11 @@ We welcome feature suggestions! Please use our **Feature Request** template when
 
 ### Code Style
 
-- Follow PEP 8 Python style guidelines. We use `ruff` for linting and formatting.
+- Follow PEP 8 Python style guidelines. We use `ruff` for linting and formatting, with the rule families configured in `pyproject.toml` (bugbear, bandit, pyupgrade, simplify and more). CI and the pre-commit hooks pin the ruff version.
 - Use meaningful variable and function names
-- Write clear commit messages
+- Write clear commit messages, with a conventional prefix (`feat:`, `fix:`, `docs:`, `test:`, `chore:`, `ci:`)
 - Keep lines within 120 characters (enforced by `ruff`)
-- Use type hints where appropriate
+- Fully annotate production code: mypy runs with `disallow_untyped_defs`. Tests may leave fixture and parametrized arguments unannotated
 
 ### Testing
 

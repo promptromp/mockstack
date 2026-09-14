@@ -26,10 +26,14 @@ CLI flags, `MOCKSTACK__*` environment variables, or a `.env` file.
 - `mockstack/rules.py`: the proxyrules `Rule`: predicates, load-time validation,
   template context
 - `mockstack/templating.py`: Jinja environment and path-to-template-name resolution
+- `mockstack/intent.py`, `mockstack/identifiers.py`: POST intent (search, command,
+  create) and path-identifier heuristics
 - `mockstack/routers/`: catch-all and homepage routes
 - `mockstack/tests/`: unit tests; `conftest.py` holds fixtures shared by unit and live
   tests (`make_settings`, `make_request`, `write_rules`, `write_template`, `span`), and
-  `strategies/conftest.py` adds strategy helpers
+  `strategies/conftest.py` adds strategy helpers (`traced_request`,
+  `proxyrules_strategy`, `apply_rule`). Build settings with `make_settings`: it ignores
+  `MOCKSTACK__*` environment variables and `.env` files
 - `mockstack/tests/live/`: live tests against real uvicorn servers on loopback sockets;
   `conftest.py` provides the session-scoped recording echo `upstream`, the module-scoped
   `mockstack_server`, `proxyrules_settings` and `render_rules`
@@ -46,11 +50,15 @@ uv run pytest -m slow mockstack/tests/live -v   # live socket tests
 uv run mypy mockstack
 uvx ruff check && uvx ruff format --check
 cp README.md docs/ && uvx --with mkdocs-material mkdocs build --strict
+uvx pre-commit run --all-files                  # ruff, mypy, unit tests with coverage >= 90%
 ```
 
 mockstack requires Python 3.13 or later; CI tests 3.13 and 3.14. Ruff (line length 120)
 and mypy are configured in `pyproject.toml`: production code must be fully annotated,
-and a `# noqa` names its rule code with the reason on the line above.
+and a `# noqa` names its rule code with the reason on the line above. CI and pre-commit
+pin ruff (0.16.7); if a newer `uvx ruff` reports findings they do not, run
+`uvx ruff@0.16.7`. Coverage measures production code only, and the pre-commit pytest
+hook fails below 90%.
 
 If `VIRTUAL_ENV` points at another checkout, `unset VIRTUAL_ENV` first so `uv` uses
 this project's `.venv`.
@@ -72,7 +80,8 @@ file fails it. CI runs the unit tests, the live tests, mypy, ruff and the docs b
   page, and checks the page embeds every recipe file and that the README's
   proxyrules example matches recipe 1. Change a recipe's files, page section and test
   together. `mockstack/tests/test_docs_yaml.py` checks that every YAML block in the
-  docs parses.
+  docs parses, and `test_docs_settings.py` that every `MOCKSTACK__*` variable in the
+  docs, examples and `.env.example` files names a real setting.
 - **Regexes in YAML** go in plain or single-quoted scalars: a double-quoted `"\1"`
   does not parse.
 - **Fail at load, not per request.** Rules are validated and compiled when the

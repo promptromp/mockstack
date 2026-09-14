@@ -8,7 +8,8 @@ To use the Ollama integration, you'll need:
 
 1. Mockstack installed with the optional `llm` dependencies:
    ```bash
-   uv pip install mockstack[llm]
+   uv pip install "mockstack[llm]"
+   # or run it without installing: uvx --from "mockstack[llm]" mockstack
    ```
 
 2. [Ollama](https://ollama.com/) installed locally with at least one model (e.g., "llama3.2")
@@ -16,6 +17,9 @@ To use the Ollama integration, you'll need:
 ## Basic Usage
 
 The Ollama integration works by routing requests to a template file that uses the special `ollama` template function.
+With the `filefixtures` strategy, `POST /ollama/openai/v1/chat/completions` renders `ollama-openai-v1-chat-completions.j2`
+from `templates_dir`; [`examples/llm/templates`](https://github.com/promptromp/mockstack/tree/main/examples/llm/templates)
+has a ready-made one. POSTs are answered from templates because `filefixtures_enable_templates_for_post` is on by default.
 
 1. Configure your LLM client to hit an endpoint that maps to a template filepath calling the `ollama` method, e.g.:
    ```python

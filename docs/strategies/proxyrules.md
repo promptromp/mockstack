@@ -350,9 +350,11 @@ not that `proxyrules` returned it.
 
 ## Error handling
 
-When no matching rule is found and resource creation simulation is disabled, the
-strategy returns a 404 NOT FOUND response stamped `X-Mockstack-Result: missing`, with
-the configured `missing_resource_fields` as its body.
+When no matching rule is found, and resource creation simulation is disabled or the
+request does not look like a resource creation (see
+[Resource creation simulation](#resource-creation-simulation)), the strategy returns a
+404 NOT FOUND response stamped `X-Mockstack-Result: missing`, with the configured
+`missing_resource_fields` as its body.
 
 Every other failure is answered by the strategy itself, stamped
 `X-Mockstack-Result: error` and, once a rule has matched, `X-Mockstack-Rule`,
