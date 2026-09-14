@@ -35,6 +35,11 @@ def test_proxy_rules_strategy_load_rules(settings):
     assert all(isinstance(rule, Rule) for rule in rules)
 
 
+def test_load_rules_attaches_jinja_env(settings):
+    strategy = ProxyRulesStrategy(settings)
+    assert all(rule.env is strategy.env for rule in strategy.rules)
+
+
 def test_proxy_rules_strategy_rule_for(settings, span):
     """Test finding a matching rule for a request."""
     strategy = ProxyRulesStrategy(settings)
@@ -168,6 +173,43 @@ async def test_proxy_rules_strategy_apply_template(settings, span, tmp_path):
         assert response.status_code == 200
         assert response.media_type == "application/json"
         assert response.body.decode() == '{"projects": "1234", "name": "Project 1234"}'
+
+
+@pytest.mark.asyncio
+async def test_apply_template_rejects_path_traversal(settings, span, tmp_path):
+    """A rendered ``file://`` path containing ``..`` -- e.g. built in part from an
+    unconstrained request value such as a header matched by ``.*`` -- must never be
+    opened. It 404s without ever calling `open`, and the response body does not echo
+    back the rejected path.
+    """
+    strategy = ProxyRulesStrategy(settings)
+    rule = Rule.from_dict(
+        {
+            "pattern": r"^/x$",
+            "replacement": f"file://{tmp_path}/fixtures/../../../etc/passwd",
+        }
+    )
+
+    with (
+        patch.object(strategy, "rule_for", return_value=rule),
+        patch("builtins.open") as mock_open,
+    ):
+        request = Request(
+            scope={
+                "type": "http",
+                "method": "GET",
+                "path": "/x",
+                "query_string": b"",
+                "headers": [],
+            },
+            receive=_empty_body_receive,
+        )
+        request.state.span = span
+        response = await strategy.apply(request)
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        mock_open.assert_not_called()
+        assert "passwd" not in response.body.decode()
 
 
 @pytest.mark.asyncio

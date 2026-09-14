@@ -4,6 +4,7 @@ import json
 
 import pytest
 from fastapi import Request
+from jinja2 import Environment
 from starlette.datastructures import URL
 
 from mockstack.rules import (
@@ -369,3 +370,117 @@ def test_rule_from_dict_with_body_predicates():
     )
     assert rule.body == "abc"
     assert rule.json == {"a.b": "1"}
+
+
+def test_template_context_includes_regex_groups():
+    rule = Rule(
+        pattern=r"^/projects/api/v2/project/(?P<project_id>[^/]+)/section/(\d+)$",
+        replacement="file:///f.json",
+    )
+    request = _request(path="/projects/api/v2/project/proj-1/section/42")
+    result = rule.apply(request)
+    assert isinstance(result, TemplateRuleResult)
+    assert result.template_context["project_id"] == "proj-1"
+    assert result.template_context["groups"] == ("proj-1", "42")
+
+
+def test_replacement_rendered_with_headers_and_groups():
+    rule = Rule(
+        pattern=r"^/projects/api/v2/project/(?P<id>[^/]+)$",
+        replacement="file:///fixtures/{{ headers['x-request-eval-scenario'] }}/projects/project.{{ id }}.json.j2",
+        env=Environment(),
+    )
+    request = _request(
+        path="/projects/api/v2/project/abc",
+        headers={"x-request-eval-scenario": "healthy"},
+    )
+    result = rule.apply(request)
+    assert isinstance(result, TemplateRuleResult)
+    assert result.template_path == "/fixtures/healthy/projects/project.abc.json.j2"
+
+
+def test_replacement_backreference_still_works():
+    rule = Rule(
+        pattern=r"^/projects/(.*)",
+        replacement=r"https://projects.example/\1",
+        env=Environment(),
+    )
+    result = rule.apply(_request(path="/projects/api/v2/project/abc"))
+    assert isinstance(result, URLRuleResult)
+    assert result.url == "https://projects.example/api/v2/project/abc"
+
+
+def test_replacement_url_rendered_from_request_json():
+    rule = Rule(
+        pattern=r"^/route$",
+        replacement="https://{{ request_json.region }}.example/v1",
+        method="POST",
+        env=Environment(),
+    )
+    payload = RequestPayload.from_bytes(b'{"region": "eu"}')
+    result = rule.apply(_request(path="/route", method="POST"), payload)
+    assert isinstance(result, URLRuleResult)
+    assert result.url == "https://eu.example/v1"
+
+
+def test_replacement_without_env_is_not_rendered():
+    rule = Rule(pattern=r"^/x$", replacement="file:///f/{{ id }}.json")
+    result = rule.apply(_request(path="/x"))
+    assert isinstance(result, TemplateRuleResult)
+    assert result.template_path == "/f/{{ id }}.json"
+
+
+def test_backreference_replacement_never_renders_request_controlled_path_text():
+    """A plain backreference replacement is never treated as a Jinja template, even
+    when the request path itself contains Jinja delimiters -- the decision to render
+    is made on the operator-authored `replacement`, never on substituted request data.
+    """
+    rule = Rule(
+        pattern=r"^/projects/(.*)$",
+        replacement=r"https://projects.example/\1",
+        env=Environment(),
+    )
+    result = rule.apply(_request(path="/projects/{{ 7*7 }}"))
+    assert isinstance(result, URLRuleResult)
+    assert "49" not in result.url
+    assert "{{ 7*7 }}" in result.url
+
+
+def test_jinja_replacement_renders_positional_groups():
+    rule = Rule(
+        pattern=r"^/projects/(.*)$",
+        replacement="https://projects.example/{{ groups[0] }}",
+        env=Environment(),
+    )
+    result = rule.apply(_request(path="/projects/api/v2/project/abc"))
+    assert isinstance(result, URLRuleResult)
+    assert result.url == "https://projects.example/api/v2/project/abc"
+
+
+def test_jinja_replacement_does_not_reevaluate_captured_group_as_template():
+    """The captured group text reaches the template only as a context value, which
+    Jinja renders literally rather than re-parsing as template source.
+    """
+    rule = Rule(
+        pattern=r"^/projects/(.*)$",
+        replacement="https://projects.example/{{ groups[0] }}",
+        env=Environment(),
+    )
+    result = rule.apply(_request(path="/projects/{{ 7*7 }}"))
+    assert isinstance(result, URLRuleResult)
+    assert "49" not in result.url
+    assert "{{ 7*7 }}" in result.url
+
+
+def test_template_context_groups_key_not_clobbered_by_heuristic_identifier():
+    """A path like `/groups/42` yields a heuristic identifier keyed `groups` (the
+    filefixtures-style inference treats `42` as an id nested under the `groups`
+    path segment); the mandated `groups` tuple of positional regex groups must win.
+    """
+    rule = Rule(
+        pattern=r"^/groups/(\d+)$",
+        replacement="file:///f.json",
+    )
+    result = rule.apply(_request(path="/groups/42"))
+    assert isinstance(result, TemplateRuleResult)
+    assert result.template_context["groups"] == ("42",)

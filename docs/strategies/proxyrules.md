@@ -190,6 +190,38 @@ The response content type comes from the file suffix, ignoring a trailing `.j2`
 | `request_json` | Parsed JSON body, or `None` when the body is empty or not JSON |
 | `id`, `<segment>` | Identifiers inferred from the path, as in the filefixtures strategy |
 
+### Dynamic replacements
+
+A `replacement` containing `{{ ... }}` or `{% ... %}` is rendered as a Jinja2
+template in its own right, with the same context available to file templates,
+plus every **named group** from `pattern` and a `groups` tuple of positional
+groups. This lets one rule fan out to per-scenario fixture directories:
+
+```yaml
+  - name: project-eval
+    method: GET
+    pattern: ^/projects/api/v2/project/(?P<id>[^/]+)$
+    headers:
+      x-request-eval-scenario: "[a-z0-9_-]+"
+    replacement: file:///fixtures/{{ headers['x-request-eval-scenario'] }}/projects/project.{{ id }}.json.j2
+```
+
+In this mode regex backreferences (`\1`, `\g<id>`) are **not** expanded -- the
+`replacement` string is rendered directly and `re.sub` never runs, so use
+`{{ groups[0] }}` (positional) or the named group (`{{ id }}`) instead. A
+`replacement` with no Jinja delimiters keeps today's plain `re.sub` behaviour, and
+backreferences work as before.
+
+!!! warning
+    A rendered `file://` path or proxied URL must never be built from an
+    unconstrained request value. mockstack rejects any rendered template path
+    containing `..`, but a predicate like `x-request-eval-scenario: ".*"` still lets
+    a header select an arbitrary sibling fixture *within* the intended directory tree
+    (and a rendered replacement that proxies, `https://{{ ... }}`, lets request data
+    choose the upstream entirely -- mockstack is already an open reverse proxy; only
+    expose it on trusted networks). Restrict predicates feeding a rendered path or
+    URL to the character classes you actually expect, e.g. `[a-z0-9_-]+`.
+
 ## Error Handling
 
 When no matching rule is found and resource creation simulation is disabled, the strategy returns a 404 NOT FOUND response.

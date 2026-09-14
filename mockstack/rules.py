@@ -9,9 +9,12 @@ from typing import Any, Self
 from urllib.parse import quote
 
 from fastapi import Request
+from jinja2 import Environment
 
 from mockstack.constants import PROXYRULES_FILE_TEMPLATE_PREFIX
 from mockstack.templating import parse_template_name_segments_and_identifiers
+
+JINJA_DELIMITERS = ("{{", "{%")
 
 
 @dataclass(frozen=True)
@@ -100,6 +103,7 @@ class Rule:
         query: Mapping[str, str] | None = None,
         body: str | None = None,
         json: Mapping[str, str] | None = None,
+        env: Environment | None = None,
     ):
         self.pattern = pattern
         self.replacement = replacement
@@ -110,9 +114,10 @@ class Rule:
         self.query = dict(query or {})
         self.body = body
         self.json = dict(json or {})
+        self.env = env
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> Self:
+    def from_dict(cls, data: dict[str, Any], env: Environment | None = None) -> Self:
         return cls(
             pattern=data["pattern"],
             replacement=data["replacement"],
@@ -122,6 +127,7 @@ class Rule:
             query=data.get("query"),
             body=data.get("body"),
             json=data.get("json"),
+            env=env,
         )
 
     def matches(self, request: Request, payload: RequestPayload | None = None) -> bool:
@@ -169,15 +175,13 @@ class Rule:
             # If a URL fragment component is present, we URL encode it and include it in the path to proxy.
             path += quote("#") + request.url.fragment
 
-        result = self._url_for(path)
+        template_context = self._create_template_context(request, payload)
+        result = self._resolve_replacement(path, template_context)
 
         # Check if the replacement is a file template
         if result.startswith(PROXYRULES_FILE_TEMPLATE_PREFIX):
             # Extract the file path from the file:/// URL
             file_path = result[len(PROXYRULES_FILE_TEMPLATE_PREFIX) - 1 :]
-
-            # Create template context from request
-            template_context = self._create_template_context(request, payload)
 
             return TemplateRuleResult(
                 template_path=file_path,
@@ -190,6 +194,24 @@ class Rule:
     def _url_for(self, path: str) -> str:
         return re.sub(self.pattern, self.replacement, path)
 
+    def _resolve_replacement(self, path: str, context: dict) -> str:
+        """Resolve ``self.replacement`` into the final URL/file path.
+
+        The decision to treat ``replacement`` as a Jinja template is made on
+        ``self.replacement`` itself (operator-authored text), never on request-controlled
+        data. When it contains Jinja delimiters and an environment is configured, the
+        *replacement string* is rendered directly against the template context -- regex
+        backreferences (``\\1``, ``\\g<name>``) are NOT expanded in that mode, since
+        ``re.sub`` never runs. Request data only ever reaches the template as context
+        values, which Jinja does not re-parse as template source. Otherwise, behaviour is
+        unchanged: ``re.sub`` performs the regex backreference substitution.
+        """
+        if self.env is not None and any(
+            d in self.replacement for d in JINJA_DELIMITERS
+        ):
+            return self.env.from_string(self.replacement).render(**context)
+        return self._url_for(path)
+
     def _create_template_context(
         self, request: Request, payload: RequestPayload
     ) -> dict:
@@ -198,6 +220,9 @@ class Rule:
         _, identifiers = parse_template_name_segments_and_identifiers(
             path, default_identifier_key="id"
         )
+        match = re.match(self.pattern, request.url.path)
+        groups = match.groups() if match else ()
+        named = match.groupdict() if match else {}
         return {
             "query": dict(request.query_params),
             "headers": dict(request.headers),
@@ -205,6 +230,8 @@ class Rule:
             "method": request.method,
             "request_json": payload.json,
             **identifiers,
+            "groups": groups,
+            **named,
         }
 
 

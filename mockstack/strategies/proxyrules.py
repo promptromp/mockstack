@@ -87,7 +87,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
 
         with open(self.rules_filename, "r") as file:
             data = yaml.safe_load(file)
-            return [Rule.from_dict(rule) for rule in data["rules"]]
+            return [Rule.from_dict(rule, env=self.env) for rule in data["rules"]]
 
     def rule_for(
         self, request: Request, payload: RequestPayload | None = None
@@ -167,6 +167,20 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
     ) -> Response:
         """Handle template results by rendering the template file."""
         template_path = Path(result.template_path)
+
+        if ".." in template_path.parts:
+            # A rendered `file://` path may be built (in part) from request-controlled
+            # values (headers, query, path segments, body). Reject any path traversal
+            # attempt rather than resolving and possibly reading a file outside the
+            # fixtures the rule author intended. The path itself is not echoed back in
+            # the response body, only to the log.
+            self.logger.error(
+                f"Rejected template path containing '..': {template_path}"
+            )
+            return JSONResponse(
+                content={"error": "Template file not found."},
+                status_code=status.HTTP_404_NOT_FOUND,
+            )
 
         if not template_path.exists():
             self.logger.error(f"Template file not found: {template_path}")
