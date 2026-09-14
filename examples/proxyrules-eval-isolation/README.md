@@ -54,25 +54,25 @@ Then, in a third terminal:
 ```bash
 # 1. Stamped GET -> served from fixtures/healthy/projects/project.json.j2
 curl -i -H "X-Request-Eval-Scenario: healthy" \
-  http://127.0.0.1:8000/projects/api/v2/project/proj-123
+  http://127.0.0.1:8000/projects/api/v1/project/proj-123
 # X-Mockstack-Result: template
-# X-Mockstack-Rule: projects-project-eval
+# X-Mockstack-Rule: projects-eval
 
 # 2. Unstamped GET -> reverse-proxied to upstream.py
-curl -i http://127.0.0.1:8000/projects/api/v2/project/proj-123
+curl -i http://127.0.0.1:8000/projects/api/v1/project/proj-123
 # X-Mockstack-Result: proxy
 # X-Mockstack-Rule: projects-passthrough
 
-# 3. Stamped Analytics POST mentioning sales_facts -> served from fixtures
+# 3. Stamped analytics POST mentioning sales_facts -> served from fixtures
 curl -i -H "X-Request-Eval-Scenario: healthy" -H "Content-Type: application/json" \
-  -d '{"query": "SELECT client_id FROM sales_facts WHERE 1=1"}' \
-  http://127.0.0.1:8000/analytics/analytics/v2/sql
+  -d '{"query": "SELECT region FROM sales_facts WHERE 1=1"}' \
+  http://127.0.0.1:8000/analytics/v1/sql
 # X-Mockstack-Result: template
 # X-Mockstack-Rule: analytics-sales-eval
 ```
 
 `mockstack/tests/live/test_example_eval_isolation.py` runs these same three
-scenarios (plus a fourth: a stamped Analytics query that does *not* mention
+scenarios (plus a fourth: a stamped analytics query that does *not* mention
 `sales_facts`, which falls through to the passthrough rule) against this
 example's real `rules.yml` and fixtures, so the example can't drift from what
 is tested.

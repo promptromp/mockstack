@@ -3,6 +3,9 @@ site_url: https://promptromp.github.io/mockstack
 repo_name: mockstack
 repo_url: https://github.com/promptromp/mockstack
 
+exclude_docs: |
+  superpowers/
+
 theme:
   name: material
   logo: assets/logo.png

@@ -60,7 +60,7 @@ match wins, so put narrow, predicate-bearing rules before broad passthroughs:
 rules:
   - name: project-eval               # only stamped eval traffic
     method: GET
-    pattern: ^/projects/api/v2/project/(?P<id>[^/]+)$
+    pattern: ^/projects/api/v1/project/(?P<id>[^/]+)$
     headers:
       x-request-eval-scenario: ".*"
     replacement: file:///fixtures/projects/project.json.j2
@@ -75,7 +75,7 @@ path and the intent lives in the payload, such as SQL gateways:
 ```yaml
   - name: analytics-sales-eval
     method: POST
-    pattern: ^/analytics/analytics/v2/sql$
+    pattern: ^/analytics/v1/sql$
     headers:
       x-request-eval-scenario: ".*"
     json:
@@ -142,14 +142,17 @@ The strategy automatically adds the following OpenTelemetry attributes:
 
 ## Result headers
 
-Every response from the `proxyrules` strategy carries:
+Every response the `proxyrules` strategy returns -- including its own error
+responses -- carries:
 
 | Header | Value |
 | --- | --- |
-| `X-Mockstack-Result` | `template`, `proxy`, `redirect`, `create` or `missing` |
+| `X-Mockstack-Result` | `template`, `proxy`, `redirect`, `create`, `missing` or `error` |
 | `X-Mockstack-Rule` | The matched rule's `name` (or its `pattern` when unnamed); absent when no rule matched |
 
 Test harnesses should assert on these to turn a silently proxied request into a failure.
+An unstamped 5xx response means the ASGI layer itself failed (outside the strategy),
+not that `proxyrules` returned it.
 
 ## Example Rules
 
@@ -179,12 +182,17 @@ rules:
 
 A `replacement` starting with `file:///` serves a Jinja2 template instead of proxying.
 The path is an **absolute filesystem path**; `templates_dir` is not consulted.
+`file://` followed directly by an absolute path (i.e. `file:///abs/path`, three
+slashes total) is the canonical form; when building the path from a variable that
+already starts with `/` (e.g. `${FIXTURES_DIR}`), write `file://${FIXTURES_DIR}/...`
+(two slashes) so the interpolated value supplies the third -- `file:///${FIXTURES_DIR}/...`
+would otherwise double up into a four-slash, `//`-rooted path.
 
 ```yaml
 rules:
   - name: project-fixture
     method: GET
-    pattern: ^/projects/api/v2/project/(?P<id>[^/]+)$
+    pattern: ^/projects/api/v1/project/(?P<id>[^/]+)$
     replacement: file:///fixtures/projects/project.json.j2
 ```
 
@@ -211,7 +219,7 @@ groups. This lets one rule fan out to per-scenario fixture directories:
 ```yaml
   - name: project-eval
     method: GET
-    pattern: ^/projects/api/v2/project/(?P<id>[^/]+)$
+    pattern: ^/projects/api/v1/project/(?P<id>[^/]+)$
     headers:
       x-request-eval-scenario: "[a-z0-9_-]+"
     replacement: file:///fixtures/{{ headers['x-request-eval-scenario'] }}/projects/project.{{ id }}.json.j2
@@ -230,8 +238,12 @@ backreferences work as before.
     a header select an arbitrary sibling fixture *within* the intended directory tree
     (and a rendered replacement that proxies, `https://{{ ... }}`, lets request data
     choose the upstream entirely -- mockstack is already an open reverse proxy; only
-    expose it on trusted networks). Restrict predicates feeding a rendered path or
-    URL to the character classes you actually expect, e.g. `[a-z0-9_-]+`.
+    expose it on trusted networks). A rendered request value must also never be the
+    *leading* element of a `file://` path -- e.g.
+    `file://{{ headers['x-root'] }}/f.json` lets a header select an arbitrary
+    absolute path (it need only start with `/`), which the `..` guard cannot catch
+    since no `..` segment is ever involved. Restrict predicates feeding a rendered
+    path or URL to the character classes you actually expect, e.g. `[a-z0-9_-]+`.
 
 ## Testing evaluation suites
 
@@ -260,3 +272,12 @@ and fixtures for real.
 ## Error Handling
 
 When no matching rule is found and resource creation simulation is disabled, the strategy returns a 404 NOT FOUND response.
+
+When a matched rule fails -- an unreachable or slow upstream during reverse
+proxying, or an internal error such as an unrecognised `proxyrules_redirect_via`
+value -- `apply()` catches the failure itself and returns a 502 BAD GATEWAY response
+with body `{"error": "mockstack: upstream request failed or internal error"}`,
+stamped with `X-Mockstack-Result: error` and, when a rule had already matched,
+`X-Mockstack-Rule`. This keeps "upstream unreachable" -- the single most common
+evaluation-harness failure -- from surfacing as a bare, unstamped 500 out of
+Starlette's `ServerErrorMiddleware`.

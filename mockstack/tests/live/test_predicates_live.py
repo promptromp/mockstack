@@ -22,7 +22,7 @@ def server(tmp_path, upstream, mockstack_server):
             {
                 "name": "project-eval",
                 "method": "GET",
-                "pattern": r"^/projects/api/v2/project/(?P<id>[^/]+)$",
+                "pattern": r"^/projects/api/v1/project/(?P<id>[^/]+)$",
                 "headers": {"x-request-eval-scenario": ".*"},
                 "replacement": f"file://{fixture}",
             },
@@ -38,7 +38,7 @@ def server(tmp_path, upstream, mockstack_server):
 
 def test_stamped_request_gets_fixture(server, upstream):
     r = httpx.get(
-        f"{server.base_url}/projects/api/v2/project/abc",
+        f"{server.base_url}/projects/api/v1/project/abc",
         headers={"X-Request-Eval-Scenario": "healthy"},
     )
     assert r.status_code == 200
@@ -49,11 +49,11 @@ def test_stamped_request_gets_fixture(server, upstream):
 
 
 def test_unstamped_request_falls_through_to_upstream(server, upstream):
-    r = httpx.get(f"{server.base_url}/projects/api/v2/project/abc")
+    r = httpx.get(f"{server.base_url}/projects/api/v1/project/abc")
     assert r.status_code == 200
     assert r.headers["x-mockstack-result"] == "proxy"
     assert r.json()["source"] == "upstream"
-    assert upstream.calls[-1]["path"] == "/api/v2/project/abc"
+    assert upstream.calls[-1]["path"] == "/api/v1/project/abc"
     assert "x-mockstack-rule" not in upstream.calls[-1]["headers"]
 
 
@@ -69,7 +69,7 @@ def analytics(tmp_path, upstream, mockstack_server):
             {
                 "name": "analytics-sales-eval",
                 "method": "POST",
-                "pattern": r"^/analytics/analytics/v2/sql$",
+                "pattern": r"^/analytics/v1/sql$",
                 "headers": {"x-request-eval-scenario": ".*"},
                 "json": {"query": r"(?is).*FROM\s+sales_facts.*"},
                 "replacement": f"file://{fixture}",
@@ -85,18 +85,16 @@ def analytics(tmp_path, upstream, mockstack_server):
 
 
 def test_analytics_query_selected_by_body(analytics, upstream):
-    sql = "SELECT client_id, SUM(amount)\nFROM sales_facts WHERE 1=1"
+    sql = "SELECT region, SUM(amount)\nFROM sales_facts WHERE 1=1"
     stamped = {"X-Request-Eval-Scenario": "healthy"}
     r = httpx.post(
-        f"{analytics.base_url}/analytics/analytics/v2/sql",
-        json={"query": sql},
-        headers=stamped,
+        f"{analytics.base_url}/analytics/v1/sql", json={"query": sql}, headers=stamped
     )
     assert r.status_code == 200 and r.json() == {"source": "fixture", "sql": sql}
     assert r.headers["x-mockstack-result"] == "template"
 
     other = httpx.post(
-        f"{analytics.base_url}/analytics/analytics/v2/sql",
+        f"{analytics.base_url}/analytics/v1/sql",
         json={"query": "SELECT 1 FROM users"},
         headers=stamped,
     )
@@ -120,7 +118,7 @@ def scenarios(tmp_path, upstream, mockstack_server):
             {
                 "name": "project-eval",
                 "method": "GET",
-                "pattern": r"^/projects/api/v2/project/(?P<id>[^/]+)$",
+                "pattern": r"^/projects/api/v1/project/(?P<id>[^/]+)$",
                 "headers": {"x-request-eval-scenario": ".*"},
                 "replacement": f"file://{tmp_path}/{{{{ headers['x-request-eval-scenario'] }}}}/projects/project.{{{{ id }}}}.json.j2",
             },
@@ -137,7 +135,7 @@ def scenarios(tmp_path, upstream, mockstack_server):
 @pytest.mark.parametrize("scenario", ["healthy", "degraded"])
 def test_scenario_header_selects_fixture_directory(scenarios, scenario):
     r = httpx.get(
-        f"{scenarios.base_url}/projects/api/v2/project/abc",
+        f"{scenarios.base_url}/projects/api/v1/project/abc",
         headers={"X-Request-Eval-Scenario": scenario},
     )
     assert r.status_code == 200
@@ -147,7 +145,7 @@ def test_scenario_header_selects_fixture_directory(scenarios, scenario):
 
 def test_unknown_scenario_returns_404_not_upstream(scenarios, upstream):
     r = httpx.get(
-        f"{scenarios.base_url}/projects/api/v2/project/abc",
+        f"{scenarios.base_url}/projects/api/v1/project/abc",
         headers={"X-Request-Eval-Scenario": "nope"},
     )
     assert r.status_code == 404
@@ -160,7 +158,7 @@ def test_traversal_scenario_returns_404_not_upstream(scenarios, upstream):
     predicate -- proving the fixture directory can't be escaped via header content.
     """
     r = httpx.get(
-        f"{scenarios.base_url}/projects/api/v2/project/abc",
+        f"{scenarios.base_url}/projects/api/v1/project/abc",
         headers={"X-Request-Eval-Scenario": "../healthy"},
     )
     assert r.status_code == 404

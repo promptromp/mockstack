@@ -331,7 +331,7 @@ def test_lookup_path(data, path, expected):
     assert lookup_path(data, path) == expected
 
 
-def _analytics(sql):
+def _sql_payload(sql):
     return RequestPayload.from_bytes(
         json.dumps({"query": sql, "context": {"x": 1}}).encode()
     )
@@ -340,16 +340,16 @@ def _analytics(sql):
 @pytest.mark.parametrize(
     "predicate,payload,expected",
     [
-        ({"body": r"FROM\s+sales"}, _analytics("SELECT * FROM sales WHERE 1"), True),
-        ({"body": r"FROM\s+sales"}, _analytics("SELECT * FROM users"), False),
+        ({"body": r"FROM\s+sales"}, _sql_payload("SELECT * FROM sales WHERE 1"), True),
+        ({"body": r"FROM\s+sales"}, _sql_payload("SELECT * FROM users"), False),
         (
             {"json": {"query": r".*FROM sales.*"}},
-            _analytics("SELECT a FROM sales"),
+            _sql_payload("SELECT a FROM sales"),
             True,
         ),
-        ({"json": {"query": r"SELECT a"}}, _analytics("SELECT a FROM sales"), False),
-        ({"json": {"context.x": "1"}}, _analytics("x"), True),
-        ({"json": {"context.missing": ".*"}}, _analytics("x"), False),
+        ({"json": {"query": r"SELECT a"}}, _sql_payload("SELECT a FROM sales"), False),
+        ({"json": {"context.x": "1"}}, _sql_payload("x"), True),
+        ({"json": {"context.missing": ".*"}}, _sql_payload("x"), False),
         ({"json": {"query": ".*"}}, RequestPayload.empty(), False),
         ({"body": ".*"}, None, False),
         ({"body": ".*"}, RequestPayload.empty(), False),
@@ -374,10 +374,10 @@ def test_rule_from_dict_with_body_predicates():
 
 def test_template_context_includes_regex_groups():
     rule = Rule(
-        pattern=r"^/projects/api/v2/project/(?P<project_id>[^/]+)/section/(\d+)$",
+        pattern=r"^/projects/api/v1/project/(?P<project_id>[^/]+)/section/(\d+)$",
         replacement="file:///f.json",
     )
-    request = _request(path="/projects/api/v2/project/proj-1/section/42")
+    request = _request(path="/projects/api/v1/project/proj-1/section/42")
     result = rule.apply(request)
     assert isinstance(result, TemplateRuleResult)
     assert result.template_context["project_id"] == "proj-1"
@@ -386,12 +386,12 @@ def test_template_context_includes_regex_groups():
 
 def test_replacement_rendered_with_headers_and_groups():
     rule = Rule(
-        pattern=r"^/projects/api/v2/project/(?P<id>[^/]+)$",
+        pattern=r"^/projects/api/v1/project/(?P<id>[^/]+)$",
         replacement="file:///fixtures/{{ headers['x-request-eval-scenario'] }}/projects/project.{{ id }}.json.j2",
         env=Environment(),
     )
     request = _request(
-        path="/projects/api/v2/project/abc",
+        path="/projects/api/v1/project/abc",
         headers={"x-request-eval-scenario": "healthy"},
     )
     result = rule.apply(request)
@@ -405,9 +405,9 @@ def test_replacement_backreference_still_works():
         replacement=r"https://projects.example/\1",
         env=Environment(),
     )
-    result = rule.apply(_request(path="/projects/api/v2/project/abc"))
+    result = rule.apply(_request(path="/projects/api/v1/project/abc"))
     assert isinstance(result, URLRuleResult)
-    assert result.url == "https://projects.example/api/v2/project/abc"
+    assert result.url == "https://projects.example/api/v1/project/abc"
 
 
 def test_replacement_url_rendered_from_request_json():
@@ -452,9 +452,9 @@ def test_jinja_replacement_renders_positional_groups():
         replacement="https://projects.example/{{ groups[0] }}",
         env=Environment(),
     )
-    result = rule.apply(_request(path="/projects/api/v2/project/abc"))
+    result = rule.apply(_request(path="/projects/api/v1/project/abc"))
     assert isinstance(result, URLRuleResult)
-    assert result.url == "https://projects.example/api/v2/project/abc"
+    assert result.url == "https://projects.example/api/v1/project/abc"
 
 
 def test_jinja_replacement_does_not_reevaluate_captured_group_as_template():

@@ -5,7 +5,7 @@ Loads the *real* rules file and fixture templates shipped under
 substitutes its ``${FIXTURES_DIR}``/``${PROJECTS_URL}``/``${ANALYTICS_URL}`` placeholders
 the same way the README's ``envsubst`` step does, so the example and this test can
 never drift apart. Asserts exactly the three ``curl`` scenarios documented in the
-example's README, plus a fourth passthrough case for a non-matching Analytics query.
+example's README, plus a fourth passthrough case for a non-matching analytics query.
 """
 
 import json
@@ -46,11 +46,11 @@ def server(tmp_path, upstream, mockstack_server):
 def test_stamped_get_project_returns_fixture(server, upstream):
     """README scenario 1: stamped GET project -> template fixture."""
     r = httpx.get(
-        f"{server.base_url}/projects/api/v2/project/proj-123", headers=STAMPED
+        f"{server.base_url}/projects/api/v1/project/proj-123", headers=STAMPED
     )
     assert r.status_code == 200
     assert r.headers["x-mockstack-result"] == "template"
-    assert r.headers["x-mockstack-rule"] == "projects-project-eval"
+    assert r.headers["x-mockstack-rule"] == "projects-eval"
     assert r.json() == {
         "id": "proj-123",
         "name": "Eval project proj-123",
@@ -62,20 +62,20 @@ def test_stamped_get_project_returns_fixture(server, upstream):
 
 def test_unstamped_get_project_falls_through_to_upstream(server, upstream):
     """README scenario 2: unstamped GET project -> proxy passthrough."""
-    r = httpx.get(f"{server.base_url}/projects/api/v2/project/proj-123")
+    r = httpx.get(f"{server.base_url}/projects/api/v1/project/proj-123")
     assert r.status_code == 200
     assert r.headers["x-mockstack-result"] == "proxy"
     assert r.headers["x-mockstack-rule"] == "projects-passthrough"
     assert r.json()["source"] == "upstream"
     assert len(upstream.calls) == 1
-    assert upstream.calls[0]["path"] == "/api/v2/project/proj-123"
+    assert upstream.calls[0]["path"] == "/api/v1/project/proj-123"
 
 
 def test_stamped_analytics_sales_query_returns_fixture(server, upstream):
-    """README scenario 3: stamped Analytics POST mentioning sales_facts -> template fixture."""
-    sql = "SELECT client_id, SUM(amount)\nFROM sales_facts WHERE 1=1"
+    """README scenario 3: stamped analytics POST mentioning sales_facts -> template fixture."""
+    sql = "SELECT region, SUM(amount)\nFROM sales_facts WHERE 1=1"
     r = httpx.post(
-        f"{server.base_url}/analytics/analytics/v2/sql",
+        f"{server.base_url}/analytics/v1/sql",
         json={"query": sql},
         headers=STAMPED,
     )
@@ -83,15 +83,15 @@ def test_stamped_analytics_sales_query_returns_fixture(server, upstream):
     assert r.headers["x-mockstack-result"] == "template"
     assert r.headers["x-mockstack-rule"] == "analytics-sales-eval"
     assert r.json() == [
-        {"client_id": "eval-client", "total_amount": 1234.5, "echo_sql": sql}
+        {"region": "eval-region", "total_amount": 1234.5, "echo_sql": sql}
     ]
     assert upstream.calls == []
 
 
 def test_stamped_analytics_non_sales_query_falls_through_to_upstream(server, upstream):
-    """Fourth scenario: stamped Analytics POST that doesn't mention sales_facts -> proxy."""
+    """Fourth scenario: stamped analytics POST that doesn't mention sales_facts -> proxy."""
     r = httpx.post(
-        f"{server.base_url}/analytics/analytics/v2/sql",
+        f"{server.base_url}/analytics/v1/sql",
         json={"query": "SELECT 1 FROM other_table"},
         headers=STAMPED,
     )

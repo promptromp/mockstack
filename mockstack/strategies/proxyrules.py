@@ -1,6 +1,7 @@
 """Strategy for using proxy rules."""
 
 import logging
+import re
 from functools import cached_property
 from pathlib import Path
 from urllib.parse import urlparse
@@ -32,6 +33,7 @@ def maybe_update_response_headers(
     response_headers: ResponseHeaders,
     *,
     content_length: int,
+    status_code: int,
 ) -> ResponseHeaders:
     """Update the response headers if needed, e.g. to adjust for compression and framing."""
     _headers = response_headers.copy()
@@ -43,10 +45,23 @@ def maybe_update_response_headers(
         # httpx already decompressed the body while proxying.
         _headers["content-encoding"] = "identity"
 
-    # We always return a fully buffered body, so the length is known.
-    _headers["content-length"] = str(content_length)
+    if status_code < 200 or status_code in (
+        status.HTTP_204_NO_CONTENT,
+        status.HTTP_304_NOT_MODIFIED,
+    ):
+        # RFC 9110 §8.6: a server MUST NOT send Content-Length on a 1xx or 204, and on
+        # a 304 the value must be whatever the corresponding 200 would have carried --
+        # ``0`` (the length of our empty buffered body) would be a lie. Drop any
+        # inherited value rather than stamp one.
+        _headers.pop("content-length", None)
+    else:
+        # We always return a fully buffered body, so the length is known.
+        _headers["content-length"] = str(content_length)
 
     return _headers
+
+
+_CONTROL_CHARACTERS_RE = re.compile(r"[\x00-\x1f\x7f]")
 
 
 def _header_safe(value: str) -> str:
@@ -54,10 +69,12 @@ def _header_safe(value: str) -> str:
 
     Starlette encodes header values as latin-1, so a rule ``name``/``pattern``
     containing non-Latin-1 characters (e.g. CJK) would otherwise raise
-    ``UnicodeEncodeError`` when the response is sent. CR/LF are also stripped
-    (replaced with a space) since they are not valid inside a single header value.
+    ``UnicodeEncodeError`` when the response is sent. ASCII control characters
+    (CR/LF included, but also e.g. NUL, VT, DEL) are also stripped (replaced with a
+    space) since they are not valid inside a single header value and would otherwise
+    survive ``backslashreplace`` as literal bytes that h11 rejects.
     """
-    value = value.replace("\r", " ").replace("\n", " ")
+    value = _CONTROL_CHARACTERS_RE.sub(" ", value)
     return value.encode("ascii", "backslashreplace").decode("ascii")
 
 
@@ -122,6 +139,35 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             return None
 
     async def apply(self, request: Request) -> Response:
+        """Apply the proxyrules strategy to the request.
+
+        Wraps ``_apply`` so that any failure -- an upstream connect error/timeout out
+        of ``reverse_proxy``, or an internal ``ValueError`` -- is stamped with the
+        strategy's own ``X-Mockstack-*`` headers before it is returned, instead of
+        propagating to Starlette's ``ServerErrorMiddleware``, which would produce a
+        bare 500 with none of them. An unstamped 5xx therefore means the ASGI layer
+        itself failed, not this strategy.
+        """
+        try:
+            return await self._apply(request)
+        except Exception:
+            self.logger.exception(
+                f"proxyrules: unhandled error applying strategy to "
+                f"{request.method} {request.url.path}"
+            )
+            rule = getattr(request.state, "proxyrules_matched_rule", None)
+            return with_result_headers(
+                JSONResponse(
+                    content={
+                        "error": "mockstack: upstream request failed or internal error"
+                    },
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                ),
+                rule=rule,
+                result_type="error",
+            )
+
+    async def _apply(self, request: Request) -> Response:
         # Read the body exactly once. Starlette caches it on the request, so the
         # reverse proxy and create-mixin paths can safely read it again later.
         payload = RequestPayload.from_bytes(await request.body())
@@ -129,6 +175,11 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         rule = self.rule_for(request, payload)
         if rule is None:
             return await self.handle_missing_rule(request)
+
+        # Recorded on the request (not on `self`, which may be shared across
+        # concurrent requests) so `apply()` can still stamp the matched rule on an
+        # error response raised further down, after matching succeeded.
+        request.state.proxyrules_matched_rule = rule
 
         result = rule.apply(request, payload)
         self.logger.info(f"[rule:{rule.name}] Result: {result}")
@@ -278,6 +329,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             response_headers = maybe_update_response_headers(
                 resp.headers,
                 content_length=len(content),
+                status_code=resp.status_code,
             )
 
             return Response(
