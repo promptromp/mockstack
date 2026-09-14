@@ -5,29 +5,31 @@ import json
 import httpx
 import pytest
 
-from mockstack.tests.live.conftest import proxyrules_settings, write_rules
-
 pytestmark = pytest.mark.slow
 
 
-@pytest.fixture
-def proxy(tmp_path, upstream, mockstack_server):
-    rules = write_rules(
-        tmp_path,
+@pytest.fixture(scope="module")
+def proxy(upstream, mockstack_server):
+    return mockstack_server(
         [
             {
                 "name": "upstream-passthrough",
                 "pattern": r"^/upstream/(.*)",
                 "replacement": f"{upstream.base_url}/\\1",
-            }
-        ],
+            },
+            {
+                "name": "unreachable-passthrough",
+                "pattern": r"^/unreachable/(.*)",
+                "replacement": r"http://127.0.0.1:1/\1",
+            },
+        ]
     )
-    return mockstack_server(proxyrules_settings(rules))
 
 
-def test_readiness_probe_is_not_recorded(upstream):
-    """The `_serve()` readiness poll hits `/__ready` before tests run; it must not
-    be recorded as a call, otherwise every test would see it as a spurious first entry.
+def test_each_test_starts_without_recorded_upstream_calls(upstream):
+    """The session-wide upstream's calls are cleared before every live test, and server
+    readiness is not probed over HTTP, so no test sees another test's requests or a
+    readiness probe as a spurious first entry.
     """
     assert upstream.calls == []
 
@@ -43,24 +45,13 @@ def test_fixed_length_body_is_forwarded(proxy, upstream):
     assert "x-mockstack-rule" not in upstream.calls[-1]["headers"]
 
 
-def test_upstream_unreachable_returns_stamped_502(tmp_path, mockstack_server):
+def test_upstream_unreachable_returns_stamped_502(proxy):
     """A passthrough rule whose replacement points at a port nothing listens on must
     not surface as a bare, unstamped 500 from Starlette's ServerErrorMiddleware --
     'upstream unreachable' is the single most common eval failure and apply() must
     stamp it with the strategy's own X-Mockstack-* headers instead.
     """
-    rules = write_rules(
-        tmp_path,
-        [
-            {
-                "name": "unreachable-passthrough",
-                "pattern": r"^/upstream/(.*)",
-                "replacement": r"http://127.0.0.1:1/\1",
-            }
-        ],
-    )
-    server = mockstack_server(proxyrules_settings(rules))
-    r = httpx.get(f"{server.base_url}/upstream/api/v1/thing")
+    r = httpx.get(f"{proxy.base_url}/unreachable/api/v1/thing")
     assert r.status_code == 502
     assert r.headers["x-mockstack-result"] == "error"
     assert r.headers["x-mockstack-rule"] == "unreachable-passthrough"

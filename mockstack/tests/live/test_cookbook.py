@@ -12,7 +12,6 @@ import json
 import os
 import re
 import shlex
-import string
 import subprocess
 import sys
 from collections.abc import Callable
@@ -23,8 +22,6 @@ from typing import Any
 import httpx
 import pytest
 import yaml
-
-from mockstack.tests.live.conftest import LiveServer, proxyrules_settings
 
 pytestmark = pytest.mark.slow
 
@@ -97,8 +94,8 @@ TESTED_CURLS = {
 }
 
 
-def curl(command: str, server: LiveServer) -> httpx.Response:
-    """Run a documented ``curl`` command, as written, against ``server``.
+def curl(command: str, base_url: str) -> httpx.Response:
+    """Run a documented ``curl`` command, as written, against mockstack at ``base_url``.
 
     Supports the flags the cookbook uses: ``-i`` (ignored), ``-L``, ``-H``, ``-d``
     (which, as in curl, implies POST and a form content type unless one is given).
@@ -121,7 +118,7 @@ def curl(command: str, server: LiveServer) -> httpx.Response:
         elif arg == "-d":
             data = next(it).encode()
         elif arg.startswith(DOCS_MOCKSTACK_URL):
-            url = server.base_url + arg.removeprefix(DOCS_MOCKSTACK_URL)
+            url = base_url + arg.removeprefix(DOCS_MOCKSTACK_URL)
         else:
             raise ValueError(f"unsupported curl argument: {arg!r}")
     assert url is not None, command
@@ -148,23 +145,20 @@ def assert_result(
     assert actual == (status, result, rule)
 
 
-@pytest.fixture
-def cookbook(tmp_path, upstream, mockstack_server) -> Callable[..., LiveServer]:
-    """Start mockstack on one recipe's real rules file and fixtures."""
+@pytest.fixture(scope="module")
+def cookbook(upstream, render_rules, mockstack_server) -> Callable[..., str]:
+    """Factory: start mockstack on one recipe's real rules file and fixtures, for the
+    rest of this module; returns its base URL."""
 
-    def _start(recipe: str, **overrides: Any) -> LiveServer:
+    def _start(recipe: str, **overrides: Any) -> str:
         recipe_dir = COOKBOOK_DIR / recipe
-        template = string.Template((recipe_dir / "rules.yml").read_text())
-        # Like `envsubst '${FIXTURES_DIR} ${UPSTREAM_URL}'`: other `$`s (regex
-        # anchors) are left alone.
-        rendered = template.safe_substitute(
+        # Like `envsubst '${FIXTURES_DIR} ${UPSTREAM_URL}'`.
+        rules_file = render_rules(
+            recipe_dir / "rules.yml",
             FIXTURES_DIR=str(recipe_dir / "fixtures"),
             UPSTREAM_URL=upstream.base_url,
         )
-        assert "${" not in rendered, f"unsubstituted placeholder in {recipe}"
-        rules_file = tmp_path / "rules.local.yml"
-        rules_file.write_text(rendered)
-        return mockstack_server(proxyrules_settings(rules_file, **overrides))
+        return mockstack_server(rules_file, **overrides).base_url
 
     return _start
 
@@ -172,7 +166,7 @@ def cookbook(tmp_path, upstream, mockstack_server) -> Callable[..., LiveServer]:
 # --- Recipe 1 ---------------------------------------------------------------
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def recipe1(cookbook):
     return cookbook("01-tagged-traffic")
 
@@ -209,7 +203,7 @@ def test_recipe1_tagged_request_without_fixture_rule_passes_through(recipe1, ups
 # --- Recipe 2 ---------------------------------------------------------------
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def recipe2(cookbook):
     return cookbook("02-scenario-directories")
 
@@ -245,7 +239,7 @@ def test_recipe2_value_failing_the_predicate_passes_through(recipe2, upstream):
 # --- Recipe 3 ---------------------------------------------------------------
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def recipe3(cookbook):
     return cookbook("03-sql-gateway")
 
@@ -279,7 +273,7 @@ def test_recipe3_other_query_passes_through(recipe3, upstream):
 ORDERS_FIXTURE = {"orders": [{"id": "ord-1001", "status": "OPEN"}], "total": 1}
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def recipe4(cookbook):
     return cookbook("04-json-literals")
 
@@ -330,7 +324,7 @@ def test_recipe4_nested_object(recipe4):
 # --- Recipe 5 ---------------------------------------------------------------
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def recipe5(cookbook):
     return cookbook("05-query-parameters")
 
@@ -368,7 +362,7 @@ def test_recipe5_repeated_parameter_with_other_last_value_passes_through(
 FIXTURE_ASSERTIONS = COOKBOOK_DIR / "06-asserting-in-tests" / "fixture_assertions.py"
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def recipe6(cookbook):
     # The page starts this recipe with MOCKSTACK__PROXYRULES_REVERSE_PROXY_TIMEOUT=1.
     return cookbook("06-asserting-in-tests", proxyrules_reverse_proxy_timeout=1.0)
@@ -392,7 +386,7 @@ def test_recipe6_snippet_passes_against_fixture(recipe6):
         cwd=FIXTURE_ASSERTIONS.parent,
         env={
             **os.environ,
-            "MOCKSTACK_URL": recipe6.base_url,
+            "MOCKSTACK_URL": recipe6,
             "PYTHONDONTWRITEBYTECODE": "1",
         },
         capture_output=True,
@@ -406,7 +400,7 @@ def test_recipe6_snippet_passes_against_fixture(recipe6):
 
 def test_recipe6_snippet_fails_when_request_is_proxied(recipe6, upstream):
     checks = _load_fixture_assertions()
-    untagged = httpx.get(f"{recipe6.base_url}/projects/api/v1/project/proj-123")
+    untagged = httpx.get(f"{recipe6}/projects/api/v1/project/proj-123")
     with pytest.raises(AssertionError, match="X-Mockstack-Result='proxy'"):
         checks.expect_fixture(untagged, rule="project-fixture")
     assert len(upstream.calls) == 1
@@ -455,7 +449,7 @@ def test_recipe6_upstream_timeout_is_504(recipe6):
 # --- Recipe 7 ---------------------------------------------------------------
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def recipe7(cookbook):
     # The page starts this recipe with MOCKSTACK__PROXYRULES_REDIRECT_VIA=http_307_temporary.
     return cookbook("07-redirect-mode", proxyrules_redirect_via="http_307_temporary")

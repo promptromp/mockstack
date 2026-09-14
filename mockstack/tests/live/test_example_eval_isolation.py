@@ -9,14 +9,10 @@ example's README, plus a fourth passthrough case for a non-matching analytics qu
 """
 
 import json
-import shutil
-import string
 from pathlib import Path
 
 import httpx
 import pytest
-
-from mockstack.tests.live.conftest import proxyrules_settings
 
 pytestmark = pytest.mark.slow
 
@@ -27,20 +23,15 @@ EXAMPLE_DIR = (
 STAMPED = {"X-Request-Eval-Scenario": "healthy"}
 
 
-@pytest.fixture
-def server(tmp_path, upstream, mockstack_server):
-    fixtures_dir = tmp_path / "fixtures"
-    shutil.copytree(EXAMPLE_DIR / "fixtures", fixtures_dir)
-
-    rendered = string.Template((EXAMPLE_DIR / "rules.yml").read_text()).safe_substitute(
-        FIXTURES_DIR=str(fixtures_dir),
+@pytest.fixture(scope="module")
+def server(upstream, render_rules, mockstack_server):
+    rules_file = render_rules(
+        EXAMPLE_DIR / "rules.yml",
+        FIXTURES_DIR=str(EXAMPLE_DIR / "fixtures"),
         PROJECTS_URL=upstream.base_url,
         ANALYTICS_URL=upstream.base_url,
     )
-    rules_file = tmp_path / "rules.local.yml"
-    rules_file.write_text(rendered)
-
-    return mockstack_server(proxyrules_settings(rules_file))
+    return mockstack_server(rules_file)
 
 
 def test_stamped_get_project_returns_fixture(server, upstream):

@@ -7,37 +7,32 @@ Header-gated fixtures versus passthrough (including body predicates) are covered
 import httpx
 import pytest
 
-from mockstack.tests.live.conftest import proxyrules_settings, write_rules
-
 pytestmark = pytest.mark.slow
 
 
-@pytest.fixture
-def scenarios(tmp_path, upstream, mockstack_server):
+@pytest.fixture(scope="module")
+def scenarios(tmp_path_factory, upstream, mockstack_server):
+    fixtures_dir = tmp_path_factory.mktemp("scenarios")
     for name in ("healthy", "degraded"):
-        d = tmp_path / name / "projects"
-        d.mkdir(parents=True)
-        (d / "project.abc.json.j2").write_text(
-            f'{{"scenario": "{name}", "id": "{{{{ id }}}}"}}'
-        )
-    rules = write_rules(
-        tmp_path,
+        template = fixtures_dir / name / "projects" / "project.abc.json.j2"
+        template.parent.mkdir(parents=True)
+        template.write_text(f'{{"scenario": "{name}", "id": "{{{{ id }}}}"}}')
+    return mockstack_server(
         [
             {
                 "name": "project-eval",
                 "method": "GET",
                 "pattern": r"^/projects/api/v1/project/(?P<id>[^/]+)$",
                 "headers": {"x-request-eval-scenario": ".*"},
-                "replacement": f"file://{tmp_path}/{{{{ headers['x-request-eval-scenario'] }}}}/projects/project.{{{{ id }}}}.json.j2",
+                "replacement": f"file://{fixtures_dir}/{{{{ headers['x-request-eval-scenario'] }}}}/projects/project.{{{{ id }}}}.json.j2",
             },
             {
                 "name": "passthrough",
                 "pattern": r"^/projects/(.*)",
                 "replacement": f"{upstream.base_url}/\\1",
             },
-        ],
+        ]
     )
-    return mockstack_server(proxyrules_settings(rules))
 
 
 @pytest.mark.parametrize("scenario", ["healthy", "degraded"])
