@@ -233,6 +233,30 @@ backreferences work as before.
     expose it on trusted networks). Restrict predicates feeding a rendered path or
     URL to the character classes you actually expect, e.g. `[a-z0-9_-]+`.
 
+## Testing evaluation suites
+
+A single mockstack instance can sit in front of a real service and serve fixtures
+only to evaluation traffic: stamp eval requests with a header (e.g.
+`X-Request-Eval-Scenario: healthy`), put a narrow, header-gated rule ahead of a
+broad passthrough for the same path prefix, and point the fixture rule's
+`replacement` at a `file:///` template under a per-scenario directory. Every
+other request -- unstamped, or one whose header value fails the predicate --
+fails open and is reverse-proxied to the real service untouched. A *stamped*
+request naming a scenario with no fixture on disk still matches the eval rule
+and does not fall through to the passthrough: it gets a 404 from
+`handle_template_result`, so evaluators should treat a 404 paired with
+`X-Mockstack-Result: template` as a missing-fixture error, not a passthrough.
+
+Have the eval harness assert `X-Mockstack-Result` (and, ideally,
+`X-Mockstack-Rule`) on every response instead of only checking the body: a rule
+that stops matching -- a path change upstream, a typo'd header -- then fails the
+run instead of silently exercising the real service with fixture inputs.
+
+See
+[`examples/proxyrules-eval-isolation`](https://github.com/promptromp/mockstack/tree/main/examples/proxyrules-eval-isolation)
+for a complete worked example, including a live test that runs its rules file
+and fixtures for real.
+
 ## Error Handling
 
 When no matching rule is found and resource creation simulation is disabled, the strategy returns a 404 NOT FOUND response.
