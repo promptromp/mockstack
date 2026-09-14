@@ -60,7 +60,7 @@ match wins, so put narrow, predicate-bearing rules before broad passthroughs:
 rules:
   - name: project-eval               # only stamped eval traffic
     method: GET
-    pattern: ^/projects/api/v2/project/(?P<id>[^/]+)$
+    pattern: ^/projects/api/v1/project/(?P<id>[^/]+)$
     headers:
       x-request-eval-scenario: ".*"
     replacement: file:///fixtures/projects/project.json.j2
@@ -75,7 +75,7 @@ path and the intent lives in the payload, such as SQL gateways:
 ```yaml
   - name: analytics-sales-eval
     method: POST
-    pattern: ^/analytics/analytics/v2/sql$
+    pattern: ^/analytics/v1/sql$
     headers:
       x-request-eval-scenario: ".*"
     json:
@@ -192,7 +192,7 @@ would otherwise double up into a four-slash, `//`-rooted path.
 rules:
   - name: project-fixture
     method: GET
-    pattern: ^/projects/api/v2/project/(?P<id>[^/]+)$
+    pattern: ^/projects/api/v1/project/(?P<id>[^/]+)$
     replacement: file:///fixtures/projects/project.json.j2
 ```
 
@@ -219,7 +219,7 @@ groups. This lets one rule fan out to per-scenario fixture directories:
 ```yaml
   - name: project-eval
     method: GET
-    pattern: ^/projects/api/v2/project/(?P<id>[^/]+)$
+    pattern: ^/projects/api/v1/project/(?P<id>[^/]+)$
     headers:
       x-request-eval-scenario: "[a-z0-9_-]+"
     replacement: file:///fixtures/{{ headers['x-request-eval-scenario'] }}/projects/project.{{ id }}.json.j2

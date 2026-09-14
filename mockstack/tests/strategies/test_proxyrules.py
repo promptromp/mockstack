@@ -600,9 +600,9 @@ def test_rule_for_prefers_stamped_fixture_then_falls_through(settings, tmp_path)
     rules_file.write_text(
         """
 rules:
-  - name: projects-project-eval
+  - name: projects-eval
     method: GET
-    pattern: ^/projects/api/v2/project/(?P<id>[^/]+)$
+    pattern: ^/projects/api/v1/project/(?P<id>[^/]+)$
     headers:
       x-request-eval-scenario: ".*"
     replacement: file:///fixtures/projects/project.json.j2
@@ -619,7 +619,7 @@ rules:
             scope={
                 "type": "http",
                 "method": "GET",
-                "path": "/projects/api/v2/project/abc",
+                "path": "/projects/api/v1/project/abc",
                 "query_string": b"",
                 "headers": headers,
             }
@@ -627,7 +627,7 @@ rules:
 
     stamped = strategy.rule_for(req([(b"x-request-eval-scenario", b"healthy")]))
     unstamped = strategy.rule_for(req([]))
-    assert stamped is not None and stamped.name == "projects-project-eval"
+    assert stamped is not None and stamped.name == "projects-eval"
     assert unstamped is not None and unstamped.name == "projects-passthrough"
 
 
