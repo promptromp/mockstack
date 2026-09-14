@@ -182,6 +182,11 @@ rules:
 
 A `replacement` starting with `file:///` serves a Jinja2 template instead of proxying.
 The path is an **absolute filesystem path**; `templates_dir` is not consulted.
+`file://` followed directly by an absolute path (i.e. `file:///abs/path`, three
+slashes total) is the canonical form; when building the path from a variable that
+already starts with `/` (e.g. `${FIXTURES_DIR}`), write `file://${FIXTURES_DIR}/...`
+(two slashes) so the interpolated value supplies the third -- `file:///${FIXTURES_DIR}/...`
+would otherwise double up into a four-slash, `//`-rooted path.
 
 ```yaml
 rules:
@@ -233,8 +238,12 @@ backreferences work as before.
     a header select an arbitrary sibling fixture *within* the intended directory tree
     (and a rendered replacement that proxies, `https://{{ ... }}`, lets request data
     choose the upstream entirely -- mockstack is already an open reverse proxy; only
-    expose it on trusted networks). Restrict predicates feeding a rendered path or
-    URL to the character classes you actually expect, e.g. `[a-z0-9_-]+`.
+    expose it on trusted networks). A rendered request value must also never be the
+    *leading* element of a `file://` path -- e.g.
+    `file://{{ headers['x-root'] }}/f.json` lets a header select an arbitrary
+    absolute path (it need only start with `/`), which the `..` guard cannot catch
+    since no `..` segment is ever involved. Restrict predicates feeding a rendered
+    path or URL to the character classes you actually expect, e.g. `[a-z0-9_-]+`.
 
 ## Testing evaluation suites
 

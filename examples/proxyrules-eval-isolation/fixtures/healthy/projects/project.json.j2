@@ -1,1 +1,1 @@
-{"id": "{{ id }}", "name": "Eval project {{ id }}", "status": "ACTIVE", "scenario": "{{ headers['x-request-eval-scenario'] }}"}
+{"id": {{ id | tojson }}, "name": {{ ("Eval project " ~ id) | tojson }}, "status": "ACTIVE", "scenario": {{ headers['x-request-eval-scenario'] | tojson }}}

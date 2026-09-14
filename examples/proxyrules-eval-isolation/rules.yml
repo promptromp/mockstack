@@ -6,7 +6,7 @@ rules:
     pattern: ^/projects/api/v2/project/(?P<id>[^/]+)$
     headers:
       x-request-eval-scenario: "[a-z0-9_-]+"
-    replacement: file:///${FIXTURES_DIR}/{{ headers['x-request-eval-scenario'] }}/projects/project.json.j2
+    replacement: file://${FIXTURES_DIR}/{{ headers['x-request-eval-scenario'] }}/projects/project.json.j2
 
   - name: projects-passthrough
     pattern: ^/projects/(.*)
@@ -19,7 +19,7 @@ rules:
       x-request-eval-scenario: "[a-z0-9_-]+"
     json:
       query: "(?is).*FROM\\s+sales_facts.*"
-    replacement: file:///${FIXTURES_DIR}/{{ headers['x-request-eval-scenario'] }}/analytics/sales_facts.json.j2
+    replacement: file://${FIXTURES_DIR}/{{ headers['x-request-eval-scenario'] }}/analytics/sales_facts.json.j2
 
   - name: analytics-passthrough
     pattern: ^/analytics/(.*)
