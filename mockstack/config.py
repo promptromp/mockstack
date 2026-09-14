@@ -162,7 +162,7 @@ class Settings(BaseSettings):
             raise ValueError("proxyrules_rules_filename is required when strategy is proxyrules")
 
         if self.strategy == "filefixtures" and self.templates_dir is None:
-            raise ValueError("templates_dir is required when strategy is proxyrules")
+            raise ValueError("templates_dir is required when strategy is filefixtures")
 
         return self
 

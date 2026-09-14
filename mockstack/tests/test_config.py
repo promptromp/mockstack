@@ -1,5 +1,7 @@
 """Tests for mockstack.config: settings construction isolation."""
 
+import pytest
+
 from mockstack.config import CliSettings, Settings
 
 
@@ -49,3 +51,8 @@ def test_filefixtures_simulate_create_on_missing_cli_flag(templates_dir):
         ]
     )
     assert settings_disabled.filefixtures_simulate_create_on_missing is False
+
+
+def test_filefixtures_without_templates_dir_names_the_right_strategy():
+    with pytest.raises(ValueError, match="templates_dir is required when strategy is filefixtures"):
+        Settings(strategy="filefixtures", templates_dir=None)
