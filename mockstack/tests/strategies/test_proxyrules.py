@@ -307,6 +307,18 @@ async def test_redirect_response_carries_result_headers(apply_rule, traced_reque
 
 
 @pytest.mark.asyncio
+async def test_redirect_result_span_attribute_is_redirect(apply_rule, traced_request, span_attributes):
+    """A 307 redirect result sets the span's ``result_type`` to ``redirect``, the same
+    as the response's stamped header."""
+    await apply_rule(
+        {"pattern": r"^/api/(.*)", "replacement": r"https://api.example/\1"},
+        traced_request("/api/x"),
+        proxyrules_redirect_via=ProxyRulesRedirectVia.HTTP_TEMPORARY_REDIRECT,
+    )
+    assert span_attributes()["mockstack.proxyrules.result_type"] == "redirect"
+
+
+@pytest.mark.asyncio
 async def test_proxy_rules_strategy_apply_no_match(proxyrules_strategy, traced_request):
     """A request no rule matches is a 404 stamped ``missing``, with no rule header."""
     response = await proxyrules_strategy().apply(traced_request("/nonexistent/path"))
@@ -509,6 +521,25 @@ async def test_missing_fixture_is_stamped_404_error_without_echoing_path(apply_r
     assert response.headers[RESULT_RULE_HEADER] == "fixture-rule"
     assert json.loads(response.body) == {"error": "Template file not found."}
     assert str(missing) in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_missing_fixture_span_attributes_describe_the_rule(apply_rule, tmp_path, span_attributes):
+    """A missing-fixture 404, like every other error naming a rule, carries that rule's
+    shared attributes and ``result_type = "error"`` -- not only the response headers."""
+    missing = tmp_path / "secret-scenario" / "project.json.j2"
+    response = await apply_rule(
+        {
+            "name": "fixture-rule",
+            "pattern": r"^/x$",
+            "replacement": f"file://{missing}",
+        }
+    )
+    assert response.status_code == 404
+    attributes = span_attributes()
+    assert attributes["mockstack.proxyrules.rule_name"] == "fixture-rule"
+    assert attributes["mockstack.proxyrules.rule_pattern"] == r"^/x$"
+    assert attributes["mockstack.proxyrules.result_type"] == "error"
 
 
 @pytest.mark.asyncio
@@ -799,6 +830,23 @@ async def test_proxy_rules_strategy_apply_reverse_proxy(apply_rule, traced_reque
 
 
 @pytest.mark.asyncio
+async def test_reverse_proxy_result_span_attribute_is_proxy(apply_rule, traced_request, upstream_send, span_attributes):
+    """A plain reverse-proxy URL result (record mode off) sets the span's
+    ``result_type`` to ``proxy``, the same as the response's stamped header."""
+    upstream_send.return_value = httpx.Response(200, headers={"content-type": "application/json"}, content=b"{}")
+    await apply_rule(
+        {
+            "name": "api-passthrough",
+            "pattern": r"^/api/(.*)",
+            "replacement": r"https://api.example/\1",
+        },
+        traced_request(PROJECT_PATH),
+        proxyrules_redirect_via=ProxyRulesRedirectVia.REVERSE_PROXY,
+    )
+    assert span_attributes()["mockstack.proxyrules.result_type"] == "proxy"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("error", "status_code", "message"),
     [
@@ -821,6 +869,24 @@ async def test_apply_stamps_upstream_failures(
     assert response.headers[RESULT_TYPE_HEADER] == "error"
     assert RESULT_RULE_HEADER in response.headers
     assert json.loads(response.body) == {"error": message}
+
+
+@pytest.mark.asyncio
+async def test_upstream_failure_span_attributes_overwrite_proxy_with_error(
+    reverse_proxy_strategy, traced_request, upstream_send, span_attributes
+):
+    """``update_opentelemetry`` sets ``result_type`` to ``proxy`` before the request is
+    sent; once the send fails, the error helper in ``apply``'s ``UpstreamError`` handler
+    must overwrite it with ``error`` -- span attributes are last-write-wins, like a real
+    span -- while still describing the rule that was stamped."""
+    upstream_send.side_effect = httpx.ConnectError("boom")
+    response = await reverse_proxy_strategy.apply(traced_request(PROJECT_PATH))
+    assert response.status_code == 502
+    assert response.headers[RESULT_TYPE_HEADER] == "error"
+    attributes = span_attributes()
+    assert attributes["mockstack.proxyrules.result_type"] == "error"
+    assert attributes["mockstack.proxyrules.rule_method"] == "GET"
+    assert attributes["mockstack.proxyrules.rule_pattern"] == r"/api/v1/projects/(\d+)"
 
 
 @pytest.mark.asyncio
@@ -1042,13 +1108,14 @@ def test_proxy_rules_strategy_update_opentelemetry(proxyrules_strategy, traced_r
     request = traced_request("/test")
     rule = Rule(pattern="/test", replacement="/target", method="GET", name="test_rule")
 
-    proxyrules_strategy().update_opentelemetry(request, rule, "/target")
+    proxyrules_strategy().update_opentelemetry(request, rule, "/target", result_type="proxy")
 
     span.set_attribute.assert_any_call("mockstack.proxyrules.rule_name", "test_rule")
     span.set_attribute.assert_any_call("mockstack.proxyrules.rule_method", "GET")
     span.set_attribute.assert_any_call("mockstack.proxyrules.rule_pattern", "/test")
     span.set_attribute.assert_any_call("mockstack.proxyrules.rule_replacement", "/target")
     span.set_attribute.assert_any_call("mockstack.proxyrules.rewritten_url", "/target")
+    span.set_attribute.assert_any_call("mockstack.proxyrules.result_type", "proxy")
 
 
 def test_maybe_update_response_headers_describes_buffered_body():

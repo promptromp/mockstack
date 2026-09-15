@@ -59,3 +59,16 @@ def upstream_send():
     """Patch ``httpx.AsyncClient.send``; each test sets ``return_value`` or ``side_effect``."""
     with patch.object(httpx.AsyncClient, "send", new_callable=AsyncMock) as send:
         yield send
+
+
+@pytest.fixture
+def span_attributes(span) -> Callable[[], dict[str, Any]]:
+    """Factory: the span's final attribute values, rebuilt from every ``set_attribute``
+    call with last-write-wins semantics (as OpenTelemetry spans behave), so a test can
+    assert on the value a real span would report rather than merely that some call was
+    made with it."""
+
+    def _attributes() -> dict[str, Any]:
+        return {call.args[0]: call.args[1] for call in span.set_attribute.call_args_list}
+
+    return _attributes

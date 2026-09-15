@@ -582,7 +582,11 @@ The default metadata fields are controlled via the configuration file and at the
 ## OpenTelemetry integration
 
 The strategy automatically adds the following OpenTelemetry attributes when a rule
-matches:
+matches. The shared rule attributes (`rule_name`, `rule_method`, `rule_pattern`,
+`rule_replacement`) always describe the rule named in the response's
+`X-Mockstack-Rule` header, never some other rule that was merely consulted along the
+way (e.g. a record-mode upstream rule whose response ends up recorded and replayed
+from the fixture instead):
 
 - `mockstack.proxyrules.rule_name`: The name of the matched rule (if specified)
 - `mockstack.proxyrules.rule_method`: The HTTP method the rule matches (if specified)
@@ -590,8 +594,29 @@ matches:
 - `mockstack.proxyrules.rule_replacement`: The replacement as written in the rules file
 - `mockstack.proxyrules.rewritten_url`: The final URL after applying the rule (proxy
   and redirect results)
-- `mockstack.proxyrules.template_path`: The rendered fixture path, and
-  `mockstack.proxyrules.result_type` set to `template` (template results)
+- `mockstack.proxyrules.result_type`: The result type stamped on the response (`proxy`,
+  `redirect`, `template`, `error`, or in record mode `record`), set on every proxy,
+  redirect, template and error result
+- `mockstack.proxyrules.template_path`: The rendered fixture path (template results)
+
+An error response that names a rule (`X-Mockstack-Result: error` with an
+`X-Mockstack-Rule` header -- e.g. a missing or unrenderable fixture, an unreachable
+upstream, or a record-mode write failure) carries that rule's shared attributes and
+`result_type` `error`, overwriting any result type an earlier, now-superseded call had
+set for the same response (e.g. a reverse proxy attempt that set `proxy` before it
+failed).
+
+In record mode (`proxyrules_record_mode`), attempting to record from the next matching
+URL rule also sets:
+
+- `mockstack.proxyrules.upstream_rule_name`: The name (or pattern, when unnamed) of the
+  rule the request was proxied to while attempting to record
+- `mockstack.proxyrules.recorded_path`: The fixture path written, when the response was
+  recorded (`result_type` is `record`; the shared rule attributes describe the fixture
+  rule)
+- `mockstack.proxyrules.not_recorded_reason`: Why the response was not recorded, when it
+  was not (`result_type` is `proxy`; the shared rule attributes describe the upstream
+  rule, since that is what `X-Mockstack-Rule` names)
 
 ## Testing evaluation suites
 
