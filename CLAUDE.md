@@ -32,9 +32,10 @@ CLI flags, `MOCKSTACK__*` environment variables, or a `.env` file.
 - `mockstack/templating.py`: Jinja environment and path-to-template-name resolution
 - `mockstack/intent.py`, `mockstack/identifiers.py`: POST intent (search, command,
   create) and path-identifier heuristics
-- `mockstack/routers/`: catch-all and homepage routes
+- `mockstack/routers/`: the catch-all route; every path, `/` included, reaches the strategy
 - `mockstack/tests/`: unit tests; `conftest.py` holds fixtures shared by unit and live
-  tests (`make_settings`, `make_request`, `write_rules`, `write_template`, `span`), and
+  tests (`make_settings`, `make_request`, `write_rules`, `write_template`, `span`, and
+  `asgi_client`, an httpx client that calls the `app` fixture in-process), and
   `strategies/conftest.py` adds strategy helpers (`traced_request`,
   `proxyrules_strategy`, `apply_rule`, `upstream_send`, `span_attributes`). Build settings with
   `make_settings`: it ignores
