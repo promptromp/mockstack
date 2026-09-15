@@ -260,6 +260,16 @@ class Rule:
     def _has_fixture_only_fields(self) -> bool:
         return self.status is not None or bool(self.response_headers)
 
+    @property
+    def is_plain_fixture(self) -> bool:
+        """True when the replacement always serves a fixture, with nothing to render.
+
+        A plain (non-Jinja) ``file:///`` replacement always serves a fixture, so it can
+        be classified without rendering it. A Jinja replacement's result type (fixture
+        or URL) is only known after rendering, so it is never ``True`` here.
+        """
+        return not self._is_template and self.replacement.startswith(PROXYRULES_FILE_TEMPLATE_PREFIX)
+
     @classmethod
     def from_dict(cls, data: dict[str, Any], env: Environment | None = None) -> Self:
         return cls(

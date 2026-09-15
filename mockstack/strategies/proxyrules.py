@@ -214,6 +214,10 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         self.verify_ssl_certificates = settings.proxyrules_verify_ssl_certificates
         self.record_mode = ProxyRulesRecordMode(settings.proxyrules_record_mode)
         self.record_root = Path(settings.proxyrules_record_root) if settings.proxyrules_record_root else None
+        # Rule identities (name, falling back to pattern -- the same identity
+        # `with_result_headers` stamps) already warned about an outside-root path, so the
+        # WARNING is logged only once per rule; later requests log it at DEBUG instead.
+        self._warned_outside_record_root: set[str] = set()
 
         if self.rules_filename is not None:
             # Load (and so validate) the rules now, so a bad rules file fails at
@@ -492,6 +496,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             return await self.handle_template_result(request, rule, result)
 
         upstream_rule, url = upstream
+        self.update_opentelemetry(request, upstream_rule, url)
         response = await self.reverse_proxy(request, url)
         text, reason = self._recordable_text(request, rule, response)
         if text is None:
@@ -514,9 +519,16 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             return None
         path = resolve_inside(self.record_root, template_path)
         if path is None:
-            self.logger.warning(
-                "[rule:%s] not recorded: %s is outside proxyrules_record_root", rule.name, template_path
-            )
+            identity = str(rule.name or rule.pattern)
+            if identity in self._warned_outside_record_root:
+                self.logger.debug(
+                    "[rule:%s] not recorded: %s is outside proxyrules_record_root", rule.name, template_path
+                )
+            else:
+                self._warned_outside_record_root.add(identity)
+                self.logger.warning(
+                    "[rule:%s] not recorded: %s is outside proxyrules_record_root", rule.name, template_path
+                )
             return None
         if not path.exists() or (self.record_mode == ProxyRulesRecordMode.OVERWRITE and is_recorded(path)):
             return path
@@ -525,8 +537,15 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
     def _upstream_for(
         self, request: Request, payload: RequestPayload, later_rules: Iterator[Rule]
     ) -> tuple[Rule, str] | None:
-        """The first later matching rule whose result is a URL, with that URL."""
+        """The first later matching rule whose result is a URL, with that URL.
+
+        A plain (non-Jinja) ``file:///`` candidate always serves a fixture, so it is
+        skipped without being applied. A Jinja replacement is still applied: its result
+        type (fixture or URL) is only known after rendering.
+        """
         for candidate in later_rules:
+            if candidate.is_plain_fixture:
+                continue
             candidate_result = candidate.apply(request, payload)
             if isinstance(candidate_result, URLRuleResult):
                 return candidate, candidate_result.url
@@ -540,6 +559,12 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         expected = rule.status if rule.status is not None else status.HTTP_200_OK
         if response.status_code != expected:
             return None, f"upstream status {response.status_code}, rule serves {expected}"
+        encoding = response.headers.get("content-encoding")
+        if encoding is not None and encoding.strip().lower() != "identity":
+            # `reverse_proxy`/`maybe_update_response_headers` relabels a coding httpx
+            # decoded while reading the body as "identity"; anything else here is a
+            # coding httpx skipped, so the body is still encoded.
+            return None, f"the upstream body is still encoded ({encoding})"
         try:
             text = bytes(response.body).decode("utf-8")
         except UnicodeDecodeError:

@@ -859,6 +859,24 @@ def test_status_on_template_replacement_rendering_a_fixture_is_applied(make_requ
     assert result.template_path == "/f/abc.json"
 
 
+@pytest.mark.parametrize(
+    ("replacement", "env", "expected"),
+    [
+        ("file:///f.json", None, True),
+        ("https://upstream.example/x", None, False),
+        ("file:///f/{{ id }}.json", Environment(), False),
+        ("https://upstream.example/{{ id }}", Environment(), False),
+    ],
+    ids=["plain-file", "plain-url", "jinja-file", "jinja-url"],
+)
+def test_is_plain_fixture(replacement, env, expected):
+    """A plain ``file:///`` replacement is classified without rendering; a Jinja
+    replacement of either kind is not, since its result type is only known after
+    rendering."""
+    rule = Rule(pattern=r"^/x/(?P<id>[^/]+)$", replacement=replacement, env=env)
+    assert rule.is_plain_fixture is expected
+
+
 def test_status_on_template_replacement_rendering_a_url_fails_on_apply(make_request):
     """Whether a rendered replacement is a fixture is only known per request."""
     rule = Rule(
