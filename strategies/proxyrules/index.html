@@ -1,0 +1,2000 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://promptromp.github.io/mockstack/strategies/proxyrules/">
+      
+      
+        <link rel="prev" href="../filefixtures/">
+      
+      
+        <link rel="next" href="../../guides/proxyrules-cookbook/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/favicon.ico">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>ProxyRules - mockstack</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Merriweather+Sans:300,300i,400,400i,700,700i%7CRed+Hat+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Merriweather Sans";--md-code-font:"Red Hat Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="amber" data-md-color-accent="deep-purple">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#proxyrules-strategy" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="mockstack" class="md-header__button md-logo" aria-label="mockstack" data-md-component="logo">
+      
+  <img src="../../assets/logo.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            mockstack
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              ProxyRules
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="amber" data-md-color-accent="deep-purple"  aria-label="Dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 7a5 5 0 0 1 5 5 5 5 0 0 1-5 5 5 5 0 0 1-5-5 5 5 0 0 1 5-5m0 2a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3m0-7 2.39 3.42C13.65 5.15 12.84 5 12 5s-1.65.15-2.39.42zM3.34 7l4.16-.35A7.2 7.2 0 0 0 5.94 8.5c-.44.74-.69 1.5-.83 2.29zm.02 10 1.76-3.77a7.131 7.131 0 0 0 2.38 4.14zM20.65 7l-1.77 3.79a7.02 7.02 0 0 0-2.38-4.15zm-.01 10-4.14.36c.59-.51 1.12-1.14 1.54-1.86.42-.73.69-1.5.83-2.29zM12 22l-2.41-3.44c.74.27 1.55.44 2.41.44.82 0 1.63-.17 2.37-.44z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="blue" data-md-color-accent="deep-orange"  aria-label="Light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m17.75 4.09-2.53 1.94.91 3.06-2.63-1.81-2.63 1.81.91-3.06-2.53-1.94L12.44 4l1.06-3 1.06 3zm3.5 6.91-1.64 1.25.59 1.98-1.7-1.17-1.7 1.17.59-1.98L15.75 11l2.06-.05L18.5 9l.69 1.95zm-2.28 4.95c.83-.08 1.72 1.1 1.19 1.85-.32.45-.66.87-1.08 1.27C15.17 23 8.84 23 4.94 19.07c-3.91-3.9-3.91-10.24 0-14.14.4-.4.82-.76 1.27-1.08.75-.53 1.93.36 1.85 1.19-.27 2.86.69 5.83 2.89 8.02a9.96 9.96 0 0 0 8.02 2.89m-1.64 2.02a12.08 12.08 0 0 1-7.8-3.47c-2.17-2.19-3.33-5-3.49-7.82-2.81 3.14-2.7 7.96.31 10.98 3.02 3.01 7.84 3.12 10.98.31"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/promptromp/mockstack" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    mockstack
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="mockstack" class="md-nav__button md-logo" aria-label="mockstack" data-md-component="logo">
+      
+  <img src="../../assets/logo.png" alt="logo">
+
+    </a>
+    mockstack
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/promptromp/mockstack" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    mockstack
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Strategies
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Strategies
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../base/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    BaseStrategy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../filefixtures/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FileFixtures
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ProxyRules
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ProxyRules
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Overview
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rules-file" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rules file
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Rules file">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rule-properties" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rule properties
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#matching-order" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Matching order
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#load-time-validation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Load-time validation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#example-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Example rules
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#file-templates" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        File templates
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="File templates">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#status-codes-and-headers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Status codes and headers
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#template-context" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Template context
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynamic-replacements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dynamic replacements
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#recording-fixtures" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Recording fixtures
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Recording fixtures">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#scrubbing-recorded-bodies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scrubbing recorded bodies
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#redirection-methods" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Redirection methods
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#result-headers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Result headers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#error-handling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Error handling
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#resource-creation-simulation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Resource creation simulation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#opentelemetry-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        OpenTelemetry integration
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#testing-evaluation-suites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Testing evaluation suites
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/proxyrules-cookbook/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ProxyRules cookbook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    LLM Integrations
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    LLM Integrations
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ollama/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ollama
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Overview
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rules-file" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rules file
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Rules file">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rule-properties" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rule properties
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#matching-order" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Matching order
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#load-time-validation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Load-time validation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#example-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Example rules
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#file-templates" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        File templates
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="File templates">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#status-codes-and-headers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Status codes and headers
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#template-context" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Template context
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynamic-replacements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dynamic replacements
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#recording-fixtures" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Recording fixtures
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Recording fixtures">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#scrubbing-recorded-bodies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scrubbing recorded bodies
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#redirection-methods" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Redirection methods
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#result-headers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Result headers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#error-handling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Error handling
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#resource-creation-simulation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Resource creation simulation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#opentelemetry-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        OpenTelemetry integration
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#testing-evaluation-suites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Testing evaluation suites
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="proxyrules-strategy">ProxyRules Strategy</h1>
+<p>The <code>ProxyRulesStrategy</code> routes each request through an ordered list of rules. A rule
+can serve a Jinja fixture file, reverse-proxy the request to a real service, or
+redirect the client there, so a single mockstack instance can mix mock responses with
+real service calls.</p>
+<p>See also the <a href="../../guides/proxyrules-cookbook/">ProxyRules cookbook</a>: tested,
+copy-paste recipes for the most common setups.</p>
+<h2 id="overview">Overview</h2>
+<p>This strategy:</p>
+<ul>
+<li>Reads its rules from a YAML file; rules are tried in order and the first match wins</li>
+<li>Matches requests on a path regex, the HTTP method, and optional <code>headers</code>, <code>query</code>,
+  <code>body</code> and <code>json</code> predicates</li>
+<li>Serves <code>file:///</code> Jinja templates as fixtures, with request data in the template
+  context, and the rule's own <code>status</code> and <code>response_headers</code></li>
+<li>Renders a <code>replacement</code> that contains Jinja delimiters as a template of its own
+  (dynamic replacements), e.g. to pick a fixture directory from a header</li>
+<li>Reverse-proxies to the rewritten URL by default, or answers with an HTTP redirect</li>
+<li>Stamps every response, including its own errors, with <code>X-Mockstack-Result</code> and
+  <code>X-Mockstack-Rule</code> headers</li>
+<li>Validates and compiles every rule at startup, so a broken rules file fails fast</li>
+<li>Can simulate resource creation for requests that match no rule</li>
+<li>Can record real upstream responses into the fixture files its rules serve (record mode)</li>
+<li>Provides OpenTelemetry integration for observability</li>
+</ul>
+<h2 id="configuration">Configuration</h2>
+<p>The strategy requires the following configuration:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">settings</span> <span class="o">=</span> <span class="n">Settings</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">strategy</span><span class="o">=</span><span class="s2">"proxyrules"</span><span class="p">,</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">proxyrules_rules_filename</span><span class="o">=</span><span class="s2">"/path/to/rules.yaml"</span><span class="p">,</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">proxyrules_redirect_via</span><span class="o">=</span><span class="s2">"reverse_proxy"</span><span class="p">,</span>  <span class="c1"># or "http_307_temporary" or "http_301_permanent"</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">proxyrules_reverse_proxy_timeout</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">proxyrules_simulate_create_on_missing</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">proxyrules_verify_ssl_certificates</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="p">)</span>
+</span></code></pre></div>
+<p>Every setting, with its environment variable, is described in
+<a href="../../configuration/#proxyrules-strategy">Configuration</a>.</p>
+<h2 id="rules-file">Rules file</h2>
+<p>Rules are defined in a YAML file with the following structure:</p>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nt">rules</span><span class="p">:</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">user-service</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">    </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">^/api/v1/users/(.*)</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">    </span><span class="nt">replacement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://user-service/api/v1/users/\1</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">    </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">GET</span><span class="w">  </span><span class="c1"># optional, if not specified matches all methods</span>
+</span></code></pre></div>
+<h3 id="rule-properties">Rule properties</h3>
+<ul>
+<li><code>name</code>: Optional identifier for the rule, used in logs, telemetry and the
+  <code>X-Mockstack-Rule</code> response header.</li>
+<li><code>pattern</code>: Regular expression matched against the request path with <code>re.match</code>, so
+  it is anchored at the start of the path. The query string is not part of the path;
+  match it with <code>query</code>.</li>
+<li><code>replacement</code>: Where the request goes. A URL is reverse-proxied or redirected to; a
+  <code>file:///</code> path serves a <a href="#file-templates">file template</a>. A plain replacement is
+  applied with <code>re.sub</code>, so backreferences such as <code>\1</code> work. A replacement containing
+  <code>{{</code>/<code>{%</code> is a <a href="#dynamic-replacements">dynamic replacement</a> instead.</li>
+<li><code>method</code>: Optional HTTP method to match, case-insensitive (if not specified,
+  matches all methods, <code>HEAD</code> and <code>OPTIONS</code> included).</li>
+<li><code>headers</code>: Optional mapping of header name -&gt; regex. Every listed header must be
+  present and its whole value must match the regex (<code>re.fullmatch</code>). Names are
+  case-insensitive. Use <code>".*"</code> to require presence only. A repeated header is
+  matched on its first value.</li>
+<li><code>query</code>: Optional mapping of query parameter -&gt; regex; same regex semantics;
+  parameter names are case-sensitive. A repeated query parameter
+  (<code>?tag=a&amp;tag=b</code>) is matched on its last value.</li>
+<li><code>body</code>: Optional regex searched (<code>re.search</code>) in the decoded request body.</li>
+<li><code>json</code>: Optional mapping of dotted JSON path -&gt; regex, fully matched against the
+  JSON text form of the value at that path (<code>query</code>, <code>filter.client.id</code>,
+  <code>items.0.name</code>). Strings are matched raw, without quotes. Every other value is
+  re-serialised as a compact JSON literal rather than taken from the request's wire
+  text: <code>true</code>, <code>false</code>, <code>null</code>, numbers normalised (<code>1e2</code> is matched as <code>100.0</code>), and
+  objects and arrays with sorted keys and no spaces (<code>{"a":1,"b":2}</code>), keeping
+  non-ASCII characters as they are. A path that is absent never matches, while a
+  present <code>null</code> matches as the text <code>null</code>. A rule with <code>body</code>/<code>json</code> never matches a
+  request without a body.</li>
+<li><code>status</code>: Optional HTTP status for the response of a <a href="#file-templates">file template</a>
+  rule, an integer from 200 to 599 (default 200). See
+  <a href="#status-codes-and-headers">Status codes and headers</a>.</li>
+<li><code>response_headers</code>: Optional mapping of header name -&gt; value added to the response of
+  a file template rule. A list value sends the header once per item.</li>
+</ul>
+<p>Predicate values must be strings. YAML reads unquoted <code>2</code>, <code>true</code> or <code>2024</code> as
+numbers and booleans; mockstack converts them back with <code>str()</code>, which turns <code>true</code>
+into <code>True</code>, so quote them: <code>x-api-version: "2"</code>, <code>active: "true"</code>. A predicate with
+no value at all (<code>x-foo:</code>) is rejected.</p>
+<div class="admonition tip">
+<p class="admonition-title">Regexes in YAML</p>
+<p>Write regexes as plain or single-quoted YAML scalars, where a backslash is an
+ordinary character: <code>replacement: https://projects.example/\1</code> or
+<code>query: '(?is).*from\s+sales_facts.*'</code>. In a double-quoted scalar a backslash
+starts a YAML escape sequence, so <code>"\1"</code> and <code>"\s"</code> do not parse and must be
+written <code>"\\1"</code> and <code>"\\s"</code>.</p>
+</div>
+<h3 id="matching-order">Matching order</h3>
+<p>All predicates on a rule are ANDed. Rules are evaluated in order and the first
+match wins, so put narrow, predicate-bearing rules before broad passthroughs:</p>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">rules</span><span class="p">:</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">project-eval</span><span class="w">               </span><span class="c1"># only stamped eval traffic</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">    </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">GET</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">    </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">^/projects/api/v1/project/(?P&lt;id&gt;[^/]+)$</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">    </span><span class="nt">headers</span><span class="p">:</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">      </span><span class="nt">x-request-eval-scenario</span><span class="p">:</span><span class="w"> </span><span class="s">".*"</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">    </span><span class="nt">replacement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file:///fixtures/projects/project.json.j2</span>
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">projects-passthrough</span><span class="w">        </span><span class="c1"># everything else reaches the real service</span>
+</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="w">    </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">^/projects/(.*)</span>
+</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="w">    </span><span class="nt">replacement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://projects.example/\1</span>
+</span></code></pre></div>
+<p>Body predicates make it possible to mock endpoints where every request shares one
+path and the intent lives in the payload, such as SQL gateways:</p>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">analytics-sales-eval</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">    </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">POST</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">    </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">^/analytics/v1/sql$</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">    </span><span class="nt">headers</span><span class="p">:</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">      </span><span class="nt">x-request-eval-scenario</span><span class="p">:</span><span class="w"> </span><span class="s">".*"</span>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">    </span><span class="nt">json</span><span class="p">:</span>
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="w">      </span><span class="nt">query</span><span class="p">:</span><span class="w"> </span><span class="s">'(?is).*FROM\s+sales_facts.*'</span>
+</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="w">    </span><span class="nt">replacement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file:///fixtures/analytics/sales_facts.json.j2</span>
+</span></code></pre></div>
+<p>The body is read once per request and cached by Starlette, so predicates do not
+interfere with reverse proxying or resource-creation simulation.</p>
+<h3 id="load-time-validation">Load-time validation</h3>
+<p>The rules file is loaded, and every rule compiled, when the strategy is constructed at
+startup. mockstack refuses to start when the file cannot be read, is not UTF-8, does not
+parse as YAML or has no top-level <code>rules</code> list. It also refuses, naming the offending
+rule by position and name (e.g. <code>rules.yml: rule #2 ('projects-fixture'): 'pattern' is
+required</code>), when:</p>
+<ul>
+<li>a rule has a key mockstack does not know, such as a misspelt <code>header</code> (the error
+  suggests the closest key);</li>
+<li>a rule is not a mapping, has no <code>pattern</code> or <code>replacement</code>, has a <code>pattern</code>,
+  <code>replacement</code> or <code>method</code> that is not a string, or has <code>headers</code>, <code>query</code> or <code>json</code>
+  that is not a mapping;</li>
+<li>a regex (<code>pattern</code> or any predicate) is invalid, or too large or deeply nested to
+  compile;</li>
+<li>a predicate has no value, or has a list or mapping where a single regex belongs;</li>
+<li>a Jinja <code>replacement</code> has a syntax error;</li>
+<li>a <code>replacement</code> mixes Jinja delimiters with a regex backreference (<code>\1</code>, <code>\g&lt;id&gt;</code>)
+  in its literal text;</li>
+<li><code>status</code> is not an integer from 200 to 599;</li>
+<li>a <code>response_headers</code> entry has an invalid name, no value, or a value that is not a
+  string or number, contains a control character, starts or ends with whitespace or is
+  not Latin-1, or names a header mockstack manages;</li>
+<li><code>status</code> or <code>response_headers</code> is set on a rule whose <code>replacement</code> is a plain URL
+  rather than a <code>file:///</code> fixture;</li>
+<li>a named group in <code>pattern</code> shadows a reserved template variable (<code>path</code>, <code>method</code>,
+  <code>query</code>, <code>headers</code>, <code>request_json</code>, <code>groups</code>).</li>
+</ul>
+<p>A broken rule therefore fails when mockstack starts, not on the first request that
+happens to reach it.</p>
+<h2 id="example-rules">Example rules</h2>
+<p>Here are some example rules:</p>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nt">rules</span><span class="p">:</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span><span class="c1"># Redirect all GET requests to /api/v1/users/* to the user service</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">user-service-get</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">    </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">^/api/v1/users/(.*)</span>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">    </span><span class="nt">replacement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://user-service/api/v1/users/\1</span>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">    </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">GET</span>
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="w">  </span><span class="c1"># Proxy all POST requests to /api/v1/orders to the order service</span>
+</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">order-service-post</span>
+</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="w">    </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">^/api/v1/orders</span>
+</span><span id="__span-4-11"><a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="w">    </span><span class="nt">replacement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://order-service/api/v1/orders</span>
+</span><span id="__span-4-12"><a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a><span class="w">    </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">POST</span>
+</span><span id="__span-4-13"><a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a>
+</span><span id="__span-4-14"><a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a><span class="w">  </span><span class="c1"># Redirect all requests to /api/v1/products to the product service</span>
+</span><span id="__span-4-15"><a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">product-service</span>
+</span><span id="__span-4-16"><a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a><span class="w">    </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">^/api/v1/products/(.*)</span>
+</span><span id="__span-4-17"><a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a><span class="w">    </span><span class="nt">replacement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://product-service/api/v1/products/\1</span>
+</span></code></pre></div>
+<h2 id="file-templates">File templates</h2>
+<p>A <code>replacement</code> starting with <code>file:///</code> serves a Jinja2 template instead of proxying.
+The path is an <strong>absolute filesystem path</strong>; <code>templates_dir</code> is not consulted.
+<code>file://</code> followed directly by an absolute path (i.e. <code>file:///abs/path</code>, three
+slashes total) is the canonical form; when building the path from a variable that
+already starts with <code>/</code> (e.g. <code>${FIXTURES_DIR}</code>), write <code>file://${FIXTURES_DIR}/...</code>
+(two slashes) so the interpolated value supplies the third -- <code>file:///${FIXTURES_DIR}/...</code>
+would otherwise double up into a four-slash, <code>//</code>-rooted path.</p>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nt">rules</span><span class="p">:</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">project-fixture</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">    </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">GET</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">    </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">^/projects/api/v1/project/(?P&lt;id&gt;[^/]+)$</span>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">    </span><span class="nt">replacement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file:///fixtures/projects/project.json.j2</span>
+</span></code></pre></div>
+<p>The response content type comes from the file suffix, ignoring a trailing <code>.j2</code>
+(<code>project.json.j2</code> -&gt; <code>application/json</code>). A successfully rendered template returns
+HTTP 200, or the rule's <code>status</code>, stamped <code>X-Mockstack-Result: template</code>; see
+<a href="#error-handling">Error handling</a> for the failure cases. Use the <code>tojson</code> filter to
+write request values into JSON fixtures, e.g. <code>{"id": {{ id | tojson }}}</code>. Fixture files
+and the rules file are read as UTF-8, matching how filefixtures reads its templates.</p>
+<h3 id="status-codes-and-headers">Status codes and headers</h3>
+<p><code>status</code> and <code>response_headers</code> set the status and extra headers a fixture is served
+with, for example to simulate a dependency that is down:</p>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nt">rules</span><span class="p">:</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">orders-outage</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">    </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">GET</span>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="w">    </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">^/orders/api/v1/orders/(?P&lt;order_id&gt;[a-z0-9-]+)$</span>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">    </span><span class="nt">headers</span><span class="p">:</span>
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="w">      </span><span class="nt">x-test-scenario</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">outage</span>
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="w">    </span><span class="nt">status</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">503</span>
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="w">    </span><span class="nt">response_headers</span><span class="p">:</span>
+</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="w">      </span><span class="nt">Retry-After</span><span class="p">:</span><span class="w"> </span><span class="s">"30"</span>
+</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="w">    </span><span class="nt">replacement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file:///fixtures/errors/unavailable.json.j2</span>
+</span></code></pre></div>
+<ul>
+<li>The response is still stamped <code>X-Mockstack-Result: template</code>, so a test can tell a
+  fixture's 503 from a 5xx <code>error</code> that mockstack itself returned.</li>
+<li>The status and headers apply only once the fixture has rendered. A missing fixture
+  or a render failure is answered as described in <a href="#error-handling">Error handling</a>,
+  without them.</li>
+<li>A <code>204</code> or <code>304</code> is sent without a body; the fixture file must still exist.</li>
+<li>Header values are sent as written. A list value sends the header once per item (for
+  example several <code>Set-Cookie</code> headers), and a <code>Content-Type</code> replaces the type
+  inferred from the file suffix. As with predicates, quote values that YAML would read
+  as numbers or booleans.</li>
+<li>Headers that mockstack manages cannot be set: <code>Content-Length</code>, the hop-by-hop
+  headers (<code>Connection</code>, <code>Keep-Alive</code>, <code>Proxy-Authenticate</code>, <code>Proxy-Authorization</code>,
+  <code>TE</code>, <code>Trailer</code>, <code>Transfer-Encoding</code>, <code>Upgrade</code>), <code>Date</code>, <code>Server</code>, and the
+  <code>X-Mockstack-Result</code> and <code>X-Mockstack-Rule</code> result headers.</li>
+<li>Only fixture rules can set them. A rule whose plain <code>replacement</code> is a URL is
+  rejected at startup; a <a href="#dynamic-replacements">dynamic replacement</a> is only known per
+  request, so one that renders a URL is answered with a 500 stamped <code>error</code>.</li>
+</ul>
+<p>The cookbook recipe
+<a href="../../guides/proxyrules-cookbook/#8-fixture-status-codes-and-headers">Fixture status codes and headers</a>
+shows a 503, a 429 with <code>application/problem+json</code>, and a 201 with <code>Location</code>.</p>
+<h3 id="template-context">Template context</h3>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Contents</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>path</code>, <code>method</code></td>
+<td>Request path and method</td>
+</tr>
+<tr>
+<td><code>query</code></td>
+<td>Query parameters as a dict (a repeated parameter keeps its last value)</td>
+</tr>
+<tr>
+<td><code>headers</code></td>
+<td>Request headers as a dict, names lower-cased (a repeated header keeps its first value)</td>
+</tr>
+<tr>
+<td><code>request_json</code></td>
+<td>Parsed JSON body, or <code>None</code> when the body is empty or not JSON</td>
+</tr>
+<tr>
+<td><code>groups</code></td>
+<td>Tuple of the positional groups from <code>pattern</code> (<code>None</code> for a group that did not participate)</td>
+</tr>
+<tr>
+<td><code>&lt;named group&gt;</code></td>
+<td>Each named group from <code>pattern</code>, e.g. <code>id</code> for <code>(?P&lt;id&gt;[^/]+)</code></td>
+</tr>
+<tr>
+<td><code>id</code>, <code>&lt;segment&gt;</code></td>
+<td>Identifiers inferred from the path, as in the filefixtures strategy</td>
+</tr>
+</tbody>
+</table>
+<p>When names collide, the reserved names (<code>path</code>, <code>method</code>, <code>query</code>, <code>headers</code>,
+<code>request_json</code>, <code>groups</code>) always win, and named groups override identifiers
+inferred from the path. A named group that would shadow a reserved name, such as
+<code>(?P&lt;headers&gt;...)</code>, is rejected when the rules are loaded. A named group that did
+not participate in the match (an unmatched optional group) is absent from the
+context rather than <code>None</code>.</p>
+<h2 id="dynamic-replacements">Dynamic replacements</h2>
+<p>A <code>replacement</code> containing <code>{{ ... }}</code> or <code>{% ... %}</code> is rendered as a Jinja2
+template in its own right, with the same context as file templates, including every
+<strong>named group</strong> from <code>pattern</code> and the <code>groups</code> tuple of positional groups. This
+lets one rule fan out to per-scenario fixture directories:</p>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">project-eval</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">    </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">GET</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">    </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">^/projects/api/v1/project/(?P&lt;id&gt;[^/]+)$</span>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">    </span><span class="nt">headers</span><span class="p">:</span>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">      </span><span class="nt">x-request-eval-scenario</span><span class="p">:</span><span class="w"> </span><span class="s">"[a-z0-9_-]+"</span>
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="w">    </span><span class="nt">replacement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file:///fixtures/{{ headers['x-request-eval-scenario'] }}/projects/project.{{ id }}.json.j2</span>
+</span></code></pre></div>
+<p>The replacement is compiled once, when the rules are loaded, so a Jinja syntax
+error stops mockstack from starting. In this mode regex backreferences (<code>\1</code>,
+<code>\g&lt;id&gt;</code>) are <strong>not</strong> expanded -- the <code>replacement</code> string is rendered directly and
+<code>re.sub</code> never runs, so use <code>{{ groups[0] }}</code> (positional) or the named group
+(<code>{{ id }}</code>) instead. A replacement that mixes Jinja delimiters with a backreference
+is rejected at load; only its literal text is checked, so the same characters inside a
+<code>{{ ... }}</code> expression or a <code>{# ... #}</code> comment are allowed. The URL fragment is not
+carried into the rendered result either; only plain <code>re.sub</code> mode appends it
+(URL-encoded) to the path it rewrites.
+A <code>replacement</code> with no Jinja delimiters keeps the plain <code>re.sub</code> behaviour, and
+backreferences work as before.</p>
+<p>Template replacements are rendered with strict undefined: referencing a header,
+query parameter, JSON key or group that is not there is an error, not an empty
+string. The request is answered with a 500 stamped <code>X-Mockstack-Result: error</code> and
+the rule's <code>X-Mockstack-Rule</code>, and the error is logged, instead of silently
+rendering a path such as <code>file:///fixtures//projects/project.json.j2</code>. Give
+optional values an explicit fallback, e.g.
+<code>{{ headers.get('x-request-eval-scenario', 'default') }}</code>.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>A rendered <code>file://</code> path or proxied URL must never be built from an
+unconstrained request value. mockstack rejects any rendered template path
+containing <code>..</code>, but a predicate like <code>x-request-eval-scenario: ".*"</code> still lets
+a header select an arbitrary sibling fixture <em>within</em> the intended directory tree
+(and a rendered replacement that proxies, <code>https://{{ ... }}</code>, lets request data
+choose the upstream entirely -- mockstack is already an open reverse proxy; only
+expose it on trusted networks). A rendered request value must also never be the
+<em>leading</em> element of a <code>file://</code> path -- e.g.
+<code>file://{{ headers['x-root'] }}/f.json</code> lets a header select an arbitrary
+absolute path (it need only start with <code>/</code>), which the <code>..</code> guard cannot catch
+since no <code>..</code> segment is ever involved. Restrict predicates feeding a rendered
+path or URL to the character classes you actually expect, e.g. <code>[a-z0-9_-]+</code>.</p>
+</div>
+<h2 id="recording-fixtures">Recording fixtures</h2>
+<p>Record mode fills in fixtures from the real service. When a fixture rule matches and its
+file does not exist yet, mockstack sends the request to the next matching rule whose
+<code>replacement</code> is a URL, writes the response body to the fixture file, and answers by
+rendering that file, stamped <code>X-Mockstack-Result: record</code>. Later requests are served from
+the file, stamped <code>template</code>, without calling the service. Existing rules files work
+unchanged: the passthrough rule that follows a fixture rule is where it records from.
+Later rules whose <code>replacement</code> is a plain <code>file:///</code> path are skipped when looking for it.</p>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="nt">rules</span><span class="p">:</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">users-fixture</span>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">    </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">GET</span>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">    </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">^/users/api/v1/users/(?P&lt;user_id&gt;[a-z0-9-]+)$</span>
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="w">    </span><span class="nt">headers</span><span class="p">:</span>
+</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="w">      </span><span class="nt">x-test-scenario</span><span class="p">:</span><span class="w"> </span><span class="s">"[a-z0-9_-]+"</span>
+</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="w">    </span><span class="nt">replacement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file:///srv/fixtures/{{ headers['x-test-scenario'] }}/users/{{ user_id }}.json.j2</span>
+</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a>
+</span><span id="__span-8-9"><a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">users-passthrough</span>
+</span><span id="__span-8-10"><a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a><span class="w">    </span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">^/users/(.*)</span>
+</span><span id="__span-8-11"><a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a><span class="w">    </span><span class="nt">replacement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://users.example/\1</span>
+</span></code></pre></div>
+<p>Start mockstack with <code>MOCKSTACK__PROXYRULES_RECORD_MODE=missing</code> and
+<code>MOCKSTACK__PROXYRULES_RECORD_ROOT=/srv/fixtures</code>, run the traffic you want fixtures for,
+then review and commit the recorded files and run without record mode.</p>
+<table>
+<thead>
+<tr>
+<th><code>proxyrules_record_mode</code></th>
+<th>Behaviour</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>off</code> (default)</td>
+<td>Fixtures are only served</td>
+</tr>
+<tr>
+<td><code>missing</code></td>
+<td>A fixture file that does not exist yet is recorded</td>
+</tr>
+<tr>
+<td><code>overwrite</code></td>
+<td>Files recorded before are recorded again, e.g. to refresh stale fixtures; hand-written fixtures are never overwritten</td>
+</tr>
+</tbody>
+</table>
+<p>A response is recorded only when:</p>
+<ul>
+<li>a later matching rule has a URL <code>replacement</code>;</li>
+<li>the request is not a <code>HEAD</code> or <code>OPTIONS</code>;</li>
+<li>the upstream's status equals the fixture rule's <code>status</code> (200 by default), so the
+  fixture replays with the status it was recorded with;</li>
+<li>the body is UTF-8 text;</li>
+<li>the body is not still compressed with a coding mockstack does not decode (for example
+  <code>br</code> without the optional <code>brotli</code> package); <code>gzip</code> and <code>deflate</code> bodies are recorded
+  decoded.</li>
+</ul>
+<p>Otherwise the upstream's response is returned stamped <code>proxy</code> with the URL rule's name,
+and the reason is logged -- at INFO for a <code>HEAD</code>/<code>OPTIONS</code> request or a scrubber that
+returns <code>None</code>, since both are expected; every other reason is logged at WARNING. With
+no later URL rule, a missing fixture is
+the usual 404 <code>error</code>. An upstream that fails is the usual 502 or 504 <code>error</code>, and a
+fixture file that cannot be written is a 500 <code>error</code>; nothing is written in either case.</p>
+<p>A later rule's <code>replacement</code> is still rendered even when it is a
+<a href="#dynamic-replacements">dynamic replacement</a>, to learn whether it gives a URL at all --
+so a later template replacement that fails (for example one that references a missing
+header) turns that record attempt into a 500, the same as it would for a plain proxied
+request to that rule.</p>
+<p>Recorded files:</p>
+<ul>
+<li>start with <code>{# mockstack:recorded #}</code>, which renders to nothing and is how <code>overwrite</code>
+  tells them from hand-written fixtures;</li>
+<li>contain the body exactly: any Jinja syntax or carriage return in it is printed by an
+  expression, so it is never evaluated and replays byte for byte;</li>
+<li>are written to a temporary file and renamed into place, so concurrent requests never
+  read a partial fixture;</li>
+<li>must resolve, symlinks followed, inside <code>proxyrules_record_root</code>. A fixture path
+  outside it is served as usual and not recorded, with a warning the first time for each
+  rule.</li>
+</ul>
+<p>While a fixture has not been recorded yet:</p>
+<ul>
+<li>requests really reach the upstream, including non-idempotent methods such as <code>POST</code>,
+  <code>PUT</code> and <code>DELETE</code> -- recording a create endpoint creates real resources there;</li>
+<li>a response that cannot be recorded (a status mismatch, a still-encoded or non-UTF-8
+  body, or a scrubber that returns <code>None</code>) is sent to the upstream again on every
+  request, not only the first;</li>
+<li>there is no locking between requests: concurrent first requests for the same fixture
+  each reach the upstream, and the last write to complete wins. A reader never sees a
+  partial file, but overlapping requests can each record a different upstream response;</li>
+<li><code>HEAD</code> and <code>OPTIONS</code> requests for a fixture that may still be recorded are proxied
+  rather than served from a fixture file; in <code>overwrite</code> mode this also applies to a
+  fixture that was already recorded.</li>
+</ul>
+<p>Only the response body is recorded. The rule's <code>status</code> and <code>response_headers</code> apply when
+it is replayed, and the content type follows the file suffix as for any fixture.</p>
+<h3 id="scrubbing-recorded-bodies">Scrubbing recorded bodies</h3>
+<p><code>proxyrules_record_scrubber</code> names a <code>module:function</code> that is called with every body
+before it is written. It returns the text to write, or <code>None</code> to skip recording that
+response, which is then returned stamped <code>proxy</code>:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">mask_emails</span><span class="p">(</span><span class="n">body</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span> <span class="n">rule_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>    <span class="k">return</span> <span class="n">EMAIL</span><span class="o">.</span><span class="n">sub</span><span class="p">(</span><span class="s2">"***@***"</span><span class="p">,</span> <span class="n">body</span><span class="p">)</span>
+</span></code></pre></div>
+<p>The reference is imported and checked when the settings are loaded, so a typo or a
+target that is not callable stops mockstack from starting; the module must be
+importable, e.g. with <code>PYTHONPATH=.</code>. A scrubber that raises, or returns something
+other than a string or <code>None</code>, answers that request with a 500 <code>error</code> and nothing is
+written. <code>rule_name</code> is the matched fixture rule's <code>name</code> (<code>None</code> when the rule has
+none), and <code>path</code> is the resolved fixture file path that will be written.</p>
+<p>The scrubber must be a regular synchronous function, not <code>async def</code>: it is called
+directly, not awaited, so an <code>async def</code> scrubber returns a coroutine object rather
+than a string, and the request gets a 500 the same as any other non-<code>str</code>, non-<code>None</code>
+return value. See the cookbook's
+<a href="../../guides/proxyrules-cookbook/#9-record-fixtures-from-a-real-service">Record fixtures from a real service</a>.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>Record mode writes files whose paths can be chosen by request data and whose content
+comes from the upstream. Enable it only for a recording session on a trusted
+network, never on a shared or exposed instance, and review recorded fixtures before
+committing them: they contain whatever the real service returned. A test harness
+that asserts <code>X-Mockstack-Result: template</code> fails on <code>record</code>, so a gating run that
+accidentally records is caught.</p>
+</div>
+<h2 id="redirection-methods">Redirection methods</h2>
+<p><code>proxyrules_redirect_via</code> selects what a rule whose <code>replacement</code> is a URL does.
+Rules that serve a <code>file:///</code> template are unaffected.</p>
+<ol>
+<li>
+<p><strong>Reverse proxy</strong> (<code>reverse_proxy</code>, the default; stamped <code>proxy</code>)</p>
+<ul>
+<li>Server forwards the request to the target service</li>
+<li>Client is unaware of the redirection</li>
+<li>Useful when you need to work with clients that do not handle HTTP redirects gracefully.</li>
+<li>Every routed method is forwarded, <code>HEAD</code> and <code>OPTIONS</code> included, together with
+  the query string, headers and body; the <code>Host</code> header is set to the target's
+  host. The upstream's status, headers and body are returned.</li>
+<li>Request and response bodies are fully buffered. Hop-by-hop headers
+  (<code>Connection</code>, <code>Transfer-Encoding</code>, <code>Upgrade</code>, ..., plus every header named
+  in a <code>Connection</code> value) are stripped in both directions, and
+  <code>Content-Length</code> is recomputed for the buffered body, so chunked clients and
+  chunked upstreams both work. <code>1xx</code>, <code>204</code> and <code>304</code> responses carry no
+  <code>Content-Length</code>. A response to <code>HEAD</code> keeps the upstream's <code>Content-Length</code>,
+  unless its <code>Content-Encoding</code> names a coding that mockstack decodes (below): that
+  length is the encoded one, so it is dropped.</li>
+<li>Compressed upstream bodies are decoded while they are read: <code>gzip</code> and <code>deflate</code>
+  always, <code>br</code> and <code>zstd</code> only when the optional <code>brotli</code> and <code>zstandard</code> packages
+  are installed. The decoded codings are removed from <code>Content-Encoding</code>, which
+  becomes <code>identity</code> only when no coding remains. A coding that was not decoded
+  (e.g. <code>compress</code>) stays in the header, and the body is forwarded still encoded
+  with it.</li>
+<li>The upstream's <code>Date</code> and <code>Server</code> headers are dropped, so the response carries
+  a single <code>date</code> and <code>server</code> header: the mockstack server's own. Other repeated
+  response headers, such as several <code>Set-Cookie</code> headers, are passed through one by
+  one rather than merged.</li>
+<li>An upstream that cannot be reached, or does not answer within
+  <code>proxyrules_reverse_proxy_timeout</code>, is answered by mockstack with a 502 or 504. A
+  rewritten URL that cannot be sent at all, such as one that is not an absolute URL,
+  is a rules-file mistake and is answered with a 500 (see
+  <a href="#error-handling">Error handling</a>). HTTPS certificates are verified unless
+  <code>proxyrules_verify_ssl_certificates</code> is disabled.</li>
+</ul>
+</li>
+<li>
+<p><strong>HTTP Temporary Redirect</strong> (<code>http_307_temporary</code>, 307; stamped <code>redirect</code>)</p>
+<ul>
+<li>Client makes a new request to the target URL</li>
+<li>Preserves the original HTTP method</li>
+</ul>
+</li>
+<li>
+<p><strong>HTTP Permanent Redirect</strong> (<code>http_301_permanent</code>, 301; stamped <code>redirect</code>)</p>
+<ul>
+<li>Client makes a new request to the target URL</li>
+<li>Browsers may cache the redirect</li>
+</ul>
+</li>
+</ol>
+<p>In both redirect modes the target URL is built from the request path, and the
+original query string is then appended to it in the <code>Location</code> header: after <code>?</code>, or
+after <code>&amp;</code> when the target already has a query of its own, and before any <code>#fragment</code>
+of the target. The client's follow-up request goes straight to the target, so its
+response carries no <code>X-Mockstack-*</code> headers.</p>
+<h2 id="result-headers">Result headers</h2>
+<p>Every response the <code>proxyrules</code> strategy returns -- including its own error
+responses -- carries:</p>
+<table>
+<thead>
+<tr>
+<th>Header</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>X-Mockstack-Result</code></td>
+<td><code>template</code>, <code>proxy</code>, <code>redirect</code>, <code>create</code>, <code>missing</code>, <code>record</code> or <code>error</code></td>
+</tr>
+<tr>
+<td><code>X-Mockstack-Rule</code></td>
+<td>The matched rule's <code>name</code> (or its <code>pattern</code> when unnamed); absent when no rule matched</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th><code>X-Mockstack-Result</code></th>
+<th>Status</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>template</code></td>
+<td>200, or the rule's <code>status</code></td>
+<td>A <code>file:///</code> fixture was rendered</td>
+</tr>
+<tr>
+<td><code>record</code></td>
+<td>The rule's <code>status</code> (200 by default)</td>
+<td>Record mode wrote the upstream response to the fixture file and served it from that file</td>
+</tr>
+<tr>
+<td><code>proxy</code></td>
+<td>Upstream's</td>
+<td>The request was reverse-proxied to the rewritten URL</td>
+</tr>
+<tr>
+<td><code>redirect</code></td>
+<td>301 / 307</td>
+<td>An HTTP redirect to the rewritten URL</td>
+</tr>
+<tr>
+<td><code>create</code></td>
+<td>201</td>
+<td>No rule matched; resource creation was simulated</td>
+</tr>
+<tr>
+<td><code>missing</code></td>
+<td>404</td>
+<td>No rule matched</td>
+</tr>
+<tr>
+<td><code>error</code></td>
+<td>404</td>
+<td>A rule matched but its fixture file does not exist (or its path contains <code>..</code>)</td>
+</tr>
+<tr>
+<td><code>error</code></td>
+<td>500</td>
+<td>A fixture failed to render, a template replacement failed, the rewritten URL is not a usable absolute URL, or another internal failure</td>
+</tr>
+<tr>
+<td><code>error</code></td>
+<td>502</td>
+<td>The upstream request failed</td>
+</tr>
+<tr>
+<td><code>error</code></td>
+<td>504</td>
+<td>The upstream request timed out</td>
+</tr>
+</tbody>
+</table>
+<p>A 404 or 5xx stamped <code>error</code> came from mockstack, not from a fixture or the upstream.
+Test harnesses should assert on these headers to turn a silently proxied request into
+a failure (see the cookbook's
+<a href="../../guides/proxyrules-cookbook/#6-asserting-in-a-test-suite">Asserting in a test suite</a>).
+An unstamped 5xx response means the ASGI layer itself failed (outside the strategy),
+not that <code>proxyrules</code> returned it.</p>
+<h2 id="error-handling">Error handling</h2>
+<p>When no matching rule is found, and resource creation simulation is disabled or the
+request does not look like a resource creation (see
+<a href="#resource-creation-simulation">Resource creation simulation</a>), the strategy returns a
+404 NOT FOUND response stamped <code>X-Mockstack-Result: missing</code>, with the configured
+<code>missing_resource_fields</code> as its body.</p>
+<p>Every other failure is answered by the strategy itself, stamped
+<code>X-Mockstack-Result: error</code> and, once a rule has matched, <code>X-Mockstack-Rule</code>,
+instead of surfacing as a bare, unstamped 500 from Starlette's
+<code>ServerErrorMiddleware</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Failure</th>
+<th>Status</th>
+<th>Body</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The rendered fixture path does not exist, or contains <code>..</code></td>
+<td>404</td>
+<td><code>{"error": "Template file not found."}</code></td>
+</tr>
+<tr>
+<td>The fixture fails to render</td>
+<td>500</td>
+<td><code>{"error": "An internal error occurred while rendering the template."}</code></td>
+</tr>
+<tr>
+<td>The upstream is unreachable, resets the connection or breaks the protocol</td>
+<td>502</td>
+<td><code>{"error": "mockstack: upstream request failed"}</code></td>
+</tr>
+<tr>
+<td>The upstream does not answer within <code>proxyrules_reverse_proxy_timeout</code></td>
+<td>504</td>
+<td><code>{"error": "mockstack: upstream request timed out"}</code></td>
+</tr>
+<tr>
+<td>The rewritten URL cannot be sent at all: not an absolute URL (e.g. <code>/api/v1/users</code>), or an invalid port</td>
+<td>500</td>
+<td><code>{"error": "mockstack: internal error"}</code></td>
+</tr>
+<tr>
+<td>Anything else, e.g. a template replacement referencing a missing value, or a malformed JSON body on the resource-creation path</td>
+<td>500</td>
+<td><code>{"error": "mockstack: internal error"}</code></td>
+</tr>
+</tbody>
+</table>
+<p>The rendered fixture path is never echoed back in a response body; it is only
+logged. Upstream failures are logged at WARNING; missing or rejected fixture paths,
+and rewritten URLs that cannot be sent, at ERROR; template render failures and
+unexpected internal errors at ERROR with a traceback. Log lines name the matched rule.
+If the client disconnects before its request body has been read, no response is sent.</p>
+<p>A broken rules file fails at startup rather than per request; see
+<a href="#load-time-validation">Load-time validation</a>.</p>
+<h2 id="resource-creation-simulation">Resource creation simulation</h2>
+<p>When <code>proxyrules_simulate_create_on_missing</code> is enabled, a request that matches no
+rule and looks like a resource creation -- a POST whose path does not look like a
+search or a command (such as <code>.../search</code> or <code>.../run</code>), or a request whose path ends
+in <code>/create</code> -- is answered by simulating the creation instead of a 404:</p>
+<ol>
+<li>Returning a 201 CREATED status code, stamped <code>X-Mockstack-Result: create</code></li>
+<li>Echoing back the request body with metadata fields injected into it, when the
+   request is JSON (a JSON <code>Content-Type</code>, or a path ending in <code>.json</code>); any other
+   request gets an empty body</li>
+</ol>
+<p>The default metadata fields are controlled via the configuration file and at the time of writing are as follows:</p>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="p">{</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="w">    </span><span class="nt">"id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"{{ uuid4() }}"</span><span class="p">,</span>
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="w">    </span><span class="nt">"createdAt"</span><span class="p">:</span><span class="w"> </span><span class="s2">"{{ utcnow().isoformat() }}"</span><span class="p">,</span>
+</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="w">    </span><span class="nt">"updatedAt"</span><span class="p">:</span><span class="w"> </span><span class="s2">"{{ utcnow().isoformat() }}"</span><span class="p">,</span>
+</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="w">    </span><span class="nt">"createdBy"</span><span class="p">:</span><span class="w"> </span><span class="s2">"{{ request.headers.get('X-User-Id', uuid4()) }}"</span><span class="p">,</span>
+</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="w">    </span><span class="nt">"status"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-10-7"><a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="w">        </span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"OK"</span><span class="p">,</span>
+</span><span id="__span-10-8"><a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a><span class="w">        </span><span class="nt">"error_code"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span>
+</span><span id="__span-10-9"><a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a><span class="w">    </span><span class="p">}</span>
+</span><span id="__span-10-10"><a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a><span class="p">}</span>
+</span></code></pre></div>
+<h2 id="opentelemetry-integration">OpenTelemetry integration</h2>
+<p>The strategy automatically adds the following OpenTelemetry attributes when a rule
+matches. The shared rule attributes (<code>rule_name</code>, <code>rule_method</code>, <code>rule_pattern</code>,
+<code>rule_replacement</code>) always describe the rule named in the response's
+<code>X-Mockstack-Rule</code> header, never some other rule that was merely consulted along the
+way (e.g. a record-mode upstream rule whose response ends up recorded and replayed
+from the fixture instead):</p>
+<ul>
+<li><code>mockstack.proxyrules.rule_name</code>: The name of the matched rule (if specified)</li>
+<li><code>mockstack.proxyrules.rule_method</code>: The HTTP method the rule matches (if specified)</li>
+<li><code>mockstack.proxyrules.rule_pattern</code>: The pattern used to match the request</li>
+<li><code>mockstack.proxyrules.rule_replacement</code>: The replacement as written in the rules file</li>
+<li><code>mockstack.proxyrules.rewritten_url</code>: The final URL after applying the rule (proxy
+  and redirect results)</li>
+<li><code>mockstack.proxyrules.result_type</code>: The result type stamped on the response (<code>proxy</code>,
+  <code>redirect</code>, <code>template</code>, <code>error</code>, or in record mode <code>record</code>), set on every proxy,
+  redirect, template and error result</li>
+<li><code>mockstack.proxyrules.template_path</code>: The rendered fixture path (template results)</li>
+</ul>
+<p>An error response that names a rule (<code>X-Mockstack-Result: error</code> with an
+<code>X-Mockstack-Rule</code> header -- e.g. a missing or unrenderable fixture, an unreachable
+upstream, or a record-mode write failure) carries that rule's shared attributes and
+<code>result_type</code> <code>error</code>, overwriting any result type an earlier, now-superseded call had
+set for the same response (e.g. a reverse proxy attempt that set <code>proxy</code> before it
+failed).</p>
+<p>In record mode (<code>proxyrules_record_mode</code>), attempting to record from the next matching
+URL rule also sets:</p>
+<ul>
+<li><code>mockstack.proxyrules.upstream_rule_name</code>: The name (or pattern, when unnamed) of the
+  rule the request was proxied to while attempting to record</li>
+<li><code>mockstack.proxyrules.rewritten_url</code>: The upstream URL the request was proxied to while
+  attempting to record, whether or not the response ended up recorded</li>
+<li><code>mockstack.proxyrules.recorded_path</code>: The fixture path written, when the response was
+  recorded (<code>result_type</code> is <code>record</code>; the shared rule attributes describe the fixture
+  rule)</li>
+<li><code>mockstack.proxyrules.not_recorded_reason</code>: Why the response was not recorded, when it
+  was not (<code>result_type</code> is <code>proxy</code>; the shared rule attributes describe the upstream
+  rule, since that is what <code>X-Mockstack-Rule</code> names)</li>
+</ul>
+<h2 id="testing-evaluation-suites">Testing evaluation suites</h2>
+<p>A single mockstack instance can sit in front of a real service and serve fixtures
+only to evaluation traffic: stamp eval requests with a header (e.g.
+<code>X-Request-Eval-Scenario: healthy</code>), put a narrow, header-gated rule ahead of a
+broad passthrough for the same path prefix, and point the fixture rule's
+<code>replacement</code> at a <code>file:///</code> template under a per-scenario directory. Every
+other request -- unstamped, or one whose header value fails the predicate --
+fails open and is reverse-proxied to the real service untouched. A <em>stamped</em>
+request naming a scenario with no fixture on disk still matches the eval rule
+and does not fall through to the passthrough: it gets a 404 stamped
+<code>X-Mockstack-Result: error</code> with body <code>{"error": "Template file not found."}</code>, so
+evaluators see a missing fixture as an error, not a passthrough.</p>
+<p>Have the eval harness assert <code>X-Mockstack-Result</code> (and, ideally,
+<code>X-Mockstack-Rule</code>) on every response instead of only checking the body: a rule
+that stops matching -- a path change upstream, a typo'd header -- then fails the
+run instead of silently exercising the real service with fixture inputs.</p>
+<p>See
+<a href="https://github.com/promptromp/mockstack/tree/main/examples/proxyrules-eval-isolation"><code>examples/proxyrules-eval-isolation</code></a>
+for a complete worked example, including a live test that runs its rules file
+and fixtures for real, and the
+<a href="../../guides/proxyrules-cookbook/">ProxyRules cookbook</a> for smaller recipes of the
+same building blocks.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../filefixtures/" class="md-footer__link md-footer__link--prev" aria-label="Previous: FileFixtures">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                FileFixtures
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../../guides/proxyrules-cookbook/" class="md-footer__link md-footer__link--next" aria-label="Next: ProxyRules cookbook">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                ProxyRules cookbook
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2025-2026 PromptRomp
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/promptromp/mockstack" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["content.code.copy", "navigation.footer"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
