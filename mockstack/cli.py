@@ -1,8 +1,8 @@
 """The ``mockstack`` command line: coloured help, and configuration errors without tracebacks.
 
-A configuration mistake (an unknown flag, a missing or invalid setting, or a rules file
-that does not load) is printed to stderr as ``mockstack: error: ...`` and exits with
-status 2, as argparse does for usage errors. Settings are named the way a user sets
+A configuration mistake (an unknown flag or setting, a missing or invalid setting, or a
+rules file that does not load) is printed to stderr as ``mockstack: error: ...`` and exits
+with status 2, as argparse does for usage errors. Settings are named the way a user sets
 them: by flag, followed by the ``MOCKSTACK__*`` environment variables (also used in
 ``.env`` files) involved. Any other exception is a bug and keeps its traceback.
 
@@ -12,6 +12,7 @@ terminal and honours ``NO_COLOR`` and ``FORCE_COLOR``.
 
 import argparse
 import difflib
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from importlib import metadata
@@ -36,8 +37,9 @@ PROG: Final = "mockstack"
 # argparse's exit status for usage errors, which a configuration error is too.
 EXIT_USAGE_ERROR: Final = 2
 
-# The exceptions reported as configuration errors; anything else keeps its traceback.
-CONFIGURATION_ERRORS: Final = (ValidationError, SettingsError, RulesFileError)
+# What parsing settings raises for a configuration mistake. A rules file that does not
+# load raises ``RulesFileError`` later, while the app is created.
+SETTINGS_ERRORS: Final = (ValidationError, SettingsError)
 
 # Flags and values are styled as --help styles them.
 FLAG_STYLE: Final = RichHelpFormatter.styles["argparse.args"]
@@ -53,6 +55,10 @@ EPILOG: Final = (
     "Every option can also be set with a MOCKSTACK__* environment variable or in a .env file, e.g. "
     "MOCKSTACK__TEMPLATES_DIR. See https://promptromp.github.io/mockstack/configuration/"
 )
+
+# pydantic-settings' message for a value it cannot decode, e.g. invalid JSON in MOCKSTACK__LOGGING.
+_PARSE_ERROR_RE: Final = re.compile(r'error parsing value for field "(?P<field>[^"]+)" from source "(?P<source>\w+)"')
+_SOURCE_NAMES: Final = {"EnvSettingsSource": "the environment", "DotEnvSettingsSource": ".env"}
 
 
 @dataclass(frozen=True)
@@ -79,12 +85,22 @@ class ErrorReport:
     help_hint: bool = True
 
 
+class HelpFormatter(RichHelpFormatter):
+    """rich-argparse's formatter, reading help text literally rather than as rich markup, so
+    a setting's docstring may contain square brackets."""
+
+    help_markup = False
+    text_markup = False
+
+
 class CliArgumentParser(argparse.ArgumentParser):
     """An ``ArgumentParser`` with rich-formatted help whose usage errors are printed like
     every other configuration error, without the usage text."""
 
     def __init__(self, **kwargs: Any) -> None:
-        super().__init__(formatter_class=RichHelpFormatter, **kwargs)
+        # Flags are spelled in full: an abbreviation would hide a typo from the suggestions,
+        # and a new flag could make an abbreviation someone relies on ambiguous.
+        super().__init__(formatter_class=HelpFormatter, allow_abbrev=False, **kwargs)
 
     def parse_args_suggesting_flags(
         self, args: Sequence[str] | None = None, namespace: argparse.Namespace | None = None
@@ -116,30 +132,33 @@ class CliArgumentParser(argparse.ArgumentParser):
 
 
 def build_parser() -> CliArgumentParser:
-    """The ``mockstack`` parser with ``--version``; pydantic-settings adds the settings' flags."""
+    """The ``mockstack`` parser with ``--version``; ``settings_source`` adds the settings' flags."""
     parser = CliArgumentParser(prog=PROG, description=DESCRIPTION, epilog=EPILOG)
     parser.add_argument("--version", action="version", version=f"%(prog)s {metadata.version('mockstack')}")
     return parser
 
 
-def parse_settings(parser: CliArgumentParser, argv: Sequence[str] | None = None) -> CliSettings:
-    """Settings from ``argv`` (by default the command line), environment variables and ``.env``."""
-    source: CliSettingsSource[CliArgumentParser] = CliSettingsSource(
+def settings_source(parser: CliArgumentParser) -> CliSettingsSource[CliArgumentParser]:
+    """Add the settings' flags to ``parser``, returning the source that parses them."""
+    return CliSettingsSource(
         CliSettings,
         root_parser=parser,
         parse_args_method=CliArgumentParser.parse_args_suggesting_flags,
     )
+
+
+def parse_settings(source: CliSettingsSource[CliArgumentParser], argv: Sequence[str] | None = None) -> CliSettings:
+    """Settings from ``argv`` (by default the command line), environment variables and ``.env``."""
     return CliApp.run(CliSettings, cli_args=None if argv is None else list(argv), cli_settings_source=source)
 
 
-def report_for(exc: Exception) -> ErrorReport:
-    """The report for one of ``CONFIGURATION_ERRORS``."""
+def report_for(exc: ValidationError | SettingsError | RulesFileError) -> ErrorReport:
+    """The report for a settings error or a rules file that does not load."""
     if isinstance(exc, ValidationError):
         return _validation_report(exc)
     if isinstance(exc, RulesFileError):
         return ErrorReport([Text.assemble((str(exc.path), "bold"), f": {exc.problem}")], help_hint=False)
-    cause = f": {exc.__cause__}" if exc.__cause__ is not None else ""
-    return ErrorReport([Text(f"{exc}{cause}")])
+    return ErrorReport([_settings_error_problem(exc)])
 
 
 def print_report(prog: str, report: ErrorReport) -> None:
@@ -198,10 +217,27 @@ def setting_name(path: Sequence[str]) -> SettingName:
     return SettingName(flag=flag, env_var=(ENV_PREFIX + ENV_NESTED_DELIMITER.join(path)).upper())
 
 
+def _known_setting_name(path: Sequence[str]) -> SettingName | None:
+    """``setting_name``, or ``None`` when ``path`` names no setting, so reporting never fails."""
+    try:
+        return setting_name(path)
+    except (KeyError, ValueError):
+        return None
+
+
 def _settings_group(field_info: FieldInfo) -> type[BaseModel] | None:
     """The model of a field that groups further settings, or ``None`` for a plain setting."""
     annotation = field_info.annotation
     return annotation if isinstance(annotation, type) and issubclass(annotation, BaseModel) else None
+
+
+def _setting_env_vars() -> list[str]:
+    """The environment variable of every setting, with settings groups expanded."""
+    paths: list[tuple[str, ...]] = []
+    for name, field_info in Settings.model_fields.items():
+        group = _settings_group(field_info)
+        paths += [(name, member) for member in group.model_fields] if group else [(name,)]
+    return [setting_name(path).env_var for path in paths]
 
 
 def _validation_report(exc: ValidationError) -> ErrorReport:
@@ -223,15 +259,20 @@ def _dependency_problem(error: SettingsDependencyError) -> tuple[Text, list[Sett
     names: list[SettingName] = []
     for literal, field_name, _, _ in Formatter().parse(error.template):
         text.append(literal)
-        if field_name:
-            name = setting_name((field_name,))
+        if not field_name:
+            continue
+        name = _known_setting_name(field_name.split("."))
+        if name is not None:
             names.append(name)
-            text.append(name.display, style=FLAG_STYLE)
+        text.append(name.display if name is not None else field_name, style=FLAG_STYLE)
     return text, names
 
 
 def _field_problem(error: ErrorDetails) -> tuple[Text, list[SettingName]]:
     """E.g. ``invalid value 'abc' for --port: input should be a valid integer``."""
+    if error["type"] == "extra_forbidden":
+        return _unknown_setting_problem(error["loc"]), []
+
     message = _clause(error["msg"])
     path = setting_path(error["loc"])
     if not path:
@@ -246,6 +287,37 @@ def _field_problem(error: ErrorDetails) -> tuple[Text, list[SettingName]]:
     text.append(name.display, style=FLAG_STYLE)
     text.append(f": {message}")
     return text, [name]
+
+
+def _unknown_setting_problem(loc: Sequence[int | str]) -> Text:
+    """E.g. ``unknown setting MOCKSTACK__TEMPLATE_DIR; did you mean MOCKSTACK__TEMPLATES_DIR?``.
+
+    A key in a ``.env`` file arrives whole, prefix included (``("mockstack__template_dir",)``);
+    a nested environment variable arrives as its path (``("opentelemetry", "enable")``).
+    """
+    parts = [str(part) for part in loc]
+    if len(parts) == 1 and parts[0].lower().startswith(ENV_PREFIX):
+        env_var = parts[0].upper()
+    else:
+        env_var = (ENV_PREFIX + ENV_NESTED_DELIMITER.join(parts)).upper()
+
+    text = Text.assemble("unknown setting ", (env_var, FLAG_STYLE))
+    close = difflib.get_close_matches(env_var, _setting_env_vars(), n=1)
+    if close:
+        text.append_text(Text.assemble("; did you mean ", (close[0], FLAG_STYLE), "?"))
+    return text
+
+
+def _settings_error_problem(exc: SettingsError) -> Text:
+    """E.g. ``cannot parse MOCKSTACK__LOGGING from the environment: Expecting value: ...``,
+    or pydantic-settings' own message for any other error."""
+    cause = f": {exc.__cause__}" if exc.__cause__ is not None else ""
+    match = _PARSE_ERROR_RE.fullmatch(str(exc))
+    name = _known_setting_name(match["field"].split(".")) if match else None
+    if match is None or name is None:
+        return Text(f"{exc}{cause}")
+    source = _SOURCE_NAMES.get(match["source"], match["source"])
+    return Text.assemble("cannot parse ", (name.env_var, FLAG_STYLE), f" from {source}{cause}")
 
 
 def _clause(message: str) -> str:

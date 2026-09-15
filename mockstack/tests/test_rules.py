@@ -72,6 +72,21 @@ def test_rule_from_dict_with_predicates():
         ({"pattern": "^/x$", "replacement": "u", "headers": ["x-a"]}, "'headers' must be a mapping"),
         ({"pattern": "^/x$", "replacement": "u", "query": "q=1"}, "'query' must be a mapping"),
         ({"pattern": "^/x$", "replacement": "u", "json": 1}, "'json' must be a mapping"),
+        ({"pattern": "^/x$", "replacement": "u", "methods": "POST"}, "unknown key 'methods'; did you mean 'method'?"),
+        ({"patern": "^/x$", "replacement": "u"}, "unknown key 'patern'; did you mean 'pattern'?"),
+        ({"pattern": "^/x$", "replacement": "u", "priority": 1}, "unknown key 'priority'"),
+        (
+            {"pattern": "^/x$", "replacement": "u", "headers": {"x-env": ["prod", "staging"]}},
+            "predicate 'x-env' must be a single regex, got a list",
+        ),
+        (
+            {"pattern": "^/x$", "replacement": "u", "json": {"a": {"b": "c"}}},
+            "predicate 'a' must be a single regex, got a dict",
+        ),
+        (
+            {"pattern": "^/x$", "replacement": "u", "body": ["alpha", "beta"]},
+            "predicate 'body' must be a single regex, got a list",
+        ),
     ],
     ids=[
         "missing-pattern",
@@ -82,11 +97,18 @@ def test_rule_from_dict_with_predicates():
         "headers-not-a-mapping",
         "query-not-a-mapping",
         "json-not-a-mapping",
+        "misspelt-key-with-suggestion",
+        "misspelt-required-key",
+        "unknown-key-without-suggestion",
+        "header-predicate-list",
+        "json-predicate-mapping",
+        "body-predicate-list",
     ],
 )
 def test_rule_from_dict_rejects_a_malformed_entry(data, problem):
-    """A rules-file entry with a missing key or a key of the wrong YAML type is a
-    ``RuleError``, not a ``KeyError`` or ``AttributeError`` from deeper in the rule."""
+    """A rules-file entry with an unknown or missing key, a key of the wrong YAML type, or a
+    list or mapping where a predicate regex belongs is a ``RuleError``. It is never a
+    ``KeyError`` or ``AttributeError`` from deeper in the rule, nor silently ignored."""
     with pytest.raises(RuleError) as excinfo:
         Rule.from_dict({"name": "r1", **data})
 

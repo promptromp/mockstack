@@ -217,6 +217,32 @@ def test_unreadable_rules_file_names_the_file(proxyrules_strategy, tmp_path):
     assert str(excinfo.value) == f"{path}: cannot read the file: Permission denied"
 
 
+@pytest.mark.parametrize(
+    ("content", "problem"),
+    [
+        ("rules: " + "[" * 5000 + "]" * 5000 + "\n", "invalid YAML: nested too deeply"),
+        (
+            "rules:\n  - pattern: 'a{4294967296}'\n    replacement: u\n",
+            "rule #1: a regex or template is too large or too deeply nested",
+        ),
+        (
+            "rules:\n  - pattern: '" + "(" * 5000 + ")" * 5000 + "'\n    replacement: u\n",
+            "rule #1: a regex or template is too large or too deeply nested",
+        ),
+    ],
+    ids=["deeply-nested-yaml", "huge-regex-repetition", "deeply-nested-regex"],
+)
+def test_rules_file_too_large_or_deep_to_load_names_the_file(proxyrules_strategy, tmp_path, content, problem):
+    """``RecursionError`` and ``OverflowError`` from PyYAML or ``re`` are rules-file mistakes too."""
+    path = tmp_path / "rules.yml"
+    path.write_text(content)
+
+    with pytest.raises(RulesFileError) as excinfo:
+        proxyrules_strategy(proxyrules_rules_filename=path)
+
+    assert str(excinfo.value) == f"{path}: {problem}"
+
+
 # --- matching ------------------------------------------------------------------------
 
 

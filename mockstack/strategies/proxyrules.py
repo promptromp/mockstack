@@ -92,6 +92,8 @@ def _read_rules_file(path: Path) -> Any:
         raise RulesFileError(path, "the file is not UTF-8 text") from exc
     except yaml.YAMLError as exc:
         raise RulesFileError(path, f"invalid YAML: {_yaml_problem(exc)}") from exc
+    except RecursionError as exc:
+        raise RulesFileError(path, "invalid YAML: nested too deeply") from exc
 
 
 def _yaml_problem(exc: yaml.YAMLError) -> str:
@@ -318,6 +320,8 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             raise RulesFileError(path, f"{label}: invalid regex {exc.pattern!r}: {exc}") from exc
         except TemplateSyntaxError as exc:
             raise RulesFileError(path, f"{label}: invalid replacement template: {exc}") from exc
+        except (OverflowError, RecursionError) as exc:
+            raise RulesFileError(path, f"{label}: a regex or template is too large or too deeply nested") from exc
 
     def matching_rules(self, request: Request, payload: RequestPayload | None = None) -> Iterator[Rule]:
         """The rules that match ``request``, lazily and in file order."""

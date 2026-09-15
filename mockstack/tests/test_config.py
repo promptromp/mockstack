@@ -25,6 +25,18 @@ def test_settings_dependency_error_names_the_settings_plainly():
     assert error.settings == ("templates_dir", "strategy")
 
 
+def test_settings_dependency_error_names_a_setting_in_a_group_with_a_dot():
+    error = SettingsDependencyError("{opentelemetry.enabled} requires {strategy} to be proxyrules")
+
+    assert str(error) == "opentelemetry.enabled requires strategy to be proxyrules"
+    assert error.settings == ("opentelemetry.enabled", "strategy")
+
+
+def test_port_must_be_a_valid_port_number(make_settings, templates_dir):
+    with pytest.raises(ValidationError, match="less than or equal to 65535"):
+        make_settings(templates_dir=templates_dir, port=65536)
+
+
 def test_make_settings_ignores_mockstack_env_vars(monkeypatch, make_settings, templates_dir):
     """A developer's exported ``MOCKSTACK__*`` environment variables must never leak
     into settings built by the shared ``make_settings`` fixture: otherwise a test

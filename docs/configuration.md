@@ -144,11 +144,12 @@ uvx mockstack --strategy proxyrules --proxyrules-rules-filename ./rules.yml --pr
 
 ### Configuration errors
 
-When a setting is missing or invalid, a flag is not recognized, or the rules file does
-not load, mockstack exits with status 2 and a short message instead of a traceback. It
-names each setting by its flag and lists the environment variables for the same
-settings, since the value may have come from the command line, the environment or a
-`.env` file:
+Settings are checked before the server starts. When a setting is missing or invalid, a
+flag or `MOCKSTACK__*` variable is not recognized, or the rules file does not load,
+mockstack exits with status 2 and a short message instead of a traceback. It names each
+setting by its flag and lists the environment variables for the same settings, since the
+value may have come from the command line, the environment or a `.env` file. Flags must
+be spelled in full, and a misspelt flag or `.env` variable gets a suggestion:
 
 ```console
 $ mockstack
@@ -170,7 +171,9 @@ Run 'mockstack --help' to see all options.
 ```
 
 A rules file that does not load is named with the offending rule; see
-[Load-time validation](strategies/proxyrules.md#load-time-validation).
+[Load-time validation](strategies/proxyrules.md#load-time-validation). A problem found
+only while the server starts, such as a port that is already in use, is reported by
+uvicorn instead.
 
 Help and error output are coloured on a terminal. Set `NO_COLOR=1` to turn colour off,
 or `FORCE_COLOR=1` to keep it when the output is piped.

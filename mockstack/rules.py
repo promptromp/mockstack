@@ -1,5 +1,6 @@
 """Rules for the proxy rules strategy."""
 
+import difflib
 import json
 import re
 from abc import ABC, abstractmethod
@@ -139,6 +140,7 @@ class TemplateRuleResult(RuleResult):
 _REQUIRED_KEYS: Final = ("pattern", "replacement")
 _STRING_KEYS: Final = ("pattern", "replacement", "method")
 _MAPPING_KEYS: Final = ("headers", "query", "json")
+_KNOWN_KEYS: Final = frozenset({*_STRING_KEYS, *_MAPPING_KEYS, "name", "body", "status", "response_headers"})
 
 
 class RuleError(ValueError):
@@ -152,6 +154,25 @@ class RuleError(ValueError):
         super().__init__(f"rule {rule_name!r}: {problem}")
         self.rule_name = rule_name
         self.problem = problem
+
+
+def _check_entry(name: str | None, data: Mapping[str, Any]) -> None:
+    """Reject a rules-file entry with an unknown key, a missing required key, or a key of
+    the wrong YAML type. A misspelt key would otherwise be ignored, silently widening the rule."""
+    unknown = [str(key) for key in data if key not in _KNOWN_KEYS]
+    if unknown:
+        close = difflib.get_close_matches(unknown[0], sorted(_KNOWN_KEYS), n=1)
+        hint = f"; did you mean {close[0]!r}?" if close else ""
+        raise RuleError(name, f"unknown key {unknown[0]!r}{hint}")
+    for key in _REQUIRED_KEYS:
+        if data.get(key) is None:
+            raise RuleError(name, f"{key!r} is required")
+    for key in _STRING_KEYS:
+        if data.get(key) is not None and not isinstance(data[key], str):
+            raise RuleError(name, f"{key!r} must be a string")
+    for key in _MAPPING_KEYS:
+        if data.get(key) is not None and not isinstance(data[key], Mapping):
+            raise RuleError(name, f"{key!r} must be a mapping")
 
 
 class Rule:
@@ -189,7 +210,7 @@ class Rule:
         self.headers = {str(k).lower(): self._predicate_value(k, v) for k, v in (headers or {}).items()}
         self.query = {str(k): self._predicate_value(k, v) for k, v in (query or {}).items()}
         self.json = {str(k): self._predicate_value(k, v) for k, v in (json or {}).items()}
-        self.body = str(body) if body is not None else None
+        self.body = self._predicate_value("body", body) if body is not None else None
 
         self._method = method.lower() if method is not None else None
         self._pattern = re.compile(pattern)
@@ -232,8 +253,12 @@ class Rule:
             self._replacement_template = template_env.from_string(replacement)
 
     def _predicate_value(self, key: Any, value: Any) -> str:
+        """A predicate's regex. A scalar is coerced to a string (YAML may parse e.g. ``1`` as
+        an int); a list or mapping is refused, since its string form is not the intended regex."""
         if value is None:
             raise RuleError(self.name, f"predicate {str(key)!r} has no value")
+        if isinstance(value, Mapping | list):
+            raise RuleError(self.name, f"predicate {str(key)!r} must be a single regex, got a {type(value).__name__}")
         return str(value)
 
     def _status(self, value: Any) -> int | None:
@@ -251,7 +276,6 @@ class Rule:
         if value is None:
             return ()
         if not isinstance(value, Mapping):
-            # Every rules-file mistake is a RuleError naming the rule, whatever its kind.
             raise RuleError(self.name, "response_headers must be a mapping of header name to value")
         headers: list[tuple[str, str]] = []
         for key, raw in value.items():
@@ -292,16 +316,7 @@ class Rule:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any], env: Environment | None = None) -> Self:
         """Build a rule from a rules-file entry, first checking its keys and their YAML types."""
-        name = str(data["name"]) if data.get("name") is not None else None
-        for key in _REQUIRED_KEYS:
-            if data.get(key) is None:
-                raise RuleError(name, f"{key!r} is required")
-        for key in _STRING_KEYS:
-            if data.get(key) is not None and not isinstance(data[key], str):
-                raise RuleError(name, f"{key!r} must be a string")
-        for key in _MAPPING_KEYS:
-            if data.get(key) is not None and not isinstance(data[key], Mapping):
-                raise RuleError(name, f"{key!r} must be a mapping")
+        _check_entry(str(data["name"]) if data.get("name") is not None else None, data)
         return cls(
             pattern=data["pattern"],
             replacement=data["replacement"],

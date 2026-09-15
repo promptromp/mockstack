@@ -148,11 +148,14 @@ parse as YAML or has no top-level `rules` list. It also refuses, naming the offe
 rule by position and name (e.g. `rules.yml: rule #2 ('projects-fixture'): 'pattern' is
 required`), when:
 
+- a rule has a key mockstack does not know, such as a misspelt `header` (the error
+  suggests the closest key);
 - a rule is not a mapping, has no `pattern` or `replacement`, has a `pattern`,
   `replacement` or `method` that is not a string, or has `headers`, `query` or `json`
   that is not a mapping;
-- a regex (`pattern` or any predicate) is invalid;
-- a predicate has no value;
+- a regex (`pattern` or any predicate) is invalid, or too large or deeply nested to
+  compile;
+- a predicate has no value, or has a list or mapping where a single regex belongs;
 - a Jinja `replacement` has a syntax error;
 - a `replacement` mixes Jinja delimiters with a regex backreference (`\1`, `\g<id>`)
   in its literal text;

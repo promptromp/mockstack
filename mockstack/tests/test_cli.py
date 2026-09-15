@@ -5,16 +5,16 @@ import re
 from importlib import metadata
 
 import pytest
-from pydantic import ValidationError
-from pydantic_settings import CliSettingsSource
+from pydantic import BaseModel, ValidationError
+from pydantic_settings import SettingsError
 
-from mockstack.cli import SettingName, build_parser, report_for, setting_name
-from mockstack.config import CliSettings, OpenTelemetrySettings, Settings
+from mockstack.cli import SettingName, build_parser, report_for, setting_name, settings_source
+from mockstack.config import OpenTelemetrySettings, Settings, SettingsDependencyError
 from mockstack.main import run
 
 
 # Environment variables that change whether and how rich colours and wraps its output.
-TERMINAL_ENV_VARS = ("FORCE_COLOR", "NO_COLOR", "TTY_COMPATIBLE", "TTY_INTERACTIVE", "COLUMNS")
+TERMINAL_ENV_VARS = ("FORCE_COLOR", "NO_COLOR", "TTY_COMPATIBLE", "TTY_INTERACTIVE", "COLUMNS", "TERM", "COLORTERM")
 
 ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
 
@@ -91,8 +91,20 @@ def test_run_without_arguments_names_the_missing_setting(served, capsys):
             ),
             "MOCKSTACK__PROXYRULES_RECORD_SCRUBBER",
         ),
+        (
+            ["--port", "99999"],
+            "invalid value '99999' for --port: input should be less than or equal to 65535",
+            "MOCKSTACK__PORT",
+        ),
     ],
-    ids=["missing-directory", "not-an-integer", "unknown-strategy", "unknown-enum-value", "unimportable-scrubber"],
+    ids=[
+        "missing-directory",
+        "not-an-integer",
+        "unknown-strategy",
+        "unknown-enum-value",
+        "unimportable-scrubber",
+        "port-out-of-range",
+    ],
 )
 def test_invalid_setting_is_named_with_its_value(served, capsys, tmp_path, argv, error, env_var):
     assert fail(["--templates-dir", str(tmp_path), *argv], capsys) == (
@@ -183,12 +195,45 @@ def test_settings_that_depend_on_each_other_are_named_by_flag(
     assert fail(argv, capsys) == f"mockstack: error: {error}\n  environment or .env: {env_vars}\n" + HELP_HINT
 
 
-def test_unparseable_environment_variable_is_reported(served, capsys, monkeypatch, tmp_path):
+def test_unparseable_environment_variable_is_named(served, capsys, monkeypatch, tmp_path):
     monkeypatch.setenv("MOCKSTACK__LOGGING", "{not json")
+
+    assert fail(["--templates-dir", str(tmp_path)], capsys) == (
+        "mockstack: error: cannot parse MOCKSTACK__LOGGING from the environment: "
+        "Expecting property name enclosed in double quotes: line 1 column 2 (char 1)\n" + HELP_HINT
+    )
+
+
+def test_unparseable_dotenv_value_is_named(served, capsys, tmp_path):
+    (tmp_path / ".env").write_text("MOCKSTACK__MISSING_RESOURCE_FIELDS={not json\n")
 
     error = fail(["--templates-dir", str(tmp_path)], capsys)
 
-    assert error.startswith('mockstack: error: error parsing value for field "logging" from source "EnvSettingsSource"')
+    assert error.startswith("mockstack: error: cannot parse MOCKSTACK__MISSING_RESOURCE_FIELDS from .env: ")
+
+
+def test_other_settings_errors_keep_their_message():
+    report = report_for(SettingsError("cannot connect CLI settings source root parser"))
+
+    assert [problem.plain for problem in report.problems] == ["cannot connect CLI settings source root parser"]
+
+
+def test_unknown_setting_in_dotenv_is_named_with_a_suggestion(served, capsys, tmp_path):
+    (tmp_path / ".env").write_text(f"MOCKSTACK__TEMPLATE_DIR={tmp_path}\n")
+
+    assert fail(["--templates-dir", str(tmp_path)], capsys) == (
+        "mockstack: error: unknown setting MOCKSTACK__TEMPLATE_DIR; did you mean MOCKSTACK__TEMPLATES_DIR?\n"
+        + HELP_HINT
+    )
+
+
+def test_unknown_nested_environment_variable_is_named_with_a_suggestion(served, capsys, monkeypatch, tmp_path):
+    monkeypatch.setenv("MOCKSTACK__OPENTELEMETRY__ENABLE", "1")
+
+    assert fail(["--templates-dir", str(tmp_path)], capsys) == (
+        "mockstack: error: unknown setting MOCKSTACK__OPENTELEMETRY__ENABLE; "
+        "did you mean MOCKSTACK__OPENTELEMETRY__ENABLED?\n" + HELP_HINT
+    )
 
 
 def test_rules_file_that_does_not_load_names_the_file_and_rule(served, capsys, tmp_path):
@@ -206,8 +251,9 @@ def test_rules_file_that_does_not_load_names_the_file_and_rule(served, capsys, t
         (["--template-dir", "templates"], "  --template-dir: did you mean --templates-dir?\n"),
         (["--prot=80"], "  --prot: did you mean --port?\n"),
         (["--zzz"], ""),
+        (["--templates", "templates"], "  --templates: did you mean --templates-dir?\n"),
     ],
-    ids=["typo-with-value", "typo-with-equals", "nothing-close"],
+    ids=["typo-with-value", "typo-with-equals", "nothing-close", "abbreviation"],
 )
 def test_unrecognized_flag_suggests_the_closest_one(served, capsys, argv, hint):
     assert fail(argv, capsys) == f"mockstack: error: unrecognized arguments: {' '.join(argv)}\n{hint}" + HELP_HINT
@@ -246,6 +292,48 @@ def test_help_describes_the_options_and_environment_variables(served, capsys):
     assert "MOCKSTACK__TEMPLATES_DIR" in help_text
 
 
+def test_help_text_is_not_read_as_rich_markup(served):
+    parser = build_parser()
+    parser.add_argument("--probe", help="a [bold] value in [module:function] form")
+
+    assert "a [bold] value in [module:function] form" in " ".join(ANSI_ESCAPE.sub("", parser.format_help()).split())
+
+
+def test_error_from_creating_the_app_keeps_its_traceback(served, monkeypatch, tmp_path):
+    """Only a rules file that does not load is reported as a configuration error once the
+    settings are parsed; a bug raising ``ValidationError`` in ``create_app`` propagates."""
+
+    class Pool(BaseModel):
+        port: int
+
+    def create_app_with_a_bug(settings):
+        return Pool.model_validate({"port": "not-a-port"})
+
+    monkeypatch.setattr("mockstack.main.create_app", create_app_with_a_bug)
+
+    with pytest.raises(ValidationError, match="Pool"):
+        run(["--templates-dir", str(tmp_path)])
+
+
+def test_dependency_error_names_group_settings_and_keeps_unknown_names():
+    exc = ValidationError.from_exception_data(
+        "CliSettings",
+        [
+            {
+                "type": "value_error",
+                "loc": (),
+                "input": {},
+                "ctx": {"error": SettingsDependencyError("{opentelemetry.enabled} requires {no_such_setting}")},
+            }
+        ],
+    )
+
+    report = report_for(exc)
+
+    assert [problem.plain for problem in report.problems] == ["--opentelemetry.enabled requires no_such_setting"]
+    assert report.settings == [SettingName(flag="--opentelemetry.enabled", env_var="MOCKSTACK__OPENTELEMETRY__ENABLED")]
+
+
 def test_report_names_what_it_can_of_each_error_location():
     """An error about the settings as a whole keeps its message; a location that runs past
     a plain setting is named by that setting."""
@@ -281,7 +369,7 @@ def test_setting_names_match_the_generated_flags():
     """Every flag an error names is one the parser really has; settings without one are
     named by their environment variable."""
     parser = build_parser()
-    CliSettingsSource(CliSettings, root_parser=parser)
+    settings_source(parser)
     paths: list[tuple[str, ...]] = [(name,) for name in Settings.model_fields]
     paths += [("opentelemetry", name) for name in OpenTelemetrySettings.model_fields]
 

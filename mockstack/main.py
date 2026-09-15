@@ -5,12 +5,13 @@ from collections.abc import Sequence
 import uvicorn
 from fastapi import FastAPI
 
-from mockstack.cli import CONFIGURATION_ERRORS, build_parser, parse_settings, report_for
+from mockstack.cli import SETTINGS_ERRORS, build_parser, parse_settings, report_for, settings_source
 from mockstack.config import Settings, settings_provider
 from mockstack.lifespan import lifespan_provider
 from mockstack.middleware import middleware_provider
 from mockstack.routers.catchall import catchall_router_provider
 from mockstack.strategies.factory import strategy_provider
+from mockstack.strategies.proxyrules import RulesFileError
 from mockstack.telemetry import opentelemetry_provider
 
 
@@ -37,14 +38,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 def run(argv: Sequence[str] | None = None) -> None:
     """Run the mockstack server with settings from ``argv`` (by default the command line).
 
-    A configuration error, including a rules file that does not load, is printed without
-    a traceback and exits with status 2.
+    Invalid settings and a rules file that does not load are printed without a traceback
+    and exit with status 2. Each ``try`` covers only the step that raises the errors it
+    catches, so a bug elsewhere keeps its traceback.
     """
     parser = build_parser()
+    source = settings_source(parser)
     try:
-        settings = parse_settings(parser, argv)
+        settings = parse_settings(source, argv)
+    except SETTINGS_ERRORS as exc:
+        parser.exit_with(report_for(exc))
+
+    try:
         app = create_app(settings=settings)
-    except CONFIGURATION_ERRORS as exc:
+    except RulesFileError as exc:
         parser.exit_with(report_for(exc))
 
     uvicorn.run(app, host=settings.host, port=settings.port)

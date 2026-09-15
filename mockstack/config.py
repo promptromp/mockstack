@@ -3,7 +3,7 @@ from functools import lru_cache
 from string import Formatter
 from typing import Any, Literal, Self
 
-from pydantic import DirectoryPath, FilePath, ImportString, model_validator
+from pydantic import DirectoryPath, Field, FilePath, ImportString, model_validator
 from pydantic_settings import (
     BaseSettings,
     CliImplicitFlag,
@@ -20,21 +20,20 @@ from mockstack.constants import (
 )
 
 
-# Attribute docstrings become the settings' descriptions, which `mockstack --help` shows.
-
-
 class SettingsDependencyError(ValueError):
     """A setting that another setting's value requires or rules out.
 
     ``template`` names each setting in braces, e.g. ``"{templates_dir} is required when
-    {strategy} is filefixtures"``. The message names the settings as they are spelled in
+    {strategy} is filefixtures"``, with a dot for a setting in a group
+    (``{opentelemetry.enabled}``). The message names the settings as they are spelled in
     Python; the command line renders the template with flags instead (``mockstack.cli``).
     """
 
     def __init__(self, template: str) -> None:
+        parts = list(Formatter().parse(template))
         self.template = template
-        self.settings = tuple(field for _, field, _, _ in Formatter().parse(template) if field)
-        super().__init__(template.format_map({name: name for name in self.settings}))
+        self.settings = tuple(field for _, field, _, _ in parts if field)
+        super().__init__("".join(literal + (field or "") for literal, field, _, _ in parts))
 
 
 class OpenTelemetrySettings(BaseSettings):
@@ -64,17 +63,19 @@ class Settings(BaseSettings):
         env_prefix=ENV_PREFIX,
         env_file=ENV_FILE,
         env_nested_delimiter=ENV_NESTED_DELIMITER,
+        # Attribute docstrings become the settings' descriptions, which `mockstack --help` shows.
         use_attribute_docstrings=True,
     )
 
     debug: CliImplicitFlag[bool] = False
     """Whether to run in debug mode."""
 
+    # Every interface, so the server is reachable from outside a container.
     host: str = "0.0.0.0"  # noqa: S104
     """Host to run the server on. The default, every interface, makes the server reachable from outside a
     container."""
 
-    port: int = 8000
+    port: int = Field(default=8000, ge=0, le=65535)
     """Port to run the server on."""
 
     openapi_docs_enabled: CliImplicitFlag[bool] = False
