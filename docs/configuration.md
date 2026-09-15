@@ -145,11 +145,14 @@ uvx mockstack --strategy proxyrules --proxyrules-rules-filename ./rules.yml --pr
 ### Configuration errors
 
 Settings are checked before the server starts. When a setting is missing or invalid, a
-flag or `MOCKSTACK__*` variable is not recognized, or the rules file does not load,
+flag, a key in the `.env` file or a variable inside a settings group (such as
+`MOCKSTACK__OPENTELEMETRY__ENABLED`) is not recognized, or the rules file does not load,
 mockstack exits with status 2 and a short message instead of a traceback. It names each
 setting by its flag and lists the environment variables for the same settings, since the
 value may have come from the command line, the environment or a `.env` file. Flags must
-be spelled in full, and a misspelt flag or `.env` variable gets a suggestion:
+be spelled in full, and a misspelt flag or `.env` key gets a suggestion. An exported
+`MOCKSTACK__*` variable that names no setting is ignored, like any other environment
+variable:
 
 ```console
 $ mockstack

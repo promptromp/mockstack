@@ -218,13 +218,33 @@ def test_other_settings_errors_keep_their_message():
     assert [problem.plain for problem in report.problems] == ["cannot connect CLI settings source root parser"]
 
 
-def test_unknown_setting_in_dotenv_is_named_with_a_suggestion(served, capsys, tmp_path):
-    (tmp_path / ".env").write_text(f"MOCKSTACK__TEMPLATE_DIR={tmp_path}\n")
+@pytest.mark.parametrize(
+    ("line", "error"),
+    [
+        (
+            "MOCKSTACK__TEMPLATE_DIR=templates",
+            "MOCKSTACK__TEMPLATE_DIR in .env; did you mean MOCKSTACK__TEMPLATES_DIR?",
+        ),
+        (
+            "OPENTELEMETRY__ENABLED=true",
+            "OPENTELEMETRY__ENABLED in .env; did you mean MOCKSTACK__OPENTELEMETRY__ENABLED?",
+        ),
+        ("DATABASE_URL=postgres://db", "DATABASE_URL in .env"),
+    ],
+    ids=["misspelt", "missing-prefix", "unrelated"],
+)
+def test_unknown_key_in_dotenv_is_named_as_written(served, capsys, tmp_path, line, error):
+    (tmp_path / ".env").write_text(f"{line}\n")
 
-    assert fail(["--templates-dir", str(tmp_path)], capsys) == (
-        "mockstack: error: unknown setting MOCKSTACK__TEMPLATE_DIR; did you mean MOCKSTACK__TEMPLATES_DIR?\n"
-        + HELP_HINT
+    assert (
+        fail(["--templates-dir", str(tmp_path)], capsys) == f"mockstack: error: unknown setting {error}\n" + HELP_HINT
     )
+
+
+def test_unparseable_command_line_json_is_named_by_flag(served, capsys, tmp_path):
+    error = fail(["--templates-dir", str(tmp_path), "--opentelemetry", "{bad"], capsys)
+
+    assert error.startswith("mockstack: error: cannot parse --opentelemetry from the command line: ")
 
 
 def test_unknown_nested_environment_variable_is_named_with_a_suggestion(served, capsys, monkeypatch, tmp_path):
@@ -251,7 +271,7 @@ def test_rules_file_that_does_not_load_names_the_file_and_rule(served, capsys, t
         (["--template-dir", "templates"], "  --template-dir: did you mean --templates-dir?\n"),
         (["--prot=80"], "  --prot: did you mean --port?\n"),
         (["--zzz"], ""),
-        (["--templates", "templates"], "  --templates: did you mean --templates-dir?\n"),
+        (["--temp", "templates"], "  --temp: did you mean --templates-dir?\n"),
     ],
     ids=["typo-with-value", "typo-with-equals", "nothing-close", "abbreviation"],
 )

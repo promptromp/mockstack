@@ -58,7 +58,11 @@ EPILOG: Final = (
 
 # pydantic-settings' message for a value it cannot decode, e.g. invalid JSON in MOCKSTACK__LOGGING.
 _PARSE_ERROR_RE: Final = re.compile(r'error parsing value for field "(?P<field>[^"]+)" from source "(?P<source>\w+)"')
-_SOURCE_NAMES: Final = {"EnvSettingsSource": "the environment", "DotEnvSettingsSource": ".env"}
+_SOURCE_NAMES: Final = {
+    "CliSettingsSource": "the command line",
+    "EnvSettingsSource": "the environment",
+    "DotEnvSettingsSource": ".env",
+}
 
 
 @dataclass(frozen=True)
@@ -125,7 +129,11 @@ class CliArgumentParser(argparse.ArgumentParser):
         hints = []
         for argument in arguments:
             flag = argument.split("=", 1)[0]
-            matches = difflib.get_close_matches(flag, known, n=1) if flag.startswith("--") else []
+            if not flag.startswith("--") or flag == "--":
+                continue
+            # A flag cut short (abbreviations are not accepted) is matched to the one flag it begins.
+            prefixed = [option for option in known if option.startswith(flag)]
+            matches = prefixed if len(prefixed) == 1 else difflib.get_close_matches(flag, prefixed or known, n=1)
             if matches:
                 hints.append(Text.assemble(f"{flag}: did you mean ", (matches[0], FLAG_STYLE), "?"))
         return hints
@@ -290,21 +298,25 @@ def _field_problem(error: ErrorDetails) -> tuple[Text, list[SettingName]]:
 
 
 def _unknown_setting_problem(loc: Sequence[int | str]) -> Text:
-    """E.g. ``unknown setting MOCKSTACK__TEMPLATE_DIR; did you mean MOCKSTACK__TEMPLATES_DIR?``.
+    """E.g. ``unknown setting MOCKSTACK__TEMPLATE_DIR in .env; did you mean MOCKSTACK__TEMPLATES_DIR?``.
 
-    A key in a ``.env`` file arrives whole, prefix included (``("mockstack__template_dir",)``);
-    a nested environment variable arrives as its path (``("opentelemetry", "enable")``).
+    A key in a ``.env`` file arrives whole, as written there with or without the prefix
+    (``("mockstack__template_dir",)``, ``("database_url",)``); a variable inside a settings
+    group arrives as its path (``("opentelemetry", "enable")``). Names are compared
+    without the prefix, which every setting shares and would otherwise dominate the match.
     """
     parts = [str(part) for part in loc]
-    if len(parts) == 1 and parts[0].lower().startswith(ENV_PREFIX):
-        env_var = parts[0].upper()
+    if len(parts) == 1:
+        key, where = parts[0].upper(), " in .env"
     else:
-        env_var = (ENV_PREFIX + ENV_NESTED_DELIMITER.join(parts)).upper()
+        key, where = (ENV_PREFIX + ENV_NESTED_DELIMITER.join(parts)).upper(), ""
 
-    text = Text.assemble("unknown setting ", (env_var, FLAG_STYLE))
-    close = difflib.get_close_matches(env_var, _setting_env_vars(), n=1)
-    if close:
-        text.append_text(Text.assemble("; did you mean ", (close[0], FLAG_STYLE), "?"))
+    text = Text.assemble("unknown setting ", (key, FLAG_STYLE), where)
+    prefix = ENV_PREFIX.upper()
+    known = {env_var.removeprefix(prefix): env_var for env_var in _setting_env_vars()}
+    close = difflib.get_close_matches(key.removeprefix(prefix), list(known), n=1)
+    if close and known[close[0]] != key:
+        text.append_text(Text.assemble("; did you mean ", (known[close[0]], FLAG_STYLE), "?"))
     return text
 
 
@@ -317,7 +329,9 @@ def _settings_error_problem(exc: SettingsError) -> Text:
     if match is None or name is None:
         return Text(f"{exc}{cause}")
     source = _SOURCE_NAMES.get(match["source"], match["source"])
-    return Text.assemble("cannot parse ", (name.env_var, FLAG_STYLE), f" from {source}{cause}")
+    # A settings group given as JSON on the command line has a flag of its own name.
+    shown = "--" + match["field"].replace("_", "-") if match["source"] == "CliSettingsSource" else name.env_var
+    return Text.assemble("cannot parse ", (shown, FLAG_STYLE), f" from {source}{cause}")
 
 
 def _clause(message: str) -> str:
