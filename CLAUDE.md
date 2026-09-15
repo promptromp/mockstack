@@ -36,7 +36,7 @@ CLI flags, `MOCKSTACK__*` environment variables, or a `.env` file.
 - `mockstack/tests/`: unit tests; `conftest.py` holds fixtures shared by unit and live
   tests (`make_settings`, `make_request`, `write_rules`, `write_template`, `span`), and
   `strategies/conftest.py` adds strategy helpers (`traced_request`,
-  `proxyrules_strategy`, `apply_rule`, `upstream_send`). Build settings with
+  `proxyrules_strategy`, `apply_rule`, `upstream_send`, `span_attributes`). Build settings with
   `make_settings`: it ignores
   `MOCKSTACK__*` environment variables and `.env` files
 - `mockstack/tests/live/`: live tests against real uvicorn servers on loopback sockets;
