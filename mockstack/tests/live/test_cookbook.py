@@ -535,20 +535,32 @@ def recipe9(upstream, render_rules, mockstack_server, tmp_path_factory):
 
     The page starts mockstack from the recipe directory with ``PYTHONPATH=.``, so the
     ``scrubbers`` module is importable; the test puts the recipe directory on the path the
-    same way while the strategy loads it.
+    same way while the strategy loads it. Unlike the ``sys.path`` entry, the import itself
+    outlives this fixture (``sys.modules`` is process-global), so it is undone in teardown:
+    modules imported while the server starts, whose file lives under the recipe directory,
+    are dropped from ``sys.modules`` again -- the running server keeps its own reference to
+    the scrubber function, so this is safe. Bytecode writing is suppressed for the same
+    window, so no ``__pycache__`` is left behind in the examples directory.
     """
     recipe_dir = COOKBOOK_DIR / "09-recording"
     fixtures = tmp_path_factory.mktemp("recorded-fixtures")
     rules_file = render_rules(recipe_dir / "rules.yml", FIXTURES_DIR=str(fixtures), UPSTREAM_URL=upstream.base_url)
+    modules_before = set(sys.modules)
     with pytest.MonkeyPatch.context() as patch:
         patch.syspath_prepend(str(recipe_dir))
+        patch.setattr(sys, "dont_write_bytecode", True)
         live = mockstack_server(
             rules_file,
             proxyrules_record_mode="missing",
             proxyrules_record_root=fixtures,
             proxyrules_record_scrubber="scrubbers:mask_emails",
         )
-    return str(live.base_url), fixtures
+    yield str(live.base_url), fixtures
+    recipe_dir_resolved = recipe_dir.resolve()
+    for name in set(sys.modules) - modules_before:
+        module_file = getattr(sys.modules.get(name), "__file__", None)
+        if module_file is not None and Path(module_file).resolve().is_relative_to(recipe_dir_resolved):
+            del sys.modules[name]
 
 
 def test_recipe9_first_request_is_recorded_with_emails_masked(recipe9, upstream):
