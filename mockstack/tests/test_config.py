@@ -62,6 +62,30 @@ def test_filefixtures_without_templates_dir_names_the_right_strategy():
         Settings(strategy="filefixtures", templates_dir=None)
 
 
+def test_openapi_docs_enabled_defaults_to_off(make_settings, templates_dir):
+    assert make_settings(templates_dir=templates_dir).openapi_docs_enabled is False
+
+
+def test_openapi_docs_enabled_env_var(monkeypatch, templates_dir):
+    """``MOCKSTACK__OPENAPI_DOCS_ENABLED`` turns FastAPI's documentation routes on."""
+    monkeypatch.setenv("MOCKSTACK__OPENAPI_DOCS_ENABLED", "true")
+
+    assert Settings(templates_dir=templates_dir).openapi_docs_enabled is True
+
+
+def test_openapi_docs_enabled_cli_flag(templates_dir):
+    """``--openapi-docs-enabled`` turns the documentation routes on and its ``--no-`` form off."""
+    enabled = CliSettings(
+        _cli_parse_args=["--templates-dir", templates_dir, "--openapi-docs-enabled"]  # type: ignore[call-arg]
+    )
+    assert enabled.openapi_docs_enabled is True
+
+    disabled = CliSettings(
+        _cli_parse_args=["--templates-dir", templates_dir, "--no-openapi-docs-enabled"]  # type: ignore[call-arg]
+    )
+    assert disabled.openapi_docs_enabled is False
+
+
 def test_record_mode_defaults_to_off(make_settings, templates_dir):
     settings = make_settings(templates_dir=templates_dir)
     assert settings.proxyrules_record_mode == ProxyRulesRecordMode.OFF

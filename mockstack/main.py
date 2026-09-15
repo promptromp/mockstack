@@ -19,7 +19,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     """Create the fastapi app and bootstrap all dependencies."""
     settings = settings or settings_provider()
 
-    app = FastAPI(lifespan=lifespan_provider(settings))
+    # FastAPI adds its documentation routes ahead of the catch-all route; without an
+    # OpenAPI URL it adds none of them.
+    app = FastAPI(
+        lifespan=lifespan_provider(settings),
+        openapi_url="/openapi.json" if settings.openapi_docs_enabled else None,
+    )
 
     strategy_provider(app, settings)
     middleware_provider(app, settings)
