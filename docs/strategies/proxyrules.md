@@ -209,7 +209,8 @@ The response content type comes from the file suffix, ignoring a trailing `.j2`
 (`project.json.j2` -> `application/json`). A successfully rendered template returns
 HTTP 200, or the rule's `status`, stamped `X-Mockstack-Result: template`; see
 [Error handling](#error-handling) for the failure cases. Use the `tojson` filter to
-write request values into JSON fixtures, e.g. `{"id": {{ id | tojson }}}`.
+write request values into JSON fixtures, e.g. `{"id": {{ id | tojson }}}`. Fixture files
+and the rules file are read as UTF-8, matching how filefixtures reads its templates.
 
 ### Status codes and headers
 

@@ -264,7 +264,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         if self.rules_filename is None:
             raise ValueError("rules_filename is not set")
 
-        with open(self.rules_filename) as file:
+        with open(self.rules_filename, encoding="utf-8") as file:
             data = yaml.safe_load(file)
         return [self._rule_from_dict(rule) for rule in data["rules"]]
 
@@ -445,7 +445,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
 
         try:
             # Read the template file content (synchronously, as above).
-            with open(template_path) as f:  # noqa: ASYNC230
+            with open(template_path, encoding="utf-8") as f:  # noqa: ASYNC230
                 template_content = f.read()
 
             # Create a template from the content
