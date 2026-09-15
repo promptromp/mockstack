@@ -2,7 +2,7 @@
 
 # Define build argument for version
 ARG PYTHON_IMAGE_VERSION=3.13-slim
-ARG MOCKSTACK_VERSION=0.14.2
+ARG MOCKSTACK_VERSION=0.15.0
 
 # ---------------------------- Base Image --------------------------------
 

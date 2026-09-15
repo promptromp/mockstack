@@ -32,7 +32,8 @@ Highlights include:
 * Fixture status codes and headers: a `proxyrules` fixture can answer with any status and extra headers, e.g. a 503 with `Retry-After`, to test how a client handles a failing dependency. :vertical_traffic_light:
 * Record mode: `proxyrules` can record real responses into the fixtures its rules serve, with an optional scrubber, then replay them without the real service. :red_circle:
 * Observability via [OpenTelemetry](https://opentelemetry.io/) integration. Get detailed traces of your sessions instantly reported to backends such as [Grafana](https://grafana.com/), [Jaeger](https://www.jaegertracing.io/), [Zipkin](https://zipkin.io/), etc. :eyes:
-* Configurability via [pydantic-settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/) supports customizing behaviour via environment variables and a `.env` file. :flags:
+* Configurability via [pydantic-settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/) supports customizing behaviour via command-line flags, environment variables and a `.env` file. :flags:
+* Readable configuration errors: a missing or invalid setting, a mistyped flag or a rules file that does not load is reported in a short message that names the flag, environment variable or rule to fix, with "did you mean" suggestions, instead of a traceback. :speech_balloon:
 * Comprehensive unit-tests, linting and formatting coverage as well as vulnerabilities and security scanning with full CI automation to ensure stability and a high-quality codebase for production-grade use. :+1:
 
 
