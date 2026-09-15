@@ -98,6 +98,9 @@ file fails it. CI runs the unit tests, the live tests, mypy, ruff and the docs b
   docs, examples and `.env.example` files names a real setting.
 - **Regexes in YAML** go in plain or single-quoted scalars: a double-quoted `"\1"`
   does not parse.
+- **Every setting has an attribute docstring.** It is the setting's `--help` text, and
+  `test_every_setting_has_help_text` fails without it. A check across settings raises
+  `SettingsDependencyError` naming each setting in braces, so the CLI can show flags.
 - **Fail at load, not per request.** Rules are validated and compiled when the
   strategy is constructed; a file that does not load raises `RulesFileError`, naming
   the file and the rule by position. Every `proxyrules` response, including errors, carries the

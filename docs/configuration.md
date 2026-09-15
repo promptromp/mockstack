@@ -22,7 +22,7 @@ version.
 |--------|------|---------|-------------|
 | `debug` | boolean | `false` | Whether to run in debug mode |
 | `host` | string | `0.0.0.0` | Host to run the server on |
-| `port` | integer | `8000` | Port to run the server on |
+| `port` | integer | `8000` | Port to run the server on, from 0 to 65535 |
 | `openapi_docs_enabled` | boolean | `false` | Whether to serve FastAPI's documentation routes: `/docs`, `/redoc`, `/openapi.json` and `/docs/oauth2-redirect`. They take precedence over the catch-all route and document only that route, so by default they are off and those paths reach the strategy like any other |
 | `strategy` | string | `filefixtures` | Strategy to use for handling requests. Options: `filefixtures`, `proxyrules` |
 
