@@ -32,7 +32,9 @@ CLI flags, `MOCKSTACK__*` environment variables, or a `.env` file.
 - `mockstack/templating.py`: Jinja environment and path-to-template-name resolution
 - `mockstack/intent.py`, `mockstack/identifiers.py`: POST intent (search, command,
   create) and path-identifier heuristics
-- `mockstack/routers/`: the catch-all route; every path, `/` included, reaches the strategy
+- `mockstack/routers/`: the catch-all route; every path, `/` included, reaches the strategy.
+  FastAPI's `/docs`, `/redoc` and `/openapi.json` routes are only registered, ahead of
+  the catch-all, when `openapi_docs_enabled` is set
 - `mockstack/tests/`: unit tests; `conftest.py` holds fixtures shared by unit and live
   tests (`make_settings`, `make_request`, `write_rules`, `write_template`, `span`, and
   `asgi_client`, an httpx client that calls the `app` fixture in-process), and
