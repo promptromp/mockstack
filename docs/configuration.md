@@ -53,6 +53,8 @@ See [ProxyRules](strategies/proxyrules.md) for how rules are written and evaluat
 | `proxyrules_reverse_proxy_timeout` | `MOCKSTACK__PROXYRULES_REVERSE_PROXY_TIMEOUT` | float | `10.0` | Timeout in seconds for reverse-proxied upstream requests. An upstream that does not answer in time is answered with a 504 stamped `X-Mockstack-Result: error`. `None` (when constructing `Settings` in Python) disables the timeout |
 | `proxyrules_simulate_create_on_missing` | `MOCKSTACK__PROXYRULES_SIMULATE_CREATE_ON_MISSING` | boolean | `false` | Whether a request that matches no rule and looks like a resource creation (e.g. a POST) gets a simulated 201 (`X-Mockstack-Result: create`) instead of a 404 (`missing`) |
 | `proxyrules_verify_ssl_certificates` | `MOCKSTACK__PROXYRULES_VERIFY_SSL_CERTIFICATES` | boolean | `true` | Whether to verify the TLS certificates of HTTPS upstreams when reverse proxying. Disable with caution, e.g. for a trusted upstream with a self-signed certificate |
+| `proxyrules_record_mode` | `MOCKSTACK__PROXYRULES_RECORD_MODE` | string | `off` | Record mode. `missing` writes the upstream response into a fixture rule's file when that file does not exist yet; `overwrite` also re-records files that were recorded before, never hand-written ones. Requires `proxyrules_record_root` and `reverse_proxy`. Never enable on a shared or exposed instance; see [Recording fixtures](strategies/proxyrules.md#recording-fixtures) |
+| `proxyrules_record_root` | `MOCKSTACK__PROXYRULES_RECORD_ROOT` | path | - | Existing directory that every recorded fixture file must resolve inside, symlinks followed. Required when `proxyrules_record_mode` is not `off` |
 
 ## Resource Creation Settings
 
