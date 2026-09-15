@@ -416,14 +416,19 @@ async def test_scrubbed_body_is_written_and_served(recording, root, traced_reque
 
 @pytest.mark.asyncio
 async def test_scrubber_returning_none_skips_recording(recording, root, traced_request, upstream_send, caplog):
+    """A scrubber returning None is the documented, intentional way to skip recording an
+    endpoint, so the not-recorded reason is logged at INFO, not WARNING."""
     upstream_send.return_value = upstream_response()
     strategy = recording(proxyrules_record_scrubber=skip_everything)
-    with caplog.at_level(logging.WARNING, logger="ProxyRulesStrategy"):
+    with caplog.at_level(logging.INFO, logger="ProxyRulesStrategy"):
         response = await strategy.apply(traced_request("/users/user-1"))
     assert result_of(response) == (200, "proxy", "users-passthrough")
     assert response.body == BODY
     assert not (root / "users").exists()
-    assert "not recorded: the scrubber skipped it" in caplog.text
+    matching = [record for record in caplog.records if "not recorded: the scrubber skipped it" in record.getMessage()]
+    assert len(matching) == 1
+    assert matching[0].levelno == logging.INFO
+    assert not any(record.levelno == logging.WARNING for record in caplog.records)
 
 
 @pytest.mark.asyncio

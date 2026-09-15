@@ -366,7 +366,9 @@ A response is recorded only when:
   decoded.
 
 Otherwise the upstream's response is returned stamped `proxy` with the URL rule's name,
-and a warning in the log names the reason. With no later URL rule, a missing fixture is
+and the reason is logged -- at INFO for a `HEAD`/`OPTIONS` request or a scrubber that
+returns `None`, since both are expected; every other reason is logged at WARNING. With
+no later URL rule, a missing fixture is
 the usual 404 `error`. An upstream that fails is the usual 502 or 504 `error`, and a
 fixture file that cannot be written is a 500 `error`; nothing is written in either case.
 

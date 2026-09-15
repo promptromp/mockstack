@@ -170,6 +170,10 @@ _BODYLESS_STATUS_CODES = frozenset({status.HTTP_204_NO_CONTENT, status.HTTP_304_
 # Methods whose responses are never written to a fixture.
 _UNRECORDED_METHODS = frozenset({"HEAD", "OPTIONS"})
 
+# Reason text for a scrubber that opts a response out of recording; shared between where
+# the reason is produced (_scrub) and where the not-recorded log level is chosen (handle_record).
+_SCRUBBER_SKIPPED_REASON = "the scrubber skipped it"
+
 
 def _header_safe(value: str) -> str:
     """Make an arbitrary string safe to use as an HTTP header value.
@@ -505,10 +509,12 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         response = await self.reverse_proxy(request, url)
         text, reason = self._recordable_text(request, rule, path, response)
         if text is None:
-            # HEAD/OPTIONS is expected on every request to a matched fixture rule
-            # while it may still be recorded, so it is logged at INFO; every other
-            # not-recorded reason is a genuine surprise and stays at WARNING.
-            level = logging.INFO if request.method.upper() in _UNRECORDED_METHODS else logging.WARNING
+            # HEAD/OPTIONS is expected on every request to a matched fixture rule while it
+            # may still be recorded, and a scrubber returning None is the documented,
+            # intentional way to skip recording an endpoint -- both are logged at INFO;
+            # every other not-recorded reason is a genuine surprise and stays at WARNING.
+            expected = request.method.upper() in _UNRECORDED_METHODS or reason == _SCRUBBER_SKIPPED_REASON
+            level = logging.INFO if expected else logging.WARNING
             self.logger.log(level, "[rule:%s] not recorded: %s", rule.name, reason)
             return with_result_headers(response, rule=upstream_rule, result_type="proxy")
 
@@ -603,7 +609,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         # Typed as object: a user-supplied scrubber may break its contract.
         scrubbed: object = scrubber(text, request=request, rule_name=rule.name, path=path)
         if scrubbed is None:
-            return None, "the scrubber skipped it"
+            return None, _SCRUBBER_SKIPPED_REASON
         if not isinstance(scrubbed, str):
             raise TypeError(f"proxyrules_record_scrubber returned {type(scrubbed).__name__}, not str or None")
         return scrubbed, ""
