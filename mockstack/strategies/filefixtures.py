@@ -3,7 +3,6 @@
 import logging
 import os
 from functools import cached_property
-from pathlib import Path
 from typing import Any
 
 from fastapi import HTTPException, Request, Response, status
@@ -35,7 +34,7 @@ class FileFixturesStrategy(BaseStrategy, CreateMixin):
         if settings.templates_dir is None:
             raise ValueError("templates_dir is not set")
 
-        self.templates_dir = Path(settings.templates_dir)
+        self.templates_dir = settings.templates_dir
         self.enable_templates_for_post = settings.filefixtures_enable_templates_for_post
         self.simulate_create_on_missing = settings.filefixtures_simulate_create_on_missing
 
