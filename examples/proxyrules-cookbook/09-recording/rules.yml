@@ -1,0 +1,11 @@
+rules:
+  # Serves users/<user_id>.json.j2, which record mode writes on the first request.
+  - name: users-recorded
+    method: GET
+    pattern: ^/users/api/v1/users/(?P<user_id>[a-z0-9-]+)$
+    replacement: file://${FIXTURES_DIR}/users/{{ user_id }}.json.j2
+
+  # Where record mode sends a request whose fixture does not exist yet.
+  - name: users-passthrough
+    pattern: ^/users/(.*)
+    replacement: ${UPSTREAM_URL}/\1

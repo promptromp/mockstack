@@ -14,6 +14,7 @@ docs page. Each numbered directory holds one recipe's `rules.yml` and `fixtures/
 | `06-asserting-in-tests` | Asserting in a test suite, and reading error results |
 | `07-redirect-mode` | Redirect mode versus reverse proxy |
 | `08-status-and-headers` | Fixture status codes and headers: error responses, `201 Created` |
+| `09-recording` | Record fixtures from a real service, with a scrubber |
 
 `mockstack/tests/live/test_cookbook.py` loads these exact files and runs every `curl`
 command from the docs page against them, so the files and the page cannot drift.
@@ -44,11 +45,15 @@ envsubst '${FIXTURES_DIR} ${UPSTREAM_URL}' < rules.yml > rules.local.yml
 MOCKSTACK__STRATEGY=proxyrules MOCKSTACK__PROXYRULES_RULES_FILENAME=rules.local.yml uv run mockstack
 ```
 
-Two recipes need one more setting on the last line:
+Three recipes need one more setting on the last line:
 
 - `06-asserting-in-tests`: `MOCKSTACK__PROXYRULES_REVERSE_PROXY_TIMEOUT=1`, so the
   slow upstream times out.
 - `07-redirect-mode`: `MOCKSTACK__PROXYRULES_REDIRECT_VIA=http_307_temporary`.
+- `09-recording`: run `mkdir -p fixtures` first, and start with `PYTHONPATH=.`,
+  `MOCKSTACK__PROXYRULES_RECORD_MODE=missing`,
+  `MOCKSTACK__PROXYRULES_RECORD_ROOT=fixtures` and
+  `MOCKSTACK__PROXYRULES_RECORD_SCRUBBER=scrubbers:mask_emails`.
 
 Then, in a third terminal, run the recipe's `curl` commands from the docs page.
 mockstack listens on `127.0.0.1:8000`. Stop it with Ctrl-C before starting the

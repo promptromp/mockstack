@@ -482,3 +482,59 @@ Things to know:
 - Headers that mockstack manages cannot be set: `Content-Length`, hop-by-hop headers
   such as `Connection` and `Transfer-Encoding`, `Date`, `Server` and the
   `X-Mockstack-*` result headers.
+
+## 9. Record fixtures from a real service
+
+Instead of writing fixtures by hand, let mockstack record them. In record mode, a fixture
+rule whose file does not exist yet sends the request on to the next matching URL rule,
+writes the response into the fixture file, and answers from that file. A scrubber can
+rewrite each body before it is written, here to mask e-mail addresses. Start mockstack
+from the recipe directory:
+
+```bash
+mkdir -p fixtures
+PYTHONPATH=. MOCKSTACK__STRATEGY=proxyrules MOCKSTACK__PROXYRULES_RULES_FILENAME=rules.local.yml \
+  MOCKSTACK__PROXYRULES_RECORD_MODE=missing MOCKSTACK__PROXYRULES_RECORD_ROOT=fixtures \
+  MOCKSTACK__PROXYRULES_RECORD_SCRUBBER=scrubbers:mask_emails uv run mockstack
+```
+
+```yaml title="09-recording/rules.yml"
+--8<-- "examples/proxyrules-cookbook/09-recording/rules.yml"
+```
+
+<!-- fmt: off -->
+```python title="09-recording/scrubbers.py"
+--8<-- "examples/proxyrules-cookbook/09-recording/scrubbers.py"
+```
+<!-- fmt: on -->
+
+The first request is recorded from the echo upstream, with the address masked:
+
+```bash
+curl -i "http://127.0.0.1:8000/users/api/v1/users/user-7?contact=ada@example.com"
+# HTTP/1.1 200 OK
+# x-mockstack-result: record
+# x-mockstack-rule: users-recorded
+# {"source":"upstream","path":"/api/v1/users/user-7","method":"GET","query":{"contact":"***@***"},...}
+```
+
+`fixtures/users/user-7.json.j2` now holds that body, after a `{# mockstack:recorded #}`
+marker. The same request is then served from the file, without calling the upstream:
+
+```bash
+curl -i "http://127.0.0.1:8000/users/api/v1/users/user-7?contact=ada@example.com"
+# HTTP/1.1 200 OK
+# x-mockstack-result: template
+# x-mockstack-rule: users-recorded
+# {"source":"upstream","path":"/api/v1/users/user-7","method":"GET","query":{"contact":"***@***"},...}
+```
+
+Things to know:
+
+- Restart without the three `RECORD` settings to replay only. `overwrite` mode re-records
+  files carrying the marker and never touches hand-written fixtures.
+- A response is recorded only when its status matches the rule's `status` (200 by
+  default) and its body is text; otherwise it is returned stamped `proxy`. See
+  [Recording fixtures](../strategies/proxyrules.md#recording-fixtures).
+- Recorded files contain whatever the real service returned. Review them before
+  committing, and never run record mode on a shared or exposed instance.

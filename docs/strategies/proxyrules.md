@@ -385,6 +385,24 @@ Recorded files:
 Only the response body is recorded. The rule's `status` and `response_headers` apply when
 it is replayed, and the content type follows the file suffix as for any fixture.
 
+### Scrubbing recorded bodies
+
+`proxyrules_record_scrubber` names a `module:function` that is called with every body
+before it is written. It returns the text to write, or `None` to skip recording that
+response, which is then returned stamped `proxy`:
+
+```python
+def mask_emails(body: str, *, request: Request, rule_name: str | None, path: Path) -> str | None:
+    return EMAIL.sub("***@***", body)
+```
+
+The reference is imported and checked when the settings are loaded, so a typo or a
+target that is not callable stops mockstack from starting; the module must be
+importable, e.g. with `PYTHONPATH=.`. A scrubber that raises, or returns something
+other than a string or `None`, answers that request with a 500 `error` and nothing is
+written. See the cookbook's
+[Record fixtures from a real service](../guides/proxyrules-cookbook.md#9-record-fixtures-from-a-real-service).
+
 !!! warning
     Record mode writes files whose paths can be chosen by request data and whose content
     comes from the upstream. Enable it only for a recording session on a trusted

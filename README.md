@@ -30,6 +30,7 @@ Highlights include:
 * Dynamic replacements: a rule's replacement can be a Jinja template, so a request header can pick the fixture scenario to serve. :twisted_rightwards_arrows:
 * Result headers: every `proxyrules` response is stamped with `X-Mockstack-Result` and `X-Mockstack-Rule`, so a test can assert it got a fixture and not the real service. :label:
 * Fixture status codes and headers: a `proxyrules` fixture can answer with any status and extra headers, e.g. a 503 with `Retry-After`, to test how a client handles a failing dependency. :vertical_traffic_light:
+* Record mode: `proxyrules` can record real responses into the fixtures its rules serve, with an optional scrubber, then replay them without the real service. :red_circle:
 * Observability via [OpenTelemetry](https://opentelemetry.io/) integration. Get detailed traces of your sessions instantly reported to backends such as [Grafana](https://grafana.com/), [Jaeger](https://www.jaegertracing.io/), [Zipkin](https://zipkin.io/), etc. :eyes:
 * Configurability via [pydantic-settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/) supports customizing behaviour via environment variables and a `.env` file. :flags:
 * Comprehensive unit-tests, linting and formatting coverage as well as vulnerabilities and security scanning with full CI automation to ensure stability and a high-quality codebase for production-grade use. :+1:
@@ -108,7 +109,7 @@ curl -i -H "X-Test-Run: ci-42" http://127.0.0.1:8000/projects/api/v1/project/pro
 curl -i http://127.0.0.1:8000/projects/api/v1/project/proj-123
 ```
 
-The [ProxyRules cookbook](https://promptromp.github.io/mockstack/guides/proxyrules-cookbook/) walks through this recipe and more (per-scenario fixtures, matching on request bodies and query parameters, asserting in tests, error responses), each backed by a live test.
+The [ProxyRules cookbook](https://promptromp.github.io/mockstack/guides/proxyrules-cookbook/) walks through this recipe and more (per-scenario fixtures, matching on request bodies and query parameters, asserting in tests, error responses, recording fixtures), each backed by a live test.
 
 
 ## Testing
