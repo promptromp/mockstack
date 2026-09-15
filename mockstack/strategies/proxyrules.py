@@ -230,12 +230,10 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             # startup rather than on the first request.
             _ = self.rules
 
-        if self.record_mode != ProxyRulesRecordMode.OFF:
-            self.logger.warning(
-                "proxyrules record mode %r is on: fixture files under %s are written from upstream responses",
-                str(self.record_mode),
-                self.record_root,
-            )
+        # The record-mode startup WARNING is logged from `display.announce` instead of
+        # here: the strategy is built in `create_app`, before the lifespan applies the
+        # configured logging (see `lifespan_provider`), so a warning logged here would
+        # bypass it.
 
     def __str__(self) -> str:
         return (
@@ -243,6 +241,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             f"rules_filename: {self.rules_filename}.\n "
             f"redirect_via: [medium_purple]{self.redirect_via}[/medium_purple].\n "
             f"record_mode: {self.record_mode}.\n "
+            f"record_root: {self.record_root}.\n "
             f"simulate_create_on_missing: {self.simulate_create_on_missing}.\n "
             f"reverse_proxy_timeout: {self.reverse_proxy_timeout}\n "
             f"verify_ssl_certificates: {self.verify_ssl_certificates}\n "
@@ -506,10 +505,14 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         response = await self.reverse_proxy(request, url)
         text, reason = self._recordable_text(request, rule, path, response)
         if text is None:
-            self.logger.warning("[rule:%s] not recorded: %s", rule.name, reason)
+            # HEAD/OPTIONS is expected on every request to a matched fixture rule
+            # while it may still be recorded, so it is logged at INFO; every other
+            # not-recorded reason is a genuine surprise and stays at WARNING.
+            level = logging.INFO if request.method.upper() in _UNRECORDED_METHODS else logging.WARNING
+            self.logger.log(level, "[rule:%s] not recorded: %s", rule.name, reason)
             return with_result_headers(response, rule=upstream_rule, result_type="proxy")
 
-        write_fixture_atomically(path, encode_fixture(text))
+        self._write_fixture(rule, path, text)
         self.logger.info(
             "[rule:%s] recorded %s from rule %s", rule.name, path, upstream_rule.name or upstream_rule.pattern
         )
@@ -577,7 +580,20 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             return None, "the upstream body is not UTF-8"
         if self.record_scrubber is None:
             return text, ""
-        return self._scrub(self.record_scrubber, text, request=request, rule=rule, path=path)
+        return self._scrub_logged(self.record_scrubber, rule, path, request, text)
+
+    def _scrub_logged(
+        self, scrubber: Callable[..., object], rule: Rule, path: Path, request: Request, text: str
+    ) -> tuple[str | None, str]:
+        """Call the scrubber, logging with the fixture rule and path before re-raising."""
+        try:
+            return self._scrub(scrubber, text, request=request, rule=rule, path=path)
+        except Exception as exc:
+            # Covers both a scrubber that raises and one that returns something other
+            # than str or None (`_scrub` turns that into a `TypeError`). The generic
+            # handler in `apply` already logs a traceback; this line adds the path.
+            self.logger.error("[rule:%s] scrubber failed for %s: %r", rule.name, path, exc)  # noqa: TRY400
+            raise
 
     @staticmethod
     def _scrub(
@@ -591,6 +607,16 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         if not isinstance(scrubbed, str):
             raise TypeError(f"proxyrules_record_scrubber returned {type(scrubbed).__name__}, not str or None")
         return scrubbed, ""
+
+    def _write_fixture(self, rule: Rule, path: Path, text: str) -> None:
+        """Write the fixture file, logging with the fixture rule and path before re-raising."""
+        try:
+            write_fixture_atomically(path, encode_fixture(text))
+        except OSError as exc:
+            # The generic handler in `apply` already logs a traceback; this line adds
+            # the path so the failure can be diagnosed without one.
+            self.logger.error("[rule:%s] could not record %s: %r", rule.name, path, exc)  # noqa: TRY400
+            raise
 
     async def reverse_proxy(self, request: Request, url: str) -> Response:
         """Reverse proxy the request to the target URL.

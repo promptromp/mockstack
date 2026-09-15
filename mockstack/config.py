@@ -181,7 +181,7 @@ class Settings(BaseSettings):
         if self.strategy == "filefixtures" and self.templates_dir is None:
             raise ValueError("templates_dir is required when strategy is filefixtures")
 
-        if self.proxyrules_record_mode != ProxyRulesRecordMode.OFF:
+        if self.strategy == "proxyrules" and self.proxyrules_record_mode != ProxyRulesRecordMode.OFF:
             if self.proxyrules_record_root is None:
                 raise ValueError("proxyrules_record_root is required when proxyrules_record_mode is not off")
             if self.proxyrules_redirect_via != ProxyRulesRedirectVia.REVERSE_PROXY:

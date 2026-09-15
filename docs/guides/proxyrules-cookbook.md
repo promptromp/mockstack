@@ -531,6 +531,8 @@ curl -i "http://127.0.0.1:8000/users/api/v1/users/user-7?contact=ada@example.com
 
 Things to know:
 
+- Until a fixture is recorded, its requests really go to the real service, including
+  `POST`, `PUT` and `DELETE` -- so record against a safe environment, never production.
 - Restart without the three `RECORD` settings to replay only. `overwrite` mode re-records
   files carrying the marker and never touches hand-written fixtures.
 - A response is recorded only when its status matches the rule's `status` (200 by

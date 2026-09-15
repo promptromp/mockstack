@@ -68,28 +68,47 @@ def test_record_mode_defaults_to_off(make_settings, templates_dir):
     assert settings.proxyrules_record_root is None
 
 
-def test_record_mode_requires_a_record_root(make_settings, templates_dir):
+def test_record_mode_requires_a_record_root(make_settings, proxyrules_rules_filename):
     with pytest.raises(ValueError, match="proxyrules_record_root is required when proxyrules_record_mode is not off"):
-        make_settings(templates_dir=templates_dir, proxyrules_record_mode="missing")
+        make_settings(
+            strategy="proxyrules",
+            proxyrules_rules_filename=proxyrules_rules_filename,
+            proxyrules_record_mode="missing",
+        )
 
 
-def test_record_mode_requires_reverse_proxy(make_settings, templates_dir, tmp_path):
+def test_record_mode_requires_reverse_proxy(make_settings, proxyrules_rules_filename, tmp_path):
     with pytest.raises(ValueError, match="proxyrules_record_mode requires proxyrules_redirect_via to be reverse_proxy"):
         make_settings(
-            templates_dir=templates_dir,
+            strategy="proxyrules",
+            proxyrules_rules_filename=proxyrules_rules_filename,
             proxyrules_record_mode="overwrite",
             proxyrules_record_root=tmp_path,
             proxyrules_redirect_via=ProxyRulesRedirectVia.HTTP_TEMPORARY_REDIRECT,
         )
 
 
-def test_record_root_must_be_an_existing_directory(make_settings, templates_dir, tmp_path):
+def test_record_root_must_be_an_existing_directory(make_settings, proxyrules_rules_filename, tmp_path):
     with pytest.raises(ValueError, match="proxyrules_record_root"):
         make_settings(
-            templates_dir=templates_dir,
+            strategy="proxyrules",
+            proxyrules_rules_filename=proxyrules_rules_filename,
             proxyrules_record_mode="missing",
             proxyrules_record_root=tmp_path / "absent",
         )
+
+
+def test_record_mode_validation_is_scoped_to_proxyrules(make_settings, templates_dir):
+    """M-f: the record-mode checks apply only to the proxyrules strategy, so a
+    filefixtures instance can set proxyrules_record_mode without also setting a
+    record root."""
+    settings = make_settings(
+        strategy="filefixtures",
+        templates_dir=templates_dir,
+        proxyrules_record_mode="missing",
+    )
+    assert settings.proxyrules_record_mode == ProxyRulesRecordMode.MISSING
+    assert settings.proxyrules_record_root is None
 
 
 def test_record_settings_from_env_vars(monkeypatch, templates_dir, tmp_path):
