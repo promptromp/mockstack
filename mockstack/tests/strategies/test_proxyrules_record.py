@@ -293,6 +293,24 @@ async def test_upstream_failure_is_a_502_naming_the_fixture_rule(recording, root
 
 
 @pytest.mark.asyncio
+async def test_upstream_failure_span_attributes_describe_the_fixture_rule(
+    recording, root, traced_request, upstream_send, span_attributes
+):
+    """The error is stamped with the fixture rule (``users-fixture``), not the
+    passthrough used to reach the failed upstream, so the shared attributes must
+    describe the fixture rule too; ``upstream_rule_name`` still names the passthrough
+    that was attempted."""
+    upstream_send.side_effect = httpx.ConnectError("refused")
+    response = await recording().apply(traced_request("/users/user-1"))
+    assert result_of(response) == (502, "error", "users-fixture")
+    attributes = span_attributes()
+    assert attributes["mockstack.proxyrules.rule_name"] == "users-fixture"
+    assert attributes["mockstack.proxyrules.rule_pattern"] == r"^/users/(?P<user_id>[a-z0-9-]+)$"
+    assert attributes["mockstack.proxyrules.result_type"] == "error"
+    assert attributes["mockstack.proxyrules.upstream_rule_name"] == "users-passthrough"
+
+
+@pytest.mark.asyncio
 async def test_fixture_path_outside_the_root_is_not_recorded(
     proxyrules_strategy, root, tmp_path, traced_request, upstream_send, caplog
 ):
@@ -364,6 +382,23 @@ async def test_write_failure_is_a_500_naming_the_fixture_rule(
         "[rule:users-fixture] could not record" in record.getMessage() and str(fixture.resolve()) in record.getMessage()
         for record in errors
     )
+
+
+@pytest.mark.asyncio
+async def test_write_failure_span_attributes_describe_the_fixture_rule(
+    recording, root, traced_request, upstream_send, monkeypatch, span_attributes
+):
+    def read_only(path: Path, _text: str) -> None:
+        raise PermissionError(f"read-only: {path}")
+
+    monkeypatch.setattr("mockstack.strategies.proxyrules.write_fixture_atomically", read_only)
+    upstream_send.return_value = upstream_response()
+    response = await recording().apply(traced_request("/users/user-1"))
+    assert result_of(response) == (500, "error", "users-fixture")
+    attributes = span_attributes()
+    assert attributes["mockstack.proxyrules.rule_name"] == "users-fixture"
+    assert attributes["mockstack.proxyrules.rule_pattern"] == r"^/users/(?P<user_id>[a-z0-9-]+)$"
+    assert attributes["mockstack.proxyrules.result_type"] == "error"
 
 
 @pytest.mark.asyncio

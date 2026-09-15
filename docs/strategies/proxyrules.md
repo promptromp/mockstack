@@ -594,9 +594,16 @@ from the fixture instead):
 - `mockstack.proxyrules.rewritten_url`: The final URL after applying the rule (proxy
   and redirect results)
 - `mockstack.proxyrules.result_type`: The result type stamped on the response (`proxy`,
-  `redirect`, `template`, or in record mode `record`), set on every proxy, redirect and
-  template result
+  `redirect`, `template`, `error`, or in record mode `record`), set on every proxy,
+  redirect, template and error result
 - `mockstack.proxyrules.template_path`: The rendered fixture path (template results)
+
+An error response that names a rule (`X-Mockstack-Result: error` with an
+`X-Mockstack-Rule` header -- e.g. a missing or unrenderable fixture, an unreachable
+upstream, or a record-mode write failure) carries that rule's shared attributes and
+`result_type` `error`, overwriting any result type an earlier, now-superseded call had
+set for the same response (e.g. a reverse proxy attempt that set `proxy` before it
+failed).
 
 In record mode (`proxyrules_record_mode`), attempting to record from the next matching
 URL rule also sets:

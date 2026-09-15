@@ -322,6 +322,8 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
                 request.url.path,
                 exc.__cause__,
             )
+            if rule is not None:
+                self.update_opentelemetry_error(request, rule)
             return _error_response(
                 "mockstack: internal error",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -336,6 +338,8 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
                 request.url.path,
                 exc.__cause__,
             )
+            if rule is not None:
+                self.update_opentelemetry_error(request, rule)
             return _error_response(exc.message, status_code=exc.status_code, rule=rule)
         except Exception:
             self.logger.exception(
@@ -344,6 +348,8 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
                 request.method,
                 request.url.path,
             )
+            if rule is not None:
+                self.update_opentelemetry_error(request, rule)
             return _error_response(
                 "mockstack: internal error",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -428,6 +434,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             # attempt rather than resolving and possibly reading a file outside the
             # fixtures the rule author intended.
             self.logger.error("Rejected template path containing '..': %s", template_path)
+            self.update_opentelemetry_error(request, rule)
             return _error_response(
                 "Template file not found.",
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -438,6 +445,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         # intentional here rather than adding an async-file dependency.
         if not template_path.exists():  # noqa: ASYNC240
             self.logger.error("Template file not found: %s", template_path)
+            self.update_opentelemetry_error(request, rule)
             return _error_response(
                 "Template file not found.",
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -478,6 +486,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             # degrade to a 500 instead of crashing.
             # logger.exception: ERROR level, with the traceback (which names the error).
             self.logger.exception("Error rendering template %s", template_path)
+            self.update_opentelemetry_error(request, rule)
             return _error_response(
                 "An internal error occurred while rendering the template.",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -704,11 +713,13 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         }
         return content_types.get(suffix, "text/plain")
 
-    def update_opentelemetry_template(
-        self, request: Request, rule: Rule, result: TemplateRuleResult, result_type: str = "template"
-    ) -> None:
-        """Update the opentelemetry span with template-specific details."""
-        span = request.state.span
+    @staticmethod
+    def _set_shared_rule_attributes(span: Any, rule: Rule) -> None:
+        """Set the shared rule attributes describing the rule named in ``X-Mockstack-Rule``.
+
+        Shared by every ``update_opentelemetry*`` method below, so every response that
+        names a rule (successful or ``error``) describes it the same way.
+        """
         if rule.name is not None:
             span.set_attribute("mockstack.proxyrules.rule_name", rule.name)
         if rule.method is not None:
@@ -716,6 +727,13 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
 
         span.set_attribute("mockstack.proxyrules.rule_pattern", rule.pattern)
         span.set_attribute("mockstack.proxyrules.rule_replacement", rule.replacement)
+
+    def update_opentelemetry_template(
+        self, request: Request, rule: Rule, result: TemplateRuleResult, result_type: str = "template"
+    ) -> None:
+        """Update the opentelemetry span with template-specific details."""
+        span = request.state.span
+        self._set_shared_rule_attributes(span, rule)
         span.set_attribute("mockstack.proxyrules.template_path", result.template_path)
         span.set_attribute("mockstack.proxyrules.result_type", result_type)
 
@@ -728,15 +746,23 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         recorded) is the one that knows it.
         """
         span = request.state.span
-        if rule.name is not None:
-            span.set_attribute("mockstack.proxyrules.rule_name", rule.name)
-        if rule.method is not None:
-            span.set_attribute("mockstack.proxyrules.rule_method", rule.method)
-
-        span.set_attribute("mockstack.proxyrules.rule_pattern", rule.pattern)
-        span.set_attribute("mockstack.proxyrules.rule_replacement", rule.replacement)
+        self._set_shared_rule_attributes(span, rule)
         span.set_attribute("mockstack.proxyrules.rewritten_url", url)
         span.set_attribute("mockstack.proxyrules.result_type", result_type)
+
+    def update_opentelemetry_error(self, request: Request, rule: Rule) -> None:
+        """Update the opentelemetry span for an error response that names ``rule``.
+
+        Called from ``apply``'s exception handlers and from ``handle_template_result``'s
+        error returns, so every ``X-Mockstack-Result: error`` response that names a rule
+        also carries that rule's shared attributes and ``result_type = "error"`` --
+        overwriting whatever result type an earlier, now-superseded call (e.g.
+        ``update_opentelemetry(..., result_type="proxy")`` before a reverse proxy that
+        then failed) had set, since span attributes are last-write-wins.
+        """
+        span = request.state.span
+        self._set_shared_rule_attributes(span, rule)
+        span.set_attribute("mockstack.proxyrules.result_type", "error")
 
     def update_opentelemetry_upstream(self, request: Request, upstream_rule: Rule, url: str) -> None:
         """Record the record-mode upstream candidate's identity, before proxying to it.
