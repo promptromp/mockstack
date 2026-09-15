@@ -46,16 +46,18 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p /tmp/mockstack-templates
+          echo '{"message": "Hello from mockstack!"}' > /tmp/mockstack-templates/index.j2
           uvx mockstack --templates-dir /tmp/mockstack-templates --port 18999 \
             > server.log 2>&1 &
           SERVER_PID=$!
           echo "started mockstack pid=$SERVER_PID"
 
-          # Poll for readiness for up to 30s. /openapi.json is served by FastAPI
-          # itself, so a 200 here proves import + app construction + uvicorn boot
-          # + HTTP serving are all healthy end-to-end.
+          # Poll for readiness for up to 30s. GET / is rendered from index.j2 by the
+          # filefixtures strategy, so a 200 here proves import + app construction +
+          # uvicorn boot + request handling are all healthy end-to-end. (FastAPI's
+          # /openapi.json is off by default since mockstack 0.14.2.)
           for i in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:18999/openapi.json -o /dev/null; then
+            if curl -fsS http://127.0.0.1:18999/ -o /dev/null; then
               echo "ready after ${i}s"
               READY=1
               break
@@ -75,8 +77,15 @@ jobs:
             exit 1
           fi
 
-          # Final assertion + capture status
-          curl -fsS http://127.0.0.1:18999/openapi.json -o /dev/null
+          # Final assertion: the strategy rendered the template.
+          BODY=$(curl -fsS http://127.0.0.1:18999/)
+          echo "GET / -> $BODY"
+          if [ "$BODY" != '{"message": "Hello from mockstack!"}' ]; then
+            echo "unexpected response; logs:"
+            cat server.log
+            kill "$SERVER_PID" 2>/dev/null || true
+            exit 1
+          fi
           echo "smoke test passed"
 
           kill "$SERVER_PID" 2>/dev/null || true
