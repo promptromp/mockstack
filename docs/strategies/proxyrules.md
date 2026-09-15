@@ -24,6 +24,7 @@ This strategy:
   `X-Mockstack-Rule` headers
 - Validates and compiles every rule at startup, so a broken rules file fails fast
 - Can simulate resource creation for requests that match no rule
+- Can record real upstream responses into the fixture files its rules serve (record mode)
 - Provides OpenTelemetry integration for observability
 
 ## Configuration
@@ -319,6 +320,79 @@ optional values an explicit fallback, e.g.
     since no `..` segment is ever involved. Restrict predicates feeding a rendered
     path or URL to the character classes you actually expect, e.g. `[a-z0-9_-]+`.
 
+## Recording fixtures
+
+Record mode fills in fixtures from the real service. When a fixture rule matches and its
+file does not exist yet, mockstack sends the request to the next matching rule whose
+`replacement` is a URL, writes the response body to the fixture file, and answers by
+rendering that file, stamped `X-Mockstack-Result: record`. Later requests are served from
+the file, stamped `template`, without calling the service. Existing rules files work
+unchanged: the passthrough rule that follows a fixture rule is where it records from.
+Later rules whose `replacement` is a plain `file:///` path are skipped when looking for it.
+
+```yaml
+rules:
+  - name: users-fixture
+    method: GET
+    pattern: ^/users/api/v1/users/(?P<user_id>[a-z0-9-]+)$
+    headers:
+      x-test-scenario: "[a-z0-9_-]+"
+    replacement: file:///srv/fixtures/{{ headers['x-test-scenario'] }}/users/{{ user_id }}.json.j2
+
+  - name: users-passthrough
+    pattern: ^/users/(.*)
+    replacement: https://users.example/\1
+```
+
+Start mockstack with `MOCKSTACK__PROXYRULES_RECORD_MODE=missing` and
+`MOCKSTACK__PROXYRULES_RECORD_ROOT=/srv/fixtures`, run the traffic you want fixtures for,
+then review and commit the recorded files and run without record mode.
+
+| `proxyrules_record_mode` | Behaviour |
+| --- | --- |
+| `off` (default) | Fixtures are only served |
+| `missing` | A fixture file that does not exist yet is recorded |
+| `overwrite` | Files recorded before are recorded again, e.g. to refresh stale fixtures; hand-written fixtures are never overwritten |
+
+A response is recorded only when:
+
+- a later matching rule has a URL `replacement`;
+- the request is not a `HEAD` or `OPTIONS`;
+- the upstream's status equals the fixture rule's `status` (200 by default), so the
+  fixture replays with the status it was recorded with;
+- the body is UTF-8 text;
+- the body is not still compressed with a coding mockstack does not decode (for example
+  `br` without the optional `brotli` package); `gzip` and `deflate` bodies are recorded
+  decoded.
+
+Otherwise the upstream's response is returned stamped `proxy` with the URL rule's name,
+and a warning in the log names the reason. With no later URL rule, a missing fixture is
+the usual 404 `error`. An upstream that fails is the usual 502 or 504 `error`, and a
+fixture file that cannot be written is a 500 `error`; nothing is written in either case.
+
+Recorded files:
+
+- start with `{# mockstack:recorded #}`, which renders to nothing and is how `overwrite`
+  tells them from hand-written fixtures;
+- contain the body exactly: any Jinja syntax or carriage return in it is printed by an
+  expression, so it is never evaluated and replays byte for byte;
+- are written to a temporary file and renamed into place, so concurrent requests never
+  read a partial fixture;
+- must resolve, symlinks followed, inside `proxyrules_record_root`. A fixture path
+  outside it is served as usual and not recorded, with a warning the first time for each
+  rule.
+
+Only the response body is recorded. The rule's `status` and `response_headers` apply when
+it is replayed, and the content type follows the file suffix as for any fixture.
+
+!!! warning
+    Record mode writes files whose paths can be chosen by request data and whose content
+    comes from the upstream. Enable it only for a recording session on a trusted
+    network, never on a shared or exposed instance, and review recorded fixtures before
+    committing them: they contain whatever the real service returned. A test harness
+    that asserts `X-Mockstack-Result: template` fails on `record`, so a gating run that
+    accidentally records is caught.
+
 ## Redirection methods
 
 `proxyrules_redirect_via` selects what a rule whose `replacement` is a URL does.
@@ -377,12 +451,13 @@ responses -- carries:
 
 | Header | Value |
 | --- | --- |
-| `X-Mockstack-Result` | `template`, `proxy`, `redirect`, `create`, `missing` or `error` |
+| `X-Mockstack-Result` | `template`, `proxy`, `redirect`, `create`, `missing`, `record` or `error` |
 | `X-Mockstack-Rule` | The matched rule's `name` (or its `pattern` when unnamed); absent when no rule matched |
 
 | `X-Mockstack-Result` | Status | Meaning |
 | --- | --- | --- |
 | `template` | 200, or the rule's `status` | A `file:///` fixture was rendered |
+| `record` | The rule's `status` (200 by default) | Record mode wrote the upstream response to the fixture file and served it from that file |
 | `proxy` | Upstream's | The request was reverse-proxied to the rewritten URL |
 | `redirect` | 301 / 307 | An HTTP redirect to the rewritten URL |
 | `create` | 201 | No rule matched; resource creation was simulated |

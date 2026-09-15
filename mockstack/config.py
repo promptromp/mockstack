@@ -13,6 +13,7 @@ from mockstack.constants import (
     ENV_FILE,
     ENV_NESTED_DELIMITER,
     ENV_PREFIX,
+    ProxyRulesRecordMode,
     ProxyRulesRedirectVia,
 )
 
@@ -93,6 +94,15 @@ class Settings(BaseSettings):
     # disable with caution!
     proxyrules_verify_ssl_certificates: CliImplicitFlag[bool] = True
 
+    # record mode: write upstream responses into the fixture files that fixture rules
+    # serve. "missing" records fixture files that do not exist yet, "overwrite" also
+    # re-records files recorded before. Never enable on a shared or exposed instance.
+    proxyrules_record_mode: ProxyRulesRecordMode = ProxyRulesRecordMode.OFF
+
+    # directory that every recorded fixture file must resolve inside.
+    # required when proxyrules_record_mode is not off.
+    proxyrules_record_root: DirectoryPath | None = None
+
     # metadata fields to inject into created resources.
     # A few template fields are available. See documentation for more details.
     created_resource_metadata: CliSuppress[dict[str, Any]] = {
@@ -163,6 +173,12 @@ class Settings(BaseSettings):
 
         if self.strategy == "filefixtures" and self.templates_dir is None:
             raise ValueError("templates_dir is required when strategy is filefixtures")
+
+        if self.proxyrules_record_mode != ProxyRulesRecordMode.OFF:
+            if self.proxyrules_record_root is None:
+                raise ValueError("proxyrules_record_root is required when proxyrules_record_mode is not off")
+            if self.proxyrules_redirect_via != ProxyRulesRedirectVia.REVERSE_PROXY:
+                raise ValueError("proxyrules_record_mode requires proxyrules_redirect_via to be reverse_proxy")
 
         return self
 

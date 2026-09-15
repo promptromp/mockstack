@@ -2,6 +2,7 @@
 
 import logging
 import re
+from collections.abc import Iterator
 from functools import cached_property
 from pathlib import Path
 from typing import Any
@@ -22,9 +23,11 @@ from mockstack.constants import (
     RESULT_RULE_HEADER,
     RESULT_TYPE_HEADER,
     SERVER_SUPPLIED_RESPONSE_HEADERS,
+    ProxyRulesRecordMode,
     ProxyRulesRedirectVia,
 )
 from mockstack.intent import looks_like_a_create
+from mockstack.recording import encode_fixture, is_recorded, resolve_inside, write_fixture_atomically
 from mockstack.rules import RequestPayload, Rule, RuleResult, TemplateRuleResult, URLRuleResult
 from mockstack.strategies.base import BaseStrategy
 from mockstack.strategies.create_mixin import CreateMixin
@@ -159,6 +162,9 @@ _CONTROL_CHARACTERS_RE = re.compile(r"[\x00-\x1f\x7f]")
 # RFC 9110 §15.3.5 and §15.4.5: a 204 or 304 response has no content.
 _BODYLESS_STATUS_CODES = frozenset({status.HTTP_204_NO_CONTENT, status.HTTP_304_NOT_MODIFIED})
 
+# Methods whose responses are never written to a fixture.
+_UNRECORDED_METHODS = frozenset({"HEAD", "OPTIONS"})
+
 
 def _header_safe(value: str) -> str:
     """Make an arbitrary string safe to use as an HTTP header value.
@@ -206,17 +212,31 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         self.rules_filename = settings.proxyrules_rules_filename
         self.simulate_create_on_missing = settings.proxyrules_simulate_create_on_missing
         self.verify_ssl_certificates = settings.proxyrules_verify_ssl_certificates
+        self.record_mode = settings.proxyrules_record_mode
+        self.record_root = settings.proxyrules_record_root
+        # Rule identities (name, falling back to pattern -- the same identity
+        # `with_result_headers` stamps) already warned about an outside-root path, so the
+        # WARNING is logged only once per rule; later requests log it at DEBUG instead.
+        self._warned_outside_record_root: set[str] = set()
 
         if self.rules_filename is not None:
             # Load (and so validate) the rules now, so a bad rules file fails at
             # startup rather than on the first request.
             _ = self.rules
 
+        if self.record_mode != ProxyRulesRecordMode.OFF:
+            self.logger.warning(
+                "proxyrules record mode %r is on: fixture files under %s are written from upstream responses",
+                str(self.record_mode),
+                self.record_root,
+            )
+
     def __str__(self) -> str:
         return (
             f"[medium_purple]proxyrules[/medium_purple]\n "
             f"rules_filename: {self.rules_filename}.\n "
             f"redirect_via: [medium_purple]{self.redirect_via}[/medium_purple].\n "
+            f"record_mode: {self.record_mode}.\n "
             f"simulate_create_on_missing: {self.simulate_create_on_missing}.\n "
             f"reverse_proxy_timeout: {self.reverse_proxy_timeout}\n "
             f"verify_ssl_certificates: {self.verify_ssl_certificates}\n "
@@ -249,11 +269,12 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         except TemplateSyntaxError as exc:
             raise ValueError(f"rule {name!r}: invalid replacement template: {exc}") from exc
 
+    def matching_rules(self, request: Request, payload: RequestPayload | None = None) -> Iterator[Rule]:
+        """The rules that match ``request``, lazily and in file order."""
+        return (rule for rule in self.rules if rule.matches(request, payload))
+
     def rule_for(self, request: Request, payload: RequestPayload | None = None) -> Rule | None:
-        try:
-            return next(rule for rule in self.rules if rule.matches(request, payload))
-        except StopIteration:
-            return None
+        return next(self.matching_rules(request, payload), None)
 
     async def apply(self, request: Request) -> Response:
         """Apply the proxyrules strategy to the request.
@@ -270,11 +291,15 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             # reverse proxy and create-mixin paths can safely read it again later.
             payload = RequestPayload.from_bytes(await request.body())
 
-            rule = self.rule_for(request, payload)
+            matching = self.matching_rules(request, payload)
+            rule = next(matching, None)
             if rule is None:
                 return await self.handle_missing_rule(request)
 
-            return await self.handle_result(request, rule, rule.apply(request, payload))
+            result = rule.apply(request, payload)
+            if self.record_mode != ProxyRulesRecordMode.OFF and isinstance(result, TemplateRuleResult):
+                return await self.handle_record(request, rule, result, payload, later_rules=matching)
+            return await self.handle_result(request, rule, result)
 
         except ClientDisconnect:
             raise
@@ -372,7 +397,9 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             case _:
                 raise ValueError(f"Invalid redirect via value: {self.redirect_via=}")
 
-    async def handle_template_result(self, request: Request, rule: Rule, result: TemplateRuleResult) -> Response:
+    async def handle_template_result(
+        self, request: Request, rule: Rule, result: TemplateRuleResult, result_type: str = "template"
+    ) -> Response:
         """Handle template results by rendering the template file.
 
         A rendered fixture is answered with the rule's ``status`` (200 by default) and
@@ -419,7 +446,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             rendered_content = template.render(**result.template_context)
 
             # Update opentelemetry with template info
-            self.update_opentelemetry_template(request, rule, result)
+            self.update_opentelemetry_template(request, rule, result, result_type=result_type)
 
             status_code = rule.status if rule.status is not None else status.HTTP_200_OK
             if status_code in _BODYLESS_STATUS_CODES:
@@ -434,7 +461,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
                 )
             for name, value in rule.response_headers:
                 response.headers.append(name, value)
-            return with_result_headers(response, rule=rule, result_type="template")
+            return with_result_headers(response, rule=rule, result_type=result_type)
 
         except Exception:
             # Deliberate catch-all so template rendering errors (e.g. Jinja2 errors)
@@ -446,6 +473,103 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 rule=rule,
             )
+
+    async def handle_record(
+        self,
+        request: Request,
+        rule: Rule,
+        result: TemplateRuleResult,
+        payload: RequestPayload,
+        later_rules: Iterator[Rule],
+    ) -> Response:
+        """Record mode for a matched fixture rule.
+
+        When the fixture file may be recorded, the request is reverse-proxied to the next
+        matching rule whose result is a URL. A response that replays faithfully is written
+        to the fixture file and answered by rendering that file, stamped ``record``; any
+        other response is returned as it is, stamped ``proxy``. When the file may not be
+        recorded, or no later rule gives a URL, the fixture is served as usual.
+        """
+        path = self._recordable_path(rule, result)
+        upstream = self._upstream_for(request, payload, later_rules) if path is not None else None
+        if path is None or upstream is None:
+            return await self.handle_template_result(request, rule, result)
+
+        upstream_rule, url = upstream
+        self.update_opentelemetry(request, upstream_rule, url)
+        response = await self.reverse_proxy(request, url)
+        text, reason = self._recordable_text(request, rule, response)
+        if text is None:
+            self.logger.warning("[rule:%s] not recorded: %s", rule.name, reason)
+            return with_result_headers(response, rule=upstream_rule, result_type="proxy")
+
+        write_fixture_atomically(path, encode_fixture(text))
+        self.logger.info(
+            "[rule:%s] recorded %s from rule %s", rule.name, path, upstream_rule.name or upstream_rule.pattern
+        )
+        request.state.span.set_attribute("mockstack.proxyrules.recorded_path", str(path))
+        replay = TemplateRuleResult(template_path=str(path), template_context=result.template_context)
+        return await self.handle_template_result(request, rule, replay, result_type="record")
+
+    def _recordable_path(self, rule: Rule, result: TemplateRuleResult) -> Path | None:
+        """The resolved fixture path when record mode may write it, otherwise ``None``."""
+        template_path = Path(result.template_path)
+        if self.record_root is None or ".." in template_path.parts:
+            # handle_template_result rejects a ".." path on its own.
+            return None
+        path = resolve_inside(self.record_root, template_path)
+        if path is None:
+            identity = str(rule.name or rule.pattern)
+            if identity in self._warned_outside_record_root:
+                self.logger.debug(
+                    "[rule:%s] not recorded: %s is outside proxyrules_record_root", rule.name, template_path
+                )
+            else:
+                self._warned_outside_record_root.add(identity)
+                self.logger.warning(
+                    "[rule:%s] not recorded: %s is outside proxyrules_record_root", rule.name, template_path
+                )
+            return None
+        if not path.exists() or (self.record_mode == ProxyRulesRecordMode.OVERWRITE and is_recorded(path)):
+            return path
+        return None
+
+    def _upstream_for(
+        self, request: Request, payload: RequestPayload, later_rules: Iterator[Rule]
+    ) -> tuple[Rule, str] | None:
+        """The first later matching rule whose result is a URL, with that URL.
+
+        A plain (non-Jinja) ``file:///`` candidate always serves a fixture, so it is
+        skipped without being applied. A Jinja replacement is still applied: its result
+        type (fixture or URL) is only known after rendering.
+        """
+        for candidate in later_rules:
+            if candidate.is_plain_fixture:
+                continue
+            candidate_result = candidate.apply(request, payload)
+            if isinstance(candidate_result, URLRuleResult):
+                return candidate, candidate_result.url
+        return None
+
+    def _recordable_text(self, request: Request, rule: Rule, response: Response) -> tuple[str | None, str]:
+        """The body to write, or ``None`` with the reason the response is not recorded."""
+        method = request.method.upper()
+        if method in _UNRECORDED_METHODS:
+            return None, f"{method} responses are never recorded"
+        expected = rule.status if rule.status is not None else status.HTTP_200_OK
+        if response.status_code != expected:
+            return None, f"upstream status {response.status_code}, rule serves {expected}"
+        encoding = response.headers.get("content-encoding")
+        if encoding is not None and encoding.strip().lower() != "identity":
+            # `reverse_proxy`/`maybe_update_response_headers` relabels a coding httpx
+            # decoded while reading the body as "identity"; anything else here is a
+            # coding httpx skipped, so the body is still encoded.
+            return None, f"the upstream body is still encoded ({encoding})"
+        try:
+            text = bytes(response.body).decode("utf-8")
+        except UnicodeDecodeError:
+            return None, "the upstream body is not UTF-8"
+        return text, ""
 
     async def reverse_proxy(self, request: Request, url: str) -> Response:
         """Reverse proxy the request to the target URL.
@@ -521,7 +645,9 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         }
         return content_types.get(suffix, "text/plain")
 
-    def update_opentelemetry_template(self, request: Request, rule: Rule, result: TemplateRuleResult) -> None:
+    def update_opentelemetry_template(
+        self, request: Request, rule: Rule, result: TemplateRuleResult, result_type: str = "template"
+    ) -> None:
         """Update the opentelemetry span with template-specific details."""
         span = request.state.span
         if rule.name is not None:
@@ -532,7 +658,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         span.set_attribute("mockstack.proxyrules.rule_pattern", rule.pattern)
         span.set_attribute("mockstack.proxyrules.rule_replacement", rule.replacement)
         span.set_attribute("mockstack.proxyrules.template_path", result.template_path)
-        span.set_attribute("mockstack.proxyrules.result_type", "template")
+        span.set_attribute("mockstack.proxyrules.result_type", result_type)
 
     def update_opentelemetry(self, request: Request, rule: Rule, url: str) -> None:
         """Update the opentelemetry span with the proxy rules rule details."""

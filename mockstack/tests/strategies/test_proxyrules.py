@@ -4,7 +4,7 @@ import gzip
 import json
 import logging
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import httpx
 import pytest
@@ -43,13 +43,6 @@ PROJECT_PATH = "/api/v1/projects/123"
 def reverse_proxy_strategy(settings_reverse_proxy):
     """A strategy on the shared rules file, in reverse-proxy mode."""
     return ProxyRulesStrategy(settings_reverse_proxy)
-
-
-@pytest.fixture
-def upstream_send():
-    """Patch ``httpx.AsyncClient.send``; each test sets ``return_value`` or ``side_effect``."""
-    with patch.object(httpx.AsyncClient, "send", new_callable=AsyncMock) as send:
-        yield send
 
 
 # --- loading rules -------------------------------------------------------------------

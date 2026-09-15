@@ -64,3 +64,17 @@ class ProxyRulesRedirectVia(StrEnum):
     HTTP_TEMPORARY_REDIRECT = "http_307_temporary"
     HTTP_PERMANENT_REDIRECT = "http_301_permanent"
     REVERSE_PROXY = "reverse_proxy"
+
+
+class ProxyRulesRecordMode(StrEnum):
+    """Whether the proxy rules strategy records upstream responses into fixture files.
+
+    - OFF: fixtures are only served.
+    - MISSING: a fixture file that does not exist yet is recorded.
+    - OVERWRITE: files recorded before are recorded again; hand-written fixtures never are.
+
+    """
+
+    OFF = "off"
+    MISSING = "missing"
+    OVERWRITE = "overwrite"

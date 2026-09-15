@@ -11,9 +11,10 @@ request to one *strategy*, selected with the `strategy` setting:
   path, and simulates resource creation, searches and commands for POSTs.
 - `proxyrules`: evaluates an ordered YAML rules file. The first matching rule serves a
   `file:///` fixture (with the rule's optional `status` and `response_headers`),
-  reverse-proxies to a real service, or redirects. Rules match on
-  path, method and `headers`/`query`/`body`/`json` predicates, and every response is
-  stamped with `X-Mockstack-Result` and `X-Mockstack-Rule`.
+  reverse-proxies to a real service, or redirects. In record mode
+  (`proxyrules_record_mode`) a missing fixture is recorded from the next matching URL
+  rule. Rules match on path, method and `headers`/`query`/`body`/`json` predicates, and
+  every response is stamped with `X-Mockstack-Result` and `X-Mockstack-Rule`.
 
 Both share `CreateMixin` for simulated creates. Settings come from pydantic-settings:
 CLI flags, `MOCKSTACK__*` environment variables, or a `.env` file.

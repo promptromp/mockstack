@@ -162,11 +162,10 @@ def upstream(_live_servers) -> Iterator[LiveServer]:
             await asyncio.wait_for(_client_disconnected(request), timeout=3)
         return {"source": "upstream", "path": "/slow"}
 
-    @app.api_route("/{p:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"])
-    async def echo(request: Request, p: str):
+    async def record_call(request: Request, path: str) -> dict[str, Any]:
         body = await request.body()
         call = {
-            "path": "/" + p,
+            "path": path,
             "method": request.method,
             "query": dict(request.query_params),
             "headers": dict(request.headers),
@@ -174,6 +173,15 @@ def upstream(_live_servers) -> Iterator[LiveServer]:
         }
         calls.append(call)
         return {"source": "upstream", **call}
+
+    @app.post("/created")
+    async def created(request: Request):
+        # Registered before the catch-all: echoes like the catch-all, with a 201.
+        return JSONResponse(await record_call(request, "/created"), status_code=201)
+
+    @app.api_route("/{p:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"])
+    async def echo(request: Request, p: str):
+        return await record_call(request, "/" + p)
 
     live = serve(app)
     live.calls = calls
