@@ -248,10 +248,11 @@ class Rule:
         return tuple(headers)
 
     def _response_header_value(self, name: str, value: Any) -> str:
-        """A scalar coerced to a string that Starlette can send as a single header value."""
+        """A scalar coerced to a string that can be sent as a single header value: Latin-1,
+        no control characters, and no surrounding whitespace (which h11 refuses)."""
         if isinstance(value, str | int | float):
             text = str(value)
-            if _INVALID_HEADER_VALUE_RE.search(text) is None and _is_latin1(text):
+            if _INVALID_HEADER_VALUE_RE.search(text) is None and _is_latin1(text) and text == text.strip(" \t"):
                 return text
         raise ValueError(f"rule {self.name!r}: invalid response header value for {name!r}")
 

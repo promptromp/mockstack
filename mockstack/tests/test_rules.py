@@ -799,6 +799,9 @@ def test_invalid_status_is_rejected_at_load(value):
         ({"x-a": "a\r\nx-injected: 1"}, r"invalid response header value for 'x-a'"),
         ({"x-a": "\x00"}, r"invalid response header value for 'x-a'"),
         ({"x-a": "日本"}, r"invalid response header value for 'x-a'"),
+        ({"x-a": " 30"}, r"invalid response header value for 'x-a'"),
+        ({"x-a": "30 "}, r"invalid response header value for 'x-a'"),
+        ({"x-a": "\t30"}, r"invalid response header value for 'x-a'"),
     ],
 )
 def test_invalid_response_headers_are_rejected_at_load(headers, message):

@@ -152,8 +152,8 @@ offending rule, when:
   in its literal text;
 - `status` is not an integer from 200 to 599;
 - a `response_headers` entry has an invalid name, no value, or a value that is not a
-  string or number, contains a control character or is not Latin-1, or names a header
-  mockstack manages;
+  string or number, contains a control character, starts or ends with whitespace or is
+  not Latin-1, or names a header mockstack manages;
 - `status` or `response_headers` is set on a rule whose `replacement` is a plain URL
   rather than a `file:///` fixture;
 - a named group in `pattern` shadows a reserved template variable (`path`, `method`,
