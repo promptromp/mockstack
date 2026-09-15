@@ -22,7 +22,12 @@ CLI flags, `MOCKSTACK__*` environment variables, or a `.env` file.
 ## Layout
 
 - `mockstack/main.py`: app factory (`create_app`) and the `mockstack` CLI entry point
-- `mockstack/config.py`: `Settings`; `mockstack/constants.py`: enums, header names
+- `mockstack/cli.py`: the command line: rich-argparse help, `--version`, and
+  configuration errors (`ValidationError`, `SettingsError`, `RulesFileError`) printed
+  without a traceback, naming each setting by flag and environment variable, exit status 2
+- `mockstack/config.py`: `Settings`, whose attribute docstrings are the `--help` text,
+  and `SettingsDependencyError` for checks across settings;
+  `mockstack/constants.py`: enums, header names
 - `mockstack/strategies/`: `base.py`, `filefixtures.py`, `proxyrules.py`,
   `create_mixin.py`, `factory.py`
 - `mockstack/rules.py`: the proxyrules `Rule`: predicates, load-time validation,
@@ -94,7 +99,8 @@ file fails it. CI runs the unit tests, the live tests, mypy, ruff and the docs b
 - **Regexes in YAML** go in plain or single-quoted scalars: a double-quoted `"\1"`
   does not parse.
 - **Fail at load, not per request.** Rules are validated and compiled when the
-  strategy is constructed. Every `proxyrules` response, including errors, carries the
+  strategy is constructed; a file that does not load raises `RulesFileError`, naming
+  the file and the rule by position. Every `proxyrules` response, including errors, carries the
   result headers.
 - **Keep names generic** in code, tests, docs and examples: projects service,
   analytics SQL gateway, `sales_facts`, orders, users. Never use company, product or

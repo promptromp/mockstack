@@ -13,6 +13,7 @@ from mockstack.rules import (
     RESERVED_CONTEXT_KEYS,
     RequestPayload,
     Rule,
+    RuleError,
     TemplateRuleResult,
     URLRuleResult,
     lookup_path,
@@ -58,6 +59,69 @@ def test_rule_from_dict_with_predicates():
     assert rule.query == {"q": "a"}
     assert rule.body == "abc"
     assert rule.json == {"a.b": "1"}
+
+
+@pytest.mark.parametrize(
+    ("data", "problem"),
+    [
+        ({"replacement": "u"}, "'pattern' is required"),
+        ({"pattern": "^/x$", "replacement": None}, "'replacement' is required"),
+        ({"pattern": 42, "replacement": "u"}, "'pattern' must be a string"),
+        ({"pattern": "^/x$", "replacement": ["u"]}, "'replacement' must be a string"),
+        ({"pattern": "^/x$", "replacement": "u", "method": ["GET"]}, "'method' must be a string"),
+        ({"pattern": "^/x$", "replacement": "u", "headers": ["x-a"]}, "'headers' must be a mapping"),
+        ({"pattern": "^/x$", "replacement": "u", "query": "q=1"}, "'query' must be a mapping"),
+        ({"pattern": "^/x$", "replacement": "u", "json": 1}, "'json' must be a mapping"),
+        ({"pattern": "^/x$", "replacement": "u", "methods": "POST"}, "unknown key 'methods'; did you mean 'method'?"),
+        ({"patern": "^/x$", "replacement": "u"}, "unknown key 'patern'; did you mean 'pattern'?"),
+        ({"pattern": "^/x$", "replacement": "u", "priority": 1}, "unknown key 'priority'"),
+        (
+            {"pattern": "^/x$", "replacement": "u", "headers": {"x-env": ["prod", "staging"]}},
+            "predicate 'x-env' must be a single regex, got a list",
+        ),
+        (
+            {"pattern": "^/x$", "replacement": "u", "json": {"a": {"b": "c"}}},
+            "predicate 'a' must be a single regex, got a dict",
+        ),
+        (
+            {"pattern": "^/x$", "replacement": "u", "body": ["alpha", "beta"]},
+            "predicate 'body' must be a single regex, got a list",
+        ),
+    ],
+    ids=[
+        "missing-pattern",
+        "null-replacement",
+        "pattern-not-a-string",
+        "replacement-not-a-string",
+        "method-not-a-string",
+        "headers-not-a-mapping",
+        "query-not-a-mapping",
+        "json-not-a-mapping",
+        "misspelt-key-with-suggestion",
+        "misspelt-required-key",
+        "unknown-key-without-suggestion",
+        "header-predicate-list",
+        "json-predicate-mapping",
+        "body-predicate-list",
+    ],
+)
+def test_rule_from_dict_rejects_a_malformed_entry(data, problem):
+    """A rules-file entry with an unknown or missing key, a key of the wrong YAML type, or a
+    list or mapping where a predicate regex belongs is a ``RuleError``. It is never a
+    ``KeyError`` or ``AttributeError`` from deeper in the rule, nor silently ignored."""
+    with pytest.raises(RuleError) as excinfo:
+        Rule.from_dict({"name": "r1", **data})
+
+    assert excinfo.value.problem == problem
+    assert str(excinfo.value) == f"rule 'r1': {problem}"
+
+
+def test_rule_error_keeps_the_rule_name_and_problem_apart():
+    with pytest.raises(RuleError) as excinfo:
+        Rule(pattern="^/x$", replacement="file:///f.json", name="r1", status=700)
+
+    assert excinfo.value.rule_name == "r1"
+    assert excinfo.value.problem == "status must be an integer from 200 to 599, got 700"
 
 
 @pytest.mark.parametrize(

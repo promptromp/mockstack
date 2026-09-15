@@ -1,17 +1,17 @@
 """Application entrypoints."""
 
-import argparse
-from importlib import metadata
+from collections.abc import Sequence
 
 import uvicorn
 from fastapi import FastAPI
-from pydantic_settings import CliApp, CliSettingsSource
 
-from mockstack.config import CliSettings, Settings, settings_provider
+from mockstack.cli import SETTINGS_ERRORS, build_parser, parse_settings, report_for, settings_source
+from mockstack.config import Settings, settings_provider
 from mockstack.lifespan import lifespan_provider
 from mockstack.middleware import middleware_provider
 from mockstack.routers.catchall import catchall_router_provider
 from mockstack.strategies.factory import strategy_provider
+from mockstack.strategies.proxyrules import RulesFileError
 from mockstack.telemetry import opentelemetry_provider
 
 
@@ -35,19 +35,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     return app
 
 
-def run() -> None:
-    """run the mockstack server."""
-    parser = argparse.ArgumentParser()
-    cli_settings: CliSettingsSource[argparse.ArgumentParser] = CliSettingsSource(CliSettings, root_parser=parser)
-    settings = CliApp.run(CliSettings, cli_settings_source=cli_settings)
+def run(argv: Sequence[str] | None = None) -> None:
+    """Run the mockstack server with settings from ``argv`` (by default the command line).
 
-    app = create_app(settings=settings)
+    Invalid settings and a rules file that does not load are printed without a traceback
+    and exit with status 2. Each ``try`` covers only the step that raises the errors it
+    catches, so a bug elsewhere keeps its traceback.
+    """
+    parser = build_parser()
+    source = settings_source(parser)
+    try:
+        settings = parse_settings(source, argv)
+    except SETTINGS_ERRORS as exc:
+        parser.exit_with(report_for(exc))
+
+    try:
+        app = create_app(settings=settings)
+    except RulesFileError as exc:
+        parser.exit_with(report_for(exc))
 
     uvicorn.run(app, host=settings.host, port=settings.port)
-
-
-def version() -> None:
-    """display mockstack version."""
-    pkg_version = metadata.version("mockstack")
-    # Command-line output.
-    print(f"mockstack v{pkg_version}")  # noqa: T201

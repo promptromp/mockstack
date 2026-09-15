@@ -1,8 +1,9 @@
 from collections.abc import Callable
 from functools import lru_cache
+from string import Formatter
 from typing import Any, Literal, Self
 
-from pydantic import DirectoryPath, FilePath, ImportString, model_validator
+from pydantic import DirectoryPath, Field, FilePath, ImportString, model_validator
 from pydantic_settings import (
     BaseSettings,
     CliImplicitFlag,
@@ -19,16 +20,35 @@ from mockstack.constants import (
 )
 
 
+class SettingsDependencyError(ValueError):
+    """A setting that another setting's value requires or rules out.
+
+    ``template`` names each setting in braces, e.g. ``"{templates_dir} is required when
+    {strategy} is filefixtures"``, with a dot for a setting in a group
+    (``{opentelemetry.enabled}``). The message names the settings as they are spelled in
+    Python; the command line renders the template with flags instead (``mockstack.cli``).
+    """
+
+    def __init__(self, template: str) -> None:
+        parts = list(Formatter().parse(template))
+        self.template = template
+        self.settings = tuple(field for _, field, _, _ in parts if field)
+        super().__init__("".join(literal + (field or "") for literal, field, _, _ in parts))
+
+
 class OpenTelemetrySettings(BaseSettings):
     """Settings for OpenTelemetry."""
 
+    model_config = SettingsConfigDict(use_attribute_docstrings=True)
+
     enabled: CliImplicitFlag[bool] = False
+    """Whether to enable the OpenTelemetry integration."""
 
     endpoint: str = "http://localhost:4317/"
+    """OpenTelemetry endpoint to export traces to."""
 
-    # whether to capture the response body.
-    # this can be heavy, sensitive (PII) and/or not needed depending on the use case.
     capture_response_body: CliImplicitFlag[bool] = False
+    """Whether to capture response bodies in traces. Bodies can be large or contain sensitive data."""
 
 
 class Settings(BaseSettings):
@@ -43,80 +63,79 @@ class Settings(BaseSettings):
         env_prefix=ENV_PREFIX,
         env_file=ENV_FILE,
         env_nested_delimiter=ENV_NESTED_DELIMITER,
+        # Attribute docstrings become the settings' descriptions, which `mockstack --help` shows.
+        use_attribute_docstrings=True,
     )
 
-    # whether to run in debug mode
     debug: CliImplicitFlag[bool] = False
+    """Whether to run in debug mode."""
 
-    # host to run the server on. Every interface by default, so the server is reachable
-    # from outside a container.
+    # Every interface, so the server is reachable from outside a container.
     host: str = "0.0.0.0"  # noqa: S104
+    """Host to run the server on. The default, every interface, makes the server reachable from outside a
+    container."""
 
-    # port to run the server on
-    port: int = 8000
+    port: int = Field(default=8000, ge=0, le=65535)
+    """Port to run the server on."""
 
-    # whether to serve FastAPI's documentation routes (/docs, /redoc, /openapi.json and
-    # /docs/oauth2-redirect). They take precedence over the catch-all route, so they are
-    # off by default and those paths reach the strategy like any other.
     openapi_docs_enabled: CliImplicitFlag[bool] = False
+    """Whether to serve FastAPI's documentation routes (/docs, /redoc, /openapi.json and
+    /docs/oauth2-redirect). They take precedence over the catch-all route, so they are off by default and
+    those paths reach the strategy like any other."""
 
-    # OpenTelemetry configuration
     opentelemetry: OpenTelemetrySettings = OpenTelemetrySettings()
+    """OpenTelemetry configuration."""
 
-    # strategy to use for handling requests
     strategy: Literal["filefixtures", "proxyrules"] = "filefixtures"
+    """Strategy for handling requests: filefixtures renders templates from --templates-dir, proxyrules follows
+    the rules in --proxyrules-rules-filename."""
 
-    # base directory for templates used by strategies
     templates_dir: DirectoryPath | None = None
+    """Existing directory of the templates the filefixtures strategy renders. Required when the strategy is
+    filefixtures."""
 
-    # whether to enable templates for POST requests.
-    # By default, templates are not used for POSTs, and instead we try to
-    # simulate a create (or search) operation. If turned on, we will first
-    # try to materialize a template for the response, and if that fails
-    # with a 404, we will then try to simulate creation of the resource.
     filefixtures_enable_templates_for_post: CliImplicitFlag[bool] = True
+    """Whether a POST request tries a template before resource creation (or search) is simulated. A POST with
+    no matching template is still simulated."""
 
-    # controls behavior of filefixtures. Whether to simulate creation of resources
-    # when a POST request doesn't match any template (or templates-for-POST is off).
-    # When disabled, such a request gets the same 404 as a GET with no template.
     filefixtures_simulate_create_on_missing: CliImplicitFlag[bool] = True
+    """Whether a create-looking POST with no matching template (or with templates for POST off) gets a
+    simulated create. When disabled, it gets the same 404 as a GET with no template."""
 
-    # rules filename for proxyrules strategy
     proxyrules_rules_filename: FilePath | None = None
+    """Existing YAML rules file for the proxyrules strategy, validated at startup. Required when the strategy
+    is proxyrules."""
 
-    # controls behavior of proxying. Whether to use HTTP status code redirects
-    # or reverse proxy the request to the target URL "silently".
     proxyrules_redirect_via: ProxyRulesRedirectVia = ProxyRulesRedirectVia.REVERSE_PROXY
+    """What a rule whose replacement is a URL does: reverse proxy the request, or answer with an HTTP
+    redirect."""
 
-    # default timeout for reverse proxy requests. given in seconds. None disables timeouts.
     proxyrules_reverse_proxy_timeout: float | None = 10.0
+    """Timeout in seconds for reverse-proxied upstream requests. None disables the timeout."""
 
-    # controls behavior of proxying. Whether to simulate creation of resources
-    # when a POST request is made to a resource that doesn't match any rules..
     proxyrules_simulate_create_on_missing: CliImplicitFlag[bool] = False
+    """Whether a create-looking request (e.g. a POST) that matches no rule gets a simulated create instead of
+    a 404."""
 
-    # controls behavior of proxying. Whether to verify SSL certificates.
-    # this is useful for testing against services that use self-signed certificates.
-    # disable with caution!
     proxyrules_verify_ssl_certificates: CliImplicitFlag[bool] = True
+    """Whether to verify the TLS certificates of HTTPS upstreams. Disable with caution, e.g. for a trusted
+    upstream with a self-signed certificate."""
 
-    # record mode: write upstream responses into the fixture files that fixture rules
-    # serve. "missing" records fixture files that do not exist yet, "overwrite" also
-    # re-records files recorded before. Never enable on a shared or exposed instance.
     proxyrules_record_mode: ProxyRulesRecordMode = ProxyRulesRecordMode.OFF
+    """Record mode: write upstream responses into the fixture files that fixture rules serve. missing records
+    fixture files that do not exist yet; overwrite also re-records files recorded before. Never enable on a
+    shared or exposed instance."""
 
-    # directory that every recorded fixture file must resolve inside.
-    # required when proxyrules_record_mode is not off.
     proxyrules_record_root: DirectoryPath | None = None
+    """Existing directory that every recorded fixture file must resolve inside. Required when
+    --proxyrules-record-mode is not off."""
 
-    # optional "module:function" (pydantic also accepts "module.function") called with
-    # every body before it is recorded. It returns the text to write, or None to skip
-    # recording that response. The reference is imported and checked when settings load,
-    # so a bad reference stops mockstack from starting.
+    # pydantic also accepts "module.function".
     proxyrules_record_scrubber: ImportString[Callable[..., Any]] | None = None
+    """Optional module:function called with every body before it is recorded. It returns the text to write,
+    or None to skip recording that response. It is imported when settings load, so a bad reference stops
+    mockstack from starting."""
 
-    # metadata fields to inject into created resources.
-    # A few template fields are available. See documentation for more details.
     created_resource_metadata: CliSuppress[dict[str, Any]] = {
         "id": "{{ uuid4() }}",
         "createdAt": "{{ utcnow().isoformat() }}",
@@ -124,17 +143,16 @@ class Settings(BaseSettings):
         "createdBy": "{{ request.headers.get('X-User-Id', uuid4()) }}",
         "status": {"code": "OK", "error_code": None},
     }
+    """Metadata fields to inject into created resources. A few template fields are available; see the
+    documentation."""
 
-    # fields to inject into missing resources response json.
-    # some services may require such additional fields to be present in the response.
     missing_resource_fields: CliSuppress[dict[str, Any]] = {
         "code": 404,
         "message": "mockstack: resource not found",
         "retryable": False,
     }
+    """Fields to inject into the JSON of a missing resource response, for services that require them."""
 
-    # logging configuration. schema is based on the logging configuration schema:
-    # https://docs.python.org/3/library/logging.config.html#logging-config-dictschema
     logging: CliSuppress[dict[str, Any]] = {
         "version": 1,
         "disable_existing_loggers": False,
@@ -173,6 +191,8 @@ class Settings(BaseSettings):
             "propagate": False,
         },
     }
+    """Logging configuration, in the schema of
+    https://docs.python.org/3/library/logging.config.html#logging-config-dictschema"""
 
     @model_validator(mode="after")
     def validate_strategy_parameters(self) -> Self:
@@ -181,16 +201,20 @@ class Settings(BaseSettings):
         # TODO: make this validation dynamic based on the strategy classes themselves.
 
         if self.strategy == "proxyrules" and self.proxyrules_rules_filename is None:
-            raise ValueError("proxyrules_rules_filename is required when strategy is proxyrules")
+            raise SettingsDependencyError("{proxyrules_rules_filename} is required when {strategy} is proxyrules")
 
         if self.strategy == "filefixtures" and self.templates_dir is None:
-            raise ValueError("templates_dir is required when strategy is filefixtures")
+            raise SettingsDependencyError("{templates_dir} is required when {strategy} is filefixtures (the default)")
 
         if self.strategy == "proxyrules" and self.proxyrules_record_mode != ProxyRulesRecordMode.OFF:
             if self.proxyrules_record_root is None:
-                raise ValueError("proxyrules_record_root is required when proxyrules_record_mode is not off")
+                raise SettingsDependencyError(
+                    "{proxyrules_record_root} is required when {proxyrules_record_mode} is not off"
+                )
             if self.proxyrules_redirect_via != ProxyRulesRedirectVia.REVERSE_PROXY:
-                raise ValueError("proxyrules_record_mode requires proxyrules_redirect_via to be reverse_proxy")
+                raise SettingsDependencyError(
+                    "{proxyrules_record_mode} requires {proxyrules_redirect_via} to be reverse_proxy"
+                )
 
         return self
 

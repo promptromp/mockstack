@@ -1,5 +1,6 @@
 """Rules for the proxy rules strategy."""
 
+import difflib
 import json
 import re
 from abc import ABC, abstractmethod
@@ -134,6 +135,46 @@ class TemplateRuleResult(RuleResult):
         return "template"
 
 
+# The rules-file keys every rule sets, and the keys whose YAML value must be a string or
+# a mapping. The rest are checked, or coerced, when the rule is built.
+_REQUIRED_KEYS: Final = ("pattern", "replacement")
+_STRING_KEYS: Final = ("pattern", "replacement", "method")
+_MAPPING_KEYS: Final = ("headers", "query", "json")
+_KNOWN_KEYS: Final = frozenset({*_STRING_KEYS, *_MAPPING_KEYS, "name", "body", "status", "response_headers"})
+
+
+class RuleError(ValueError):
+    """A rules-file entry that is not a valid rule.
+
+    ``problem`` says what is wrong without naming the rule, so the rules-file loader can
+    name the rule by its position as well as its name.
+    """
+
+    def __init__(self, rule_name: str | None, problem: str) -> None:
+        super().__init__(f"rule {rule_name!r}: {problem}")
+        self.rule_name = rule_name
+        self.problem = problem
+
+
+def _check_entry(name: str | None, data: Mapping[str, Any]) -> None:
+    """Reject a rules-file entry with an unknown key, a missing required key, or a key of
+    the wrong YAML type. A misspelt key would otherwise be ignored, silently widening the rule."""
+    unknown = [str(key) for key in data if key not in _KNOWN_KEYS]
+    if unknown:
+        close = difflib.get_close_matches(unknown[0], sorted(_KNOWN_KEYS), n=1)
+        hint = f"; did you mean {close[0]!r}?" if close else ""
+        raise RuleError(name, f"unknown key {unknown[0]!r}{hint}")
+    for key in _REQUIRED_KEYS:
+        if data.get(key) is None:
+            raise RuleError(name, f"{key!r} is required")
+    for key in _STRING_KEYS:
+        if data.get(key) is not None and not isinstance(data[key], str):
+            raise RuleError(name, f"{key!r} must be a string")
+    for key in _MAPPING_KEYS:
+        if data.get(key) is not None and not isinstance(data[key], Mapping):
+            raise RuleError(name, f"{key!r} must be a mapping")
+
+
 class Rule:
     """A rule for the proxy rules strategy.
 
@@ -169,7 +210,7 @@ class Rule:
         self.headers = {str(k).lower(): self._predicate_value(k, v) for k, v in (headers or {}).items()}
         self.query = {str(k): self._predicate_value(k, v) for k, v in (query or {}).items()}
         self.json = {str(k): self._predicate_value(k, v) for k, v in (json or {}).items()}
-        self.body = str(body) if body is not None else None
+        self.body = self._predicate_value("body", body) if body is not None else None
 
         self._method = method.lower() if method is not None else None
         self._pattern = re.compile(pattern)
@@ -180,7 +221,7 @@ class Rule:
 
         shadowed = sorted(RESERVED_CONTEXT_KEYS.intersection(self._pattern.groupindex))
         if shadowed:
-            raise ValueError(f"rule {self.name!r}: named group {shadowed[0]!r} shadows a reserved template variable")
+            raise RuleError(self.name, f"named group {shadowed[0]!r} shadows a reserved template variable")
 
         # The decision to render is made on the operator-authored `replacement`, never
         # on request-controlled data.
@@ -193,7 +234,7 @@ class Rule:
         if self._has_fixture_only_fields and not (
             self._is_template or replacement.startswith(PROXYRULES_FILE_TEMPLATE_PREFIX)
         ):
-            raise ValueError(f"rule {self.name!r}: {_FIXTURE_ONLY_FIELDS_ERROR}, and the replacement is not one")
+            raise RuleError(self.name, f"{_FIXTURE_ONLY_FIELDS_ERROR}, and the replacement is not one")
 
         self._replacement_template: Template | None = None
         if env is not None and self._is_template:
@@ -203,16 +244,21 @@ class Rule:
                 token_type == "data" and _BACKREFERENCE_RE.search(value)  # noqa: S105
                 for _, token_type, value in template_env.lex(replacement)
             ):
-                raise ValueError(
-                    f"rule {self.name!r}: replacement mixes Jinja delimiters with a regex "
-                    "backreference; backreferences are not expanded in template mode, "
-                    "use {{ groups[0] }} or a named group instead"
+                raise RuleError(
+                    self.name,
+                    "replacement mixes Jinja delimiters with a regex backreference; "
+                    "backreferences are not expanded in template mode, "
+                    "use {{ groups[0] }} or a named group instead",
                 )
             self._replacement_template = template_env.from_string(replacement)
 
     def _predicate_value(self, key: Any, value: Any) -> str:
+        """A predicate's regex. A scalar is coerced to a string (YAML may parse e.g. ``1`` as
+        an int); a list or mapping is refused, since its string form is not the intended regex."""
         if value is None:
-            raise ValueError(f"rule {self.name!r}: predicate {str(key)!r} has no value")
+            raise RuleError(self.name, f"predicate {str(key)!r} has no value")
+        if isinstance(value, Mapping | list):
+            raise RuleError(self.name, f"predicate {str(key)!r} must be a single regex, got a {type(value).__name__}")
         return str(value)
 
     def _status(self, value: Any) -> int | None:
@@ -222,7 +268,7 @@ class Rule:
         if isinstance(value, str) and value.isascii() and value.isdigit():
             value = int(value)
         if isinstance(value, bool) or not isinstance(value, int) or not 200 <= value <= 599:
-            raise ValueError(f"rule {self.name!r}: status must be an integer from 200 to 599, got {value!r}")
+            raise RuleError(self.name, f"status must be an integer from 200 to 599, got {value!r}")
         return value
 
     def _response_headers(self, value: Any) -> tuple[tuple[str, str], ...]:
@@ -230,20 +276,17 @@ class Rule:
         if value is None:
             return ()
         if not isinstance(value, Mapping):
-            # Every rules-file mistake is a ValueError naming the rule, whatever its kind.
-            raise ValueError(  # noqa: TRY004
-                f"rule {self.name!r}: response_headers must be a mapping of header name to value"
-            )
+            raise RuleError(self.name, "response_headers must be a mapping of header name to value")
         headers: list[tuple[str, str]] = []
         for key, raw in value.items():
             name = str(key)
             if _HEADER_NAME_RE.fullmatch(name) is None:
-                raise ValueError(f"rule {self.name!r}: invalid response header name {name!r}")
+                raise RuleError(self.name, f"invalid response header name {name!r}")
             if name.lower() in MOCKSTACK_OWNED_RESPONSE_HEADERS:
-                raise ValueError(f"rule {self.name!r}: response header {name!r} is set by mockstack")
+                raise RuleError(self.name, f"response header {name!r} is set by mockstack")
             values = raw if isinstance(raw, list) else [raw]
             if not values or any(item is None for item in values):
-                raise ValueError(f"rule {self.name!r}: response header {name!r} has no value")
+                raise RuleError(self.name, f"response header {name!r} has no value")
             headers.extend((name, self._response_header_value(name, item)) for item in values)
         return tuple(headers)
 
@@ -254,7 +297,7 @@ class Rule:
             text = str(value)
             if _INVALID_HEADER_VALUE_RE.search(text) is None and _is_latin1(text) and text == text.strip(" \t"):
                 return text
-        raise ValueError(f"rule {self.name!r}: invalid response header value for {name!r}")
+        raise RuleError(self.name, f"invalid response header value for {name!r}")
 
     @property
     def _has_fixture_only_fields(self) -> bool:
@@ -271,7 +314,9 @@ class Rule:
         return not self._is_template and self.replacement.startswith(PROXYRULES_FILE_TEMPLATE_PREFIX)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any], env: Environment | None = None) -> Self:
+    def from_dict(cls, data: Mapping[str, Any], env: Environment | None = None) -> Self:
+        """Build a rule from a rules-file entry, first checking its keys and their YAML types."""
+        _check_entry(str(data["name"]) if data.get("name") is not None else None, data)
         return cls(
             pattern=data["pattern"],
             replacement=data["replacement"],

@@ -33,7 +33,7 @@ from mockstack.recording import (
     resolve_inside,
     write_fixture_atomically,
 )
-from mockstack.rules import RequestPayload, Rule, RuleResult, TemplateRuleResult, URLRuleResult
+from mockstack.rules import RequestPayload, Rule, RuleError, RuleResult, TemplateRuleResult, URLRuleResult
 from mockstack.strategies.base import BaseStrategy
 from mockstack.strategies.create_mixin import CreateMixin
 from mockstack.templating import templates_env_provider
@@ -69,6 +69,40 @@ class InvalidUpstreamURLError(Exception):
     def __init__(self, url: str):
         super().__init__(f"invalid upstream URL: {url!r}")
         self.url = url
+
+
+class RulesFileError(ValueError):
+    """A rules file that does not load: unreadable, not YAML, without a ``rules`` list, or
+    with an invalid rule, which ``problem`` names by position (and name, when it has one)."""
+
+    def __init__(self, path: Path, problem: str) -> None:
+        super().__init__(f"{path}: {problem}")
+        self.path = path
+        self.problem = problem
+
+
+def _read_rules_file(path: Path) -> Any:
+    """The parsed YAML of the rules file at ``path``."""
+    try:
+        with open(path, encoding="utf-8") as file:
+            return yaml.safe_load(file)
+    except OSError as exc:
+        raise RulesFileError(path, f"cannot read the file: {exc.strerror or exc}") from exc
+    except UnicodeDecodeError as exc:
+        raise RulesFileError(path, "the file is not UTF-8 text") from exc
+    except yaml.YAMLError as exc:
+        raise RulesFileError(path, f"invalid YAML: {_yaml_problem(exc)}") from exc
+    except RecursionError as exc:
+        raise RulesFileError(path, "invalid YAML: nested too deeply") from exc
+
+
+def _yaml_problem(exc: yaml.YAMLError) -> str:
+    """A YAML error on one line, with the line and column when PyYAML marks them."""
+    problem = getattr(exc, "problem", None)
+    mark = getattr(exc, "problem_mark", None)
+    if problem and mark is not None:
+        return f"{problem} (line {mark.line + 1}, column {mark.column + 1})"
+    return " ".join(str(exc).split())
 
 
 def strip_hop_by_hop[HeadersT: (MutableHeaders, ResponseHeaders)](
@@ -261,22 +295,33 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         return self.load_rules()
 
     def load_rules(self) -> list[Rule]:
+        """Load and validate every rule; a rules file that does not load raises ``RulesFileError``."""
         if self.rules_filename is None:
             raise ValueError("rules_filename is not set")
 
-        with open(self.rules_filename, encoding="utf-8") as file:
-            data = yaml.safe_load(file)
-        return [self._rule_from_dict(rule) for rule in data["rules"]]
+        path = self.rules_filename
+        data = _read_rules_file(path)
+        rules = data.get("rules") if isinstance(data, dict) else None
+        if not isinstance(rules, list):
+            raise RulesFileError(path, "expected a top-level 'rules' list")
+        return [self._rule_from_dict(path, position, rule) for position, rule in enumerate(rules, start=1)]
 
-    def _rule_from_dict(self, data: dict[str, Any]) -> Rule:
-        """Build one rule, naming it in any load-time validation error."""
-        name = str(data["name"]) if data.get("name") is not None else None
+    def _rule_from_dict(self, path: Path, position: int, data: Any) -> Rule:
+        """Build one rule, naming it by position (and name) in any load-time validation error."""
+        if not isinstance(data, dict):
+            problem = f"expected a mapping with 'pattern' and 'replacement', got {type(data).__name__}"
+            raise RulesFileError(path, f"rule #{position}: {problem}")
+        label = f"rule #{position}" if data.get("name") is None else f"rule #{position} ({str(data['name'])!r})"
         try:
             return Rule.from_dict(data, env=self.env)
+        except RuleError as exc:
+            raise RulesFileError(path, f"{label}: {exc.problem}") from exc
         except re.error as exc:
-            raise ValueError(f"rule {name!r}: invalid regex {exc.pattern!r}: {exc}") from exc
+            raise RulesFileError(path, f"{label}: invalid regex {exc.pattern!r}: {exc}") from exc
         except TemplateSyntaxError as exc:
-            raise ValueError(f"rule {name!r}: invalid replacement template: {exc}") from exc
+            raise RulesFileError(path, f"{label}: invalid replacement template: {exc}") from exc
+        except (OverflowError, RecursionError) as exc:
+            raise RulesFileError(path, f"{label}: a regex or template is too large or too deeply nested") from exc
 
     def matching_rules(self, request: Request, payload: RequestPayload | None = None) -> Iterator[Rule]:
         """The rules that match ``request``, lazily and in file order."""

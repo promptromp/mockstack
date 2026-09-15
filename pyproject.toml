@@ -30,7 +30,7 @@ dependencies = [
     "pydantic-settings>=2.15.0",
     "pyyaml>=6.0.3",
     "rich>=15.0.0",
-    "typer>=0.27.2",
+    "rich-argparse>=1.8.0",
     # The standard extra installs uvloop and httptools, which uvicorn uses when present.
     "uvicorn[standard]>=0.53.0",
 ]
