@@ -1,12 +1,14 @@
 """Fixtures shared by the unit tests and the live tests."""
 
 import os
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import AsyncIterator, Callable, Iterable, Mapping
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 
+import httpx
 import pytest
+import pytest_asyncio
 import yaml
 from fastapi import FastAPI, Request
 from starlette.types import Message
@@ -119,6 +121,17 @@ def app(settings, span):
     app.state.strategy = FileFixturesStrategy(settings)
     app.state.span = span
     return app
+
+
+@pytest_asyncio.fixture
+async def asgi_client(app) -> AsyncIterator[httpx.AsyncClient]:
+    """An ``httpx.AsyncClient`` that calls the ``app`` fixture in-process.
+
+    Requests go through ``httpx.ASGITransport``, so routes and middleware added to
+    ``app`` before the first request are served. The app's lifespan does not run.
+    """
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://testserver") as client:
+        yield client
 
 
 @pytest.fixture
