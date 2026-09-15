@@ -120,6 +120,16 @@ MOCKSTACK__PROXYRULES_REDIRECT_VIA=reverse_proxy
 MOCKSTACK__PROXYRULES_REVERSE_PROXY_TIMEOUT=5
 ```
 
+And one that records fixtures from the real services behind the rules (see
+[Recording fixtures](strategies/proxyrules.md#recording-fixtures)):
+
+```env
+MOCKSTACK__STRATEGY=proxyrules
+MOCKSTACK__PROXYRULES_RULES_FILENAME=./rules.yml
+MOCKSTACK__PROXYRULES_RECORD_MODE=missing
+MOCKSTACK__PROXYRULES_RECORD_ROOT=/path/to/fixtures
+```
+
 ## Command Line Usage
 
 You can also set configuration options via command line arguments:
@@ -127,4 +137,5 @@ You can also set configuration options via command line arguments:
 ```bash
 uvx mockstack --strategy filefixtures --templates-dir ~/mockstack-templates/
 uvx mockstack --strategy proxyrules --proxyrules-rules-filename ./rules.yml --proxyrules-redirect-via http_307_temporary
+uvx mockstack --strategy proxyrules --proxyrules-rules-filename ./rules.yml --proxyrules-record-mode missing --proxyrules-record-root ./fixtures
 ```

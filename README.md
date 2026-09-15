@@ -111,6 +111,17 @@ curl -i http://127.0.0.1:8000/projects/api/v1/project/proj-123
 
 The [ProxyRules cookbook](https://promptromp.github.io/mockstack/guides/proxyrules-cookbook/) walks through this recipe and more (per-scenario fixtures, matching on request bodies and query parameters, asserting in tests, error responses, recording fixtures), each backed by a live test.
 
+### Record fixtures from a real service
+
+Instead of writing fixtures by hand, record them: with record mode on, a fixture rule whose file does not exist yet sends the request on to the next matching URL rule, saves the response into the fixture file, and serves it from there. Later requests are replayed from the file without calling the service. Record mode is off by default:
+
+```shell
+MOCKSTACK__STRATEGY=proxyrules MOCKSTACK__PROXYRULES_RULES_FILENAME=rules.yml \
+  MOCKSTACK__PROXYRULES_RECORD_MODE=missing MOCKSTACK__PROXYRULES_RECORD_ROOT=fixtures \
+  uv run mockstack
+```
+
+Requests really reach the service until their response is recorded, so record against a safe environment and review the recorded files before committing them. An optional scrubber can mask sensitive data first; see [Recording fixtures](https://promptromp.github.io/mockstack/strategies/proxyrules/#recording-fixtures) and the cookbook's [Record fixtures from a real service](https://promptromp.github.io/mockstack/guides/proxyrules-cookbook/#9-record-fixtures-from-a-real-service).
 
 ## Testing
 

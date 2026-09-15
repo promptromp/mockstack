@@ -41,7 +41,8 @@ CLI flags, `MOCKSTACK__*` environment variables, or a `.env` file.
   `MOCKSTACK__*` environment variables and `.env` files
 - `mockstack/tests/live/`: live tests against real uvicorn servers on loopback sockets;
   `conftest.py` provides the session-scoped recording echo `upstream`, the module-scoped
-  `mockstack_server`, `proxyrules_settings` and `render_rules`
+  `mockstack_server`, `proxyrules_settings` and `render_rules`; `test_record_mode_live.py`
+  records into temporary directories, never the repository
 - `examples/`: runnable examples; `examples/proxyrules-cookbook/` holds the files
   embedded in the cookbook docs page
 - `docs/`: the MkDocs Material site (`mkdocs.yml`); the home page is `README.md`
