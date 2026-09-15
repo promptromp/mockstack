@@ -26,6 +26,7 @@ from mockstack.rules import TemplateRuleResult, URLRuleResult
 from mockstack.strategies.proxyrules import (
     ProxyRulesStrategy,
     Rule,
+    RulesFileError,
     UpstreamError,
     _header_safe,
     maybe_update_response_headers,
@@ -75,7 +76,7 @@ def test_proxy_rules_strategy_missing_rules_file(proxyrules_strategy):
     [
         (
             {"name": "bad-regex", "pattern": "^/x/(unclosed$", "replacement": "u"},
-            r"rule 'bad-regex': invalid regex '\^/x/\(unclosed\$'",
+            r"rule #1 \('bad-regex'\): invalid regex '\^/x/\(unclosed\$'",
         ),
         (
             {
@@ -84,7 +85,7 @@ def test_proxy_rules_strategy_missing_rules_file(proxyrules_strategy):
                 "headers": {"x-scenario": "[a-z"},
                 "replacement": "u",
             },
-            r"rule 'bad-header': invalid regex '\[a-z'",
+            r"rule #1 \('bad-header'\): invalid regex '\[a-z'",
         ),
         (
             {
@@ -92,7 +93,7 @@ def test_proxy_rules_strategy_missing_rules_file(proxyrules_strategy):
                 "pattern": r"^/x/(?P<headers>[^/]+)$",
                 "replacement": "u",
             },
-            r"rule 'shadowing': named group 'headers' shadows a reserved template",
+            r"rule #1 \('shadowing'\): named group 'headers' shadows a reserved template",
         ),
         (
             {
@@ -100,7 +101,7 @@ def test_proxy_rules_strategy_missing_rules_file(proxyrules_strategy):
                 "pattern": "^/x$",
                 "replacement": "file:///{{ id .j",
             },
-            r"rule 'bad-template': invalid replacement template",
+            r"rule #1 \('bad-template'\): invalid replacement template",
         ),
         (
             {
@@ -109,7 +110,7 @@ def test_proxy_rules_strategy_missing_rules_file(proxyrules_strategy):
                 "headers": {"x-foo": None},
                 "replacement": "u",
             },
-            r"rule '2024': predicate 'x-foo' has no value",
+            r"rule #1 \('2024'\): predicate 'x-foo' has no value",
         ),
         (
             {
@@ -118,7 +119,7 @@ def test_proxy_rules_strategy_missing_rules_file(proxyrules_strategy):
                 "replacement": "file:///f.json",
                 "status": 700,
             },
-            r"rule 'bad-status': status must be an integer from 200 to 599",
+            r"rule #1 \('bad-status'\): status must be an integer from 200 to 599",
         ),
         (
             {
@@ -127,7 +128,7 @@ def test_proxy_rules_strategy_missing_rules_file(proxyrules_strategy):
                 "replacement": "https://upstream.example/x",
                 "response_headers": {"x-a": "1"},
             },
-            r"rule 'headers-on-url': status and response_headers only apply to file:/// fixtures",
+            r"rule #1 \('headers-on-url'\): status and response_headers only apply to file:/// fixtures",
         ),
     ],
     ids=[
@@ -141,9 +142,79 @@ def test_proxy_rules_strategy_missing_rules_file(proxyrules_strategy):
     ],
 )
 def test_invalid_rules_file_fails_at_startup_with_rule_name(proxyrules_strategy, rule, message):
-    """A bad rules file fails when the strategy is built (startup), naming the rule."""
-    with pytest.raises(ValueError, match=message):
+    """A bad rules file fails when the strategy is built (startup), naming the file and
+    the rule by position and name."""
+    with pytest.raises(RulesFileError, match=message) as excinfo:
         proxyrules_strategy(rules=[rule])
+
+    assert str(excinfo.value).startswith(f"{excinfo.value.path}: rule #1 ")
+
+
+@pytest.mark.parametrize(
+    ("content", "problem"),
+    [
+        ("", "expected a top-level 'rules' list"),
+        ("routes: []\n", "expected a top-level 'rules' list"),
+        ("rules:\n", "expected a top-level 'rules' list"),
+        ("- pattern: ^/a\n  replacement: u\n", "expected a top-level 'rules' list"),
+        ("rules: [\n", "invalid YAML: expected the node content, but found '<stream end>' (line 2, column 1)"),
+        ("rules:\n  - just-a-string\n", "rule #1: expected a mapping with 'pattern' and 'replacement', got str"),
+        ("rules:\n  - pattern: ^/a\n    replacement: u\n  - replacement: u\n", "rule #2: 'pattern' is required"),
+        (
+            "rules:\n  - name: numbered\n    pattern: 42\n    replacement: u\n",
+            "rule #1 ('numbered'): 'pattern' must be a string",
+        ),
+    ],
+    ids=[
+        "empty-file",
+        "no-rules-key",
+        "null-rules",
+        "top-level-list",
+        "invalid-yaml",
+        "rule-not-a-mapping",
+        "second-rule-missing-pattern",
+        "named-rule",
+    ],
+)
+def test_malformed_rules_file_names_the_file_and_rule(proxyrules_strategy, tmp_path, content, problem):
+    path = tmp_path / "rules.yml"
+    path.write_text(content)
+
+    with pytest.raises(RulesFileError) as excinfo:
+        proxyrules_strategy(proxyrules_rules_filename=path)
+
+    assert (excinfo.value.path, excinfo.value.problem) == (path, problem)
+    assert str(excinfo.value) == f"{path}: {problem}"
+
+
+def test_rules_file_with_a_control_character_is_invalid_yaml(proxyrules_strategy, tmp_path):
+    path = tmp_path / "rules.yml"
+    path.write_text("rules:\n  - pattern: \x01\n")
+
+    with pytest.raises(RulesFileError, match=r"^[^\n]*: invalid YAML: unacceptable character #x0001[^\n]*$"):
+        proxyrules_strategy(proxyrules_rules_filename=path)
+
+
+def test_rules_file_that_is_not_utf8_names_the_file(proxyrules_strategy, tmp_path):
+    path = tmp_path / "rules.yml"
+    path.write_bytes(b"rules:\n  - pattern: \xff\n")
+
+    with pytest.raises(RulesFileError) as excinfo:
+        proxyrules_strategy(proxyrules_rules_filename=path)
+
+    assert str(excinfo.value) == f"{path}: the file is not UTF-8 text"
+
+
+@pytest.mark.skipif(os.name != "posix" or os.geteuid() == 0, reason="needs file permissions that apply to the user")
+def test_unreadable_rules_file_names_the_file(proxyrules_strategy, tmp_path):
+    path = tmp_path / "rules.yml"
+    path.write_text("rules: []\n")
+    path.chmod(0)
+
+    with pytest.raises(RulesFileError) as excinfo:
+        proxyrules_strategy(proxyrules_rules_filename=path)
+
+    assert str(excinfo.value) == f"{path}: cannot read the file: Permission denied"
 
 
 # --- matching ------------------------------------------------------------------------

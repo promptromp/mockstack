@@ -13,6 +13,7 @@ from mockstack.rules import (
     RESERVED_CONTEXT_KEYS,
     RequestPayload,
     Rule,
+    RuleError,
     TemplateRuleResult,
     URLRuleResult,
     lookup_path,
@@ -58,6 +59,47 @@ def test_rule_from_dict_with_predicates():
     assert rule.query == {"q": "a"}
     assert rule.body == "abc"
     assert rule.json == {"a.b": "1"}
+
+
+@pytest.mark.parametrize(
+    ("data", "problem"),
+    [
+        ({"replacement": "u"}, "'pattern' is required"),
+        ({"pattern": "^/x$", "replacement": None}, "'replacement' is required"),
+        ({"pattern": 42, "replacement": "u"}, "'pattern' must be a string"),
+        ({"pattern": "^/x$", "replacement": ["u"]}, "'replacement' must be a string"),
+        ({"pattern": "^/x$", "replacement": "u", "method": ["GET"]}, "'method' must be a string"),
+        ({"pattern": "^/x$", "replacement": "u", "headers": ["x-a"]}, "'headers' must be a mapping"),
+        ({"pattern": "^/x$", "replacement": "u", "query": "q=1"}, "'query' must be a mapping"),
+        ({"pattern": "^/x$", "replacement": "u", "json": 1}, "'json' must be a mapping"),
+    ],
+    ids=[
+        "missing-pattern",
+        "null-replacement",
+        "pattern-not-a-string",
+        "replacement-not-a-string",
+        "method-not-a-string",
+        "headers-not-a-mapping",
+        "query-not-a-mapping",
+        "json-not-a-mapping",
+    ],
+)
+def test_rule_from_dict_rejects_a_malformed_entry(data, problem):
+    """A rules-file entry with a missing key or a key of the wrong YAML type is a
+    ``RuleError``, not a ``KeyError`` or ``AttributeError`` from deeper in the rule."""
+    with pytest.raises(RuleError) as excinfo:
+        Rule.from_dict({"name": "r1", **data})
+
+    assert excinfo.value.problem == problem
+    assert str(excinfo.value) == f"rule 'r1': {problem}"
+
+
+def test_rule_error_keeps_the_rule_name_and_problem_apart():
+    with pytest.raises(RuleError) as excinfo:
+        Rule(pattern="^/x$", replacement="file:///f.json", name="r1", status=700)
+
+    assert excinfo.value.rule_name == "r1"
+    assert excinfo.value.problem == "status must be an integer from 200 to 599, got 700"
 
 
 @pytest.mark.parametrize(

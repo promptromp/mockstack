@@ -143,9 +143,14 @@ interfere with reverse proxying or resource-creation simulation.
 ### Load-time validation
 
 The rules file is loaded, and every rule compiled, when the strategy is constructed at
-startup. mockstack refuses to start when the YAML does not parse, and, naming the
-offending rule, when:
+startup. mockstack refuses to start when the file cannot be read, is not UTF-8, does not
+parse as YAML or has no top-level `rules` list. It also refuses, naming the offending
+rule by position and name (e.g. `rules.yml: rule #2 ('projects-fixture'): 'pattern' is
+required`), when:
 
+- a rule is not a mapping, has no `pattern` or `replacement`, has a `pattern`,
+  `replacement` or `method` that is not a string, or has `headers`, `query` or `json`
+  that is not a mapping;
 - a regex (`pattern` or any predicate) is invalid;
 - a predicate has no value;
 - a Jinja `replacement` has a syntax error;
