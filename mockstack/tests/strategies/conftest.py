@@ -2,7 +2,9 @@
 
 from collections.abc import Awaitable, Callable
 from typing import Any
+from unittest.mock import AsyncMock, patch
 
+import httpx
 import pytest
 from fastapi import Request, Response
 
@@ -50,3 +52,10 @@ def apply_rule(
         return await strategy.apply(request if request is not None else traced_request("/x"))
 
     return _apply
+
+
+@pytest.fixture
+def upstream_send():
+    """Patch ``httpx.AsyncClient.send``; each test sets ``return_value`` or ``side_effect``."""
+    with patch.object(httpx.AsyncClient, "send", new_callable=AsyncMock) as send:
+        yield send
