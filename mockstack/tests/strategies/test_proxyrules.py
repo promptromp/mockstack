@@ -3,6 +3,9 @@
 import gzip
 import json
 import logging
+import os
+import subprocess
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
@@ -619,6 +622,150 @@ async def test_handlers_stamp_their_own_result_type(proxyrules_strategy, traced_
         TemplateRuleResult(template_path=str(template_file), template_context={}),
     )
     assert rendered.headers[RESULT_TYPE_HEADER] == "template"
+
+
+# --- utf-8 file reads ------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_rules_and_fixture_files_are_read_as_utf8(proxyrules_strategy, traced_request, write_template):
+    """Both ``open()`` calls the strategy makes -- for the rules file and for a matched
+    fixture file -- must request UTF-8 explicitly, independent of the machine's locale.
+    """
+    template_file = write_template("t.json", '{"ok": true}')
+    with patch("mockstack.strategies.proxyrules.open", wraps=open, create=True) as mock_open:
+        strategy = proxyrules_strategy(rules=[{"pattern": r"^/x$", "replacement": f"file://{template_file}"}])
+        response = await strategy.apply(traced_request("/x"))
+
+    assert response.status_code == 200
+    # One open() for the rules file (at construction) and one for the fixture (at apply).
+    assert len(mock_open.call_args_list) >= 2
+    for call in mock_open.call_args_list:
+        assert call.kwargs.get("encoding") == "utf-8", call
+
+
+# Non-ASCII text to prove file reads survive a non-UTF-8 locale: Latin-1 range
+# ("Zoë Müller") and beyond it ("日本"), matching the problem this regression test covers.
+_NON_ASCII_RULE_NAME = "Zoë Müller"
+_NON_ASCII_FIXTURE_BODY = "Zoë Müller 日本"
+
+# Candidate non-UTF-8 locales to probe for, in preference order. CI Linux images often
+# ship none of these (they are skipped there); macOS ships several.
+_LATIN1_LOCALE_CANDIDATES = (
+    "en_US.ISO8859-1",
+    "en_US.ISO-8859-1",
+    "de_DE.ISO8859-1",
+    "C.ISO-8859-1",
+)
+
+
+def _preferred_encoding_under(locale_name: str) -> str | None:
+    """The ``locale.getpreferredencoding`` a fresh interpreter reports under
+    ``LC_ALL=locale_name`` and ``PYTHONUTF8=0``, or ``None`` if the locale is not
+    installed on this machine (a subprocess that fails to set it)."""
+    completed = subprocess.run(
+        [sys.executable, "-c", "import locale; print(locale.getpreferredencoding(False))"],
+        env={**os.environ, "LC_ALL": locale_name, "PYTHONUTF8": "0"},
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    if completed.returncode != 0:
+        return None
+    return completed.stdout.strip()
+
+
+def _find_non_utf8_locale() -> str | None:
+    for candidate in _LATIN1_LOCALE_CANDIDATES:
+        encoding = _preferred_encoding_under(candidate)
+        if encoding is not None and encoding.lower().replace("-", "") != "utf8":
+            return candidate
+    return None
+
+
+# The subprocess script: reads the rules file and fixture it names (both written as
+# UTF-8 by the test, outside this locale), applies one request through the strategy
+# directly, and writes the raw response body bytes to stdout -- never text, so nothing
+# non-Latin-1 is ever printed through the subprocess's (possibly Latin-1) stdout.
+_LOCALE_REGRESSION_SCRIPT = """
+import asyncio
+import sys
+from types import SimpleNamespace
+
+from starlette.requests import Request
+
+from mockstack.config import Settings
+from mockstack.strategies.proxyrules import ProxyRulesStrategy
+
+rules_path = sys.argv[1]
+
+settings = Settings(
+    strategy="proxyrules",
+    proxyrules_rules_filename=rules_path,
+    proxyrules_redirect_via="reverse_proxy",
+    _env_file=None,
+)
+strategy = ProxyRulesStrategy(settings)
+
+
+async def main() -> None:
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/x",
+            "query_string": b"",
+            "headers": [],
+        },
+        receive=receive,
+    )
+    request.state.span = SimpleNamespace(set_attribute=lambda *a, **kw: None)
+    response = await strategy.apply(request)
+    sys.stdout.buffer.write(bytes([response.status_code % 256]))
+    sys.stdout.buffer.write(response.body)
+
+
+asyncio.run(main())
+"""
+
+
+def test_locale_regression_utf8_replay_byte_identical(tmp_path):
+    """Regression test for the bug this fix addresses: under a non-UTF-8 locale, a
+    fixture recorded/written as UTF-8 must still replay byte-identically, not mojibake.
+    """
+    locale_name = _find_non_utf8_locale()
+    if locale_name is None:
+        pytest.skip("no non-UTF-8 locale available on this machine to probe")
+
+    fixture_file = tmp_path / "fixture.txt"
+    fixture_file.write_text(_NON_ASCII_FIXTURE_BODY, encoding="utf-8")
+
+    rules_file = tmp_path / "rules.yml"
+    rules_file.write_text(
+        f"rules:\n  - name: {_NON_ASCII_RULE_NAME!r}\n    pattern: ^/x$\n    replacement: file://{fixture_file}\n",
+        encoding="utf-8",
+    )
+
+    script_file = tmp_path / "locale_regression.py"
+    script_file.write_text(_LOCALE_REGRESSION_SCRIPT, encoding="utf-8")
+
+    # sys.executable running a script this test just wrote to tmp_path: trusted inputs.
+    completed = subprocess.run(  # noqa: S603
+        [sys.executable, str(script_file), str(rules_file)],
+        env={**os.environ, "LC_ALL": locale_name, "PYTHONUTF8": "0"},
+        capture_output=True,
+        timeout=30,
+        check=False,
+    )
+    assert completed.returncode == 0, ascii(completed.stderr)
+
+    status_byte, body = completed.stdout[:1], completed.stdout[1:]
+    assert status_byte == bytes([status.HTTP_200_OK % 256]), ascii(completed.stdout)
+    assert body == _NON_ASCII_FIXTURE_BODY.encode("utf-8"), (ascii(body), locale_name)
 
 
 # --- apply: reverse proxy ------------------------------------------------------------
