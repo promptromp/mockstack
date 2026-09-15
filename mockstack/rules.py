@@ -12,7 +12,7 @@ from urllib.parse import quote
 from fastapi import Request
 from jinja2 import Environment, StrictUndefined, Template
 
-from mockstack.constants import PROXYRULES_FILE_TEMPLATE_PREFIX
+from mockstack.constants import MOCKSTACK_OWNED_RESPONSE_HEADERS, PROXYRULES_FILE_TEMPLATE_PREFIX
 from mockstack.templating import parse_template_name_segments_and_identifiers
 
 
@@ -30,6 +30,13 @@ MISSING: Final = object()
 # ``re.sub`` and therefore never in template mode. Only literal template text is
 # scanned; the same characters inside a Jinja expression or comment are not one.
 _BACKREFERENCE_RE = re.compile(r"\\[1-9]|\\g<")
+
+# An HTTP field name is an RFC 9110 token.
+_HEADER_NAME_RE = re.compile(r"[!#$%&'*+\-.^_`|~0-9A-Za-z]+")
+# Control characters are not allowed in a field value, except horizontal tab.
+_INVALID_HEADER_VALUE_RE = re.compile(r"[\x00-\x08\x0a-\x1f\x7f]")
+
+_FIXTURE_ONLY_FIELDS_ERROR = "status and response_headers only apply to file:/// fixtures"
 
 
 @dataclass(frozen=True)
@@ -131,9 +138,10 @@ class Rule:
     """A rule for the proxy rules strategy.
 
     Everything that can be validated is validated here, at load time: regexes are
-    compiled, predicate values coerced to strings, and a Jinja replacement compiled
-    with strict undefined. A bad rules file therefore fails when it is loaded rather
-    than on the first request that happens to reach the broken rule.
+    compiled, predicate values coerced to strings, the fixture ``status`` and
+    ``response_headers`` checked, and a Jinja replacement compiled with strict
+    undefined. A bad rules file therefore fails when it is loaded rather than on the
+    first request that happens to reach the broken rule.
     """
 
     def __init__(
@@ -146,6 +154,8 @@ class Rule:
         query: Mapping[str, Any] | None = None,
         body: Any | None = None,
         json: Mapping[str, Any] | None = None,
+        status: Any | None = None,
+        response_headers: Any | None = None,
         env: Environment | None = None,
     ):
         # YAML may parse e.g. `name: 2024` as an int.
@@ -175,6 +185,16 @@ class Rule:
         # The decision to render is made on the operator-authored `replacement`, never
         # on request-controlled data.
         self._is_template = any(d in replacement for d in JINJA_DELIMITERS)
+
+        # How a rendered fixture is answered. A plain URL replacement can never serve
+        # one; a Jinja replacement is checked per request, in `apply`.
+        self.status = self._status(status)
+        self.response_headers = self._response_headers(response_headers)
+        if self._has_fixture_only_fields and not (
+            self._is_template or replacement.startswith(PROXYRULES_FILE_TEMPLATE_PREFIX)
+        ):
+            raise ValueError(f"rule {self.name!r}: {_FIXTURE_ONLY_FIELDS_ERROR}, and the replacement is not one")
+
         self._replacement_template: Template | None = None
         if env is not None and self._is_template:
             template_env = env.overlay(undefined=StrictUndefined)
@@ -195,6 +215,51 @@ class Rule:
             raise ValueError(f"rule {self.name!r}: predicate {str(key)!r} has no value")
         return str(value)
 
+    def _status(self, value: Any) -> int | None:
+        """The fixture status: an integer, or a string of ASCII digits, from 200 to 599."""
+        if value is None:
+            return None
+        if isinstance(value, str) and value.isascii() and value.isdigit():
+            value = int(value)
+        if isinstance(value, bool) or not isinstance(value, int) or not 200 <= value <= 599:
+            raise ValueError(f"rule {self.name!r}: status must be an integer from 200 to 599, got {value!r}")
+        return value
+
+    def _response_headers(self, value: Any) -> tuple[tuple[str, str], ...]:
+        """``(name, value)`` pairs in file order; a list value repeats the header."""
+        if value is None:
+            return ()
+        if not isinstance(value, Mapping):
+            # Every rules-file mistake is a ValueError naming the rule, whatever its kind.
+            raise ValueError(  # noqa: TRY004
+                f"rule {self.name!r}: response_headers must be a mapping of header name to value"
+            )
+        headers: list[tuple[str, str]] = []
+        for key, raw in value.items():
+            name = str(key)
+            if _HEADER_NAME_RE.fullmatch(name) is None:
+                raise ValueError(f"rule {self.name!r}: invalid response header name {name!r}")
+            if name.lower() in MOCKSTACK_OWNED_RESPONSE_HEADERS:
+                raise ValueError(f"rule {self.name!r}: response header {name!r} is set by mockstack")
+            values = raw if isinstance(raw, list) else [raw]
+            if not values or any(item is None for item in values):
+                raise ValueError(f"rule {self.name!r}: response header {name!r} has no value")
+            headers.extend((name, self._response_header_value(name, item)) for item in values)
+        return tuple(headers)
+
+    def _response_header_value(self, name: str, value: Any) -> str:
+        """A scalar coerced to a string that can be sent as a single header value: Latin-1,
+        no control characters, and no surrounding whitespace (which h11 refuses)."""
+        if isinstance(value, str | int | float):
+            text = str(value)
+            if _INVALID_HEADER_VALUE_RE.search(text) is None and _is_latin1(text) and text == text.strip(" \t"):
+                return text
+        raise ValueError(f"rule {self.name!r}: invalid response header value for {name!r}")
+
+    @property
+    def _has_fixture_only_fields(self) -> bool:
+        return self.status is not None or bool(self.response_headers)
+
     @classmethod
     def from_dict(cls, data: dict[str, Any], env: Environment | None = None) -> Self:
         return cls(
@@ -206,6 +271,8 @@ class Rule:
             query=data.get("query"),
             body=data.get("body"),
             json=data.get("json"),
+            status=data.get("status"),
+            response_headers=data.get("response_headers"),
             env=env,
         )
 
@@ -271,6 +338,10 @@ class Rule:
             result = self._pattern.sub(self.replacement, path)
 
         if not result.startswith(PROXYRULES_FILE_TEMPLATE_PREFIX):
+            if self._has_fixture_only_fields:
+                raise ValueError(
+                    f"rule {self.name!r}: {_FIXTURE_ONLY_FIELDS_ERROR}, but the replacement rendered a URL"
+                )
             return URLRuleResult(url=result)
 
         if context is None:
@@ -308,6 +379,14 @@ class Rule:
             "method": request.method,
             "request_json": payload.json,
         }
+
+
+def _is_latin1(text: str) -> bool:
+    try:
+        text.encode("latin-1")
+    except UnicodeEncodeError:
+        return False
+    return True
 
 
 def _mapping_matches(predicates: Mapping[str, re.Pattern[str]], actual: Mapping[str, str]) -> bool:

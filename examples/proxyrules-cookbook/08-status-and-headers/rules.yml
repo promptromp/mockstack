@@ -1,0 +1,36 @@
+rules:
+  # 503 with Retry-After: the orders service is down for this scenario.
+  - name: orders-outage
+    method: GET
+    pattern: ^/orders/api/v1/orders/(?P<order_id>[a-z0-9-]+)$
+    headers:
+      x-test-scenario: outage
+    status: 503
+    response_headers:
+      Retry-After: "30"
+    replacement: file://${FIXTURES_DIR}/errors/unavailable.json.j2
+
+  # 429 with a problem+json body, which replaces the type inferred from .json.j2.
+  - name: orders-rate-limited
+    method: GET
+    pattern: ^/orders/api/v1/orders/(?P<order_id>[a-z0-9-]+)$
+    headers:
+      x-test-scenario: throttled
+    status: 429
+    response_headers:
+      Content-Type: application/problem+json
+      Retry-After: "5"
+    replacement: file://${FIXTURES_DIR}/errors/rate-limited.json.j2
+
+  # 201 Created, with a Location header for the new order.
+  - name: order-created
+    method: POST
+    pattern: ^/orders/api/v1/orders$
+    status: 201
+    response_headers:
+      Location: /orders/api/v1/orders/ord-1001
+    replacement: file://${FIXTURES_DIR}/orders/created.json.j2
+
+  - name: orders-passthrough
+    pattern: ^/orders/(.*)
+    replacement: ${UPSTREAM_URL}/\1

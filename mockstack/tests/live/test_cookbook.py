@@ -84,6 +84,12 @@ R7_REDIRECT = "curl -i http://127.0.0.1:8000/users/api/v1/users/user-2"
 R7_FOLLOW_REDIRECT = "curl -i -L http://127.0.0.1:8000/users/api/v1/users/user-2"
 R7_QUERY_KEPT = 'curl -i "http://127.0.0.1:8000/users/api/v1/users?page=2"'
 
+# Recipe 8: fixture status codes and headers.
+R8_OUTAGE = 'curl -i -H "X-Test-Scenario: outage" http://127.0.0.1:8000/orders/api/v1/orders/ord-1001'
+R8_THROTTLED = 'curl -i -H "X-Test-Scenario: throttled" http://127.0.0.1:8000/orders/api/v1/orders/ord-1001'
+R8_CREATED = """curl -i -H "Content-Type: application/json" -d '{"customer": "cust-7"}' http://127.0.0.1:8000/orders/api/v1/orders"""
+R8_UNTAGGED = "curl -i http://127.0.0.1:8000/orders/api/v1/orders/ord-1001"
+
 TESTED_CURLS = {name: value for name, value in dict(globals()).items() if re.fullmatch(r"R\d_[A-Z0-9_]+", name)}
 
 
@@ -474,6 +480,46 @@ def test_recipe7_query_string_is_kept_in_location(recipe7, upstream):
     assert_result(r, 307, "redirect", "users-redirect")
     assert r.headers["location"] == f"{upstream.base_url}/api/v1/users?page=2"
     assert upstream.calls == []
+
+
+# --- Recipe 8 ---------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def recipe8(cookbook):
+    return cookbook("08-status-and-headers")
+
+
+def test_recipe8_outage_is_503_with_retry_after(recipe8, upstream):
+    r = curl(R8_OUTAGE, recipe8)
+    assert_result(r, 503, "template", "orders-outage")
+    assert r.headers["retry-after"] == "30"
+    assert r.headers["content-type"] == "application/json"
+    assert r.json() == {"error": "service unavailable", "order_id": "ord-1001"}
+    assert upstream.calls == []
+
+
+def test_recipe8_throttled_is_429_with_problem_json(recipe8, upstream):
+    r = curl(R8_THROTTLED, recipe8)
+    assert_result(r, 429, "template", "orders-rate-limited")
+    assert r.headers.get_list("content-type") == ["application/problem+json"]
+    assert r.headers["retry-after"] == "5"
+    assert r.json() == {"type": "about:blank", "title": "Too Many Requests", "status": 429}
+    assert upstream.calls == []
+
+
+def test_recipe8_create_is_201_with_location(recipe8, upstream):
+    r = curl(R8_CREATED, recipe8)
+    assert_result(r, 201, "template", "order-created")
+    assert r.headers["location"] == "/orders/api/v1/orders/ord-1001"
+    assert r.json() == {"id": "ord-1001", "status": "OPEN", "customer": "cust-7"}
+    assert upstream.calls == []
+
+
+def test_recipe8_untagged_request_passes_through(recipe8, upstream):
+    r = curl(R8_UNTAGGED, recipe8)
+    assert_result(r, 200, "proxy", "orders-passthrough")
+    assert [c["path"] for c in upstream.calls] == ["/api/v1/orders/ord-1001"]
 
 
 # --- The page, the README and this module stay in step ----------------------

@@ -16,7 +16,7 @@ This strategy:
 - Matches requests on a path regex, the HTTP method, and optional `headers`, `query`,
   `body` and `json` predicates
 - Serves `file:///` Jinja templates as fixtures, with request data in the template
-  context
+  context, and the rule's own `status` and `response_headers`
 - Renders a `replacement` that contains Jinja delimiters as a template of its own
   (dynamic replacements), e.g. to pick a fixture directory from a header
 - Reverse-proxies to the rewritten URL by default, or answers with an HTTP redirect
@@ -86,6 +86,11 @@ rules:
   non-ASCII characters as they are. A path that is absent never matches, while a
   present `null` matches as the text `null`. A rule with `body`/`json` never matches a
   request without a body.
+- `status`: Optional HTTP status for the response of a [file template](#file-templates)
+  rule, an integer from 200 to 599 (default 200). See
+  [Status codes and headers](#status-codes-and-headers).
+- `response_headers`: Optional mapping of header name -> value added to the response of
+  a file template rule. A list value sends the header once per item.
 
 Predicate values must be strings. YAML reads unquoted `2`, `true` or `2024` as
 numbers and booleans; mockstack converts them back with `str()`, which turns `true`
@@ -145,6 +150,12 @@ offending rule, when:
 - a Jinja `replacement` has a syntax error;
 - a `replacement` mixes Jinja delimiters with a regex backreference (`\1`, `\g<id>`)
   in its literal text;
+- `status` is not an integer from 200 to 599;
+- a `response_headers` entry has an invalid name, no value, or a value that is not a
+  string or number, contains a control character, starts or ends with whitespace or is
+  not Latin-1, or names a header mockstack manages;
+- `status` or `response_headers` is set on a rule whose `replacement` is a plain URL
+  rather than a `file:///` fixture;
 - a named group in `pattern` shadows a reserved template variable (`path`, `method`,
   `query`, `headers`, `request_json`, `groups`).
 
@@ -194,10 +205,50 @@ rules:
 ```
 
 The response content type comes from the file suffix, ignoring a trailing `.j2`
-(`project.json.j2` -> `application/json`). A successfully rendered template always
-returns HTTP 200 stamped `X-Mockstack-Result: template`; see
+(`project.json.j2` -> `application/json`). A successfully rendered template returns
+HTTP 200, or the rule's `status`, stamped `X-Mockstack-Result: template`; see
 [Error handling](#error-handling) for the failure cases. Use the `tojson` filter to
 write request values into JSON fixtures, e.g. `{"id": {{ id | tojson }}}`.
+
+### Status codes and headers
+
+`status` and `response_headers` set the status and extra headers a fixture is served
+with, for example to simulate a dependency that is down:
+
+```yaml
+rules:
+  - name: orders-outage
+    method: GET
+    pattern: ^/orders/api/v1/orders/(?P<order_id>[a-z0-9-]+)$
+    headers:
+      x-test-scenario: outage
+    status: 503
+    response_headers:
+      Retry-After: "30"
+    replacement: file:///fixtures/errors/unavailable.json.j2
+```
+
+- The response is still stamped `X-Mockstack-Result: template`, so a test can tell a
+  fixture's 503 from a 5xx `error` that mockstack itself returned.
+- The status and headers apply only once the fixture has rendered. A missing fixture
+  or a render failure is answered as described in [Error handling](#error-handling),
+  without them.
+- A `204` or `304` is sent without a body; the fixture file must still exist.
+- Header values are sent as written. A list value sends the header once per item (for
+  example several `Set-Cookie` headers), and a `Content-Type` replaces the type
+  inferred from the file suffix. As with predicates, quote values that YAML would read
+  as numbers or booleans.
+- Headers that mockstack manages cannot be set: `Content-Length`, the hop-by-hop
+  headers (`Connection`, `Keep-Alive`, `Proxy-Authenticate`, `Proxy-Authorization`,
+  `TE`, `Trailer`, `Transfer-Encoding`, `Upgrade`), `Date`, `Server`, and the
+  `X-Mockstack-Result` and `X-Mockstack-Rule` result headers.
+- Only fixture rules can set them. A rule whose plain `replacement` is a URL is
+  rejected at startup; a [dynamic replacement](#dynamic-replacements) is only known per
+  request, so one that renders a URL is answered with a 500 stamped `error`.
+
+The cookbook recipe
+[Fixture status codes and headers](../guides/proxyrules-cookbook.md#8-fixture-status-codes-and-headers)
+shows a 503, a 429 with `application/problem+json`, and a 201 with `Location`.
 
 ### Template context
 
@@ -331,7 +382,7 @@ responses -- carries:
 
 | `X-Mockstack-Result` | Status | Meaning |
 | --- | --- | --- |
-| `template` | 200 | A `file:///` fixture was rendered |
+| `template` | 200, or the rule's `status` | A `file:///` fixture was rendered |
 | `proxy` | Upstream's | The request was reverse-proxied to the rewritten URL |
 | `redirect` | 301 / 307 | An HTTP redirect to the rewritten URL |
 | `create` | 201 | No rule matched; resource creation was simulated |

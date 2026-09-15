@@ -10,7 +10,8 @@ request to one *strategy*, selected with the `strategy` setting:
 - `filefixtures`: renders Jinja templates from `templates_dir`, chosen from the request
   path, and simulates resource creation, searches and commands for POSTs.
 - `proxyrules`: evaluates an ordered YAML rules file. The first matching rule serves a
-  `file:///` fixture, reverse-proxies to a real service, or redirects. Rules match on
+  `file:///` fixture (with the rule's optional `status` and `response_headers`),
+  reverse-proxies to a real service, or redirects. Rules match on
   path, method and `headers`/`query`/`body`/`json` predicates, and every response is
   stamped with `X-Mockstack-Result` and `X-Mockstack-Rule`.
 
