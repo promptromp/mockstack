@@ -366,8 +366,11 @@ def test_record_mode_is_announced_at_startup(recording, caplog):
 
 
 # --- scrubber --------------------------------------------------------------------------
+#
+# The strategy fixture applies settings_overrides via `model_copy` (unvalidated), so these
+# pass the scrubber function itself rather than a "module:function" string -- Settings (and
+# its ImportString field) owns loading a string reference; see test_config.py.
 
-SCRUBBERS = "mockstack.tests.strategies.test_proxyrules_record"
 SCRUBBER_CALLS: list[dict[str, Any]] = []
 
 
@@ -384,13 +387,15 @@ def return_bytes(body: str, *, request: Any, rule_name: str | None, path: Path) 
     return body.encode()
 
 
+def raise_error(body: str, *, request: Any, rule_name: str | None, path: Path) -> str | None:
+    raise RuntimeError("scrubber failed")
+
+
 @pytest.mark.asyncio
 async def test_scrubbed_body_is_written_and_served(recording, root, traced_request, upstream_send):
     SCRUBBER_CALLS.clear()
     upstream_send.return_value = upstream_response()
-    response = await recording(proxyrules_record_scrubber=f"{SCRUBBERS}:mask_names").apply(
-        traced_request("/users/user-1")
-    )
+    response = await recording(proxyrules_record_scrubber=mask_names).apply(traced_request("/users/user-1"))
     fixture = root / "users" / "user-1.json.j2"
     assert result_of(response) == (200, "record", "users-fixture")
     assert response.body == b'{"id": "user-1", "name": "***"}'
@@ -401,7 +406,7 @@ async def test_scrubbed_body_is_written_and_served(recording, root, traced_reque
 @pytest.mark.asyncio
 async def test_scrubber_returning_none_skips_recording(recording, root, traced_request, upstream_send, caplog):
     upstream_send.return_value = upstream_response()
-    strategy = recording(proxyrules_record_scrubber=f"{SCRUBBERS}:skip_everything")
+    strategy = recording(proxyrules_record_scrubber=skip_everything)
     with caplog.at_level(logging.WARNING, logger="ProxyRulesStrategy"):
         response = await strategy.apply(traced_request("/users/user-1"))
     assert result_of(response) == (200, "proxy", "users-passthrough")
@@ -413,13 +418,14 @@ async def test_scrubber_returning_none_skips_recording(recording, root, traced_r
 @pytest.mark.asyncio
 async def test_scrubber_returning_a_non_string_is_a_500(recording, root, traced_request, upstream_send):
     upstream_send.return_value = upstream_response()
-    response = await recording(proxyrules_record_scrubber=f"{SCRUBBERS}:return_bytes").apply(
-        traced_request("/users/user-1")
-    )
+    response = await recording(proxyrules_record_scrubber=return_bytes).apply(traced_request("/users/user-1"))
     assert result_of(response) == (500, "error", "users-fixture")
     assert not (root / "users").exists()
 
 
-def test_unloadable_scrubber_fails_at_startup(recording):
-    with pytest.raises(ValueError, match="cannot import 'no_such_module_for_mockstack'"):
-        recording(proxyrules_record_scrubber="no_such_module_for_mockstack:scrub")
+@pytest.mark.asyncio
+async def test_scrubber_that_raises_is_a_500_and_nothing_is_written(recording, root, traced_request, upstream_send):
+    upstream_send.return_value = upstream_response()
+    response = await recording(proxyrules_record_scrubber=raise_error).apply(traced_request("/users/user-1"))
+    assert result_of(response) == (500, "error", "users-fixture")
+    assert not (root / "users").exists()

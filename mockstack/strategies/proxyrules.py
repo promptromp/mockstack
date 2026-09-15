@@ -2,7 +2,7 @@
 
 import logging
 import re
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from functools import cached_property
 from pathlib import Path
 from typing import Any
@@ -28,10 +28,8 @@ from mockstack.constants import (
 )
 from mockstack.intent import looks_like_a_create
 from mockstack.recording import (
-    Scrubber,
     encode_fixture,
     is_recorded,
-    load_scrubber,
     resolve_inside,
     write_fixture_atomically,
 )
@@ -221,8 +219,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         self.verify_ssl_certificates = settings.proxyrules_verify_ssl_certificates
         self.record_mode = settings.proxyrules_record_mode
         self.record_root = settings.proxyrules_record_root
-        scrubber = settings.proxyrules_record_scrubber
-        self.record_scrubber: Scrubber | None = load_scrubber(scrubber) if scrubber else None
+        self.record_scrubber: Callable[..., object] | None = settings.proxyrules_record_scrubber
         # Rule identities (name, falling back to pattern -- the same identity
         # `with_result_headers` stamps) already warned about an outside-root path, so the
         # WARNING is logged only once per rule; later requests log it at DEBUG instead.
@@ -583,7 +580,9 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         return self._scrub(self.record_scrubber, text, request=request, rule=rule, path=path)
 
     @staticmethod
-    def _scrub(scrubber: Scrubber, text: str, *, request: Request, rule: Rule, path: Path) -> tuple[str | None, str]:
+    def _scrub(
+        scrubber: Callable[..., object], text: str, *, request: Request, rule: Rule, path: Path
+    ) -> tuple[str | None, str]:
         """Apply ``scrubber`` to ``text``, raising when it returns anything but ``str`` or ``None``."""
         # Typed as object: a user-supplied scrubber may break its contract.
         scrubbed: object = scrubber(text, request=request, rule_name=rule.name, path=path)

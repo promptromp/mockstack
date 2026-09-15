@@ -1,6 +1,9 @@
 """Tests for mockstack.config: settings construction isolation."""
 
+import json
+
 import pytest
+from pydantic import ValidationError
 
 from mockstack.config import CliSettings, Settings
 from mockstack.constants import ProxyRulesRecordMode, ProxyRulesRedirectVia
@@ -113,7 +116,34 @@ def test_record_settings_from_cli_flags(templates_dir, tmp_path):
     assert settings.proxyrules_record_root == tmp_path
 
 
-def test_record_scrubber_defaults_to_none_and_reads_its_env_var(monkeypatch, templates_dir):
+def test_record_scrubber_defaults_to_none(templates_dir):
     assert Settings(templates_dir=templates_dir).proxyrules_record_scrubber is None
-    monkeypatch.setenv("MOCKSTACK__PROXYRULES_RECORD_SCRUBBER", "scrubbers:mask_emails")
-    assert Settings(templates_dir=templates_dir).proxyrules_record_scrubber == "scrubbers:mask_emails"
+
+
+def test_record_scrubber_from_env_var_imports_the_callable(monkeypatch, templates_dir):
+    """``make_settings`` ignores ``MOCKSTACK__*``, so this builds ``Settings`` directly."""
+    monkeypatch.setenv("MOCKSTACK__PROXYRULES_RECORD_SCRUBBER", "json:dumps")
+    settings = Settings(templates_dir=templates_dir)
+    assert settings.proxyrules_record_scrubber is json.dumps
+
+
+def test_record_scrubber_from_cli_flag_imports_the_callable(templates_dir):
+    settings = CliSettings(
+        _cli_parse_args=[  # type: ignore[call-arg]
+            "--templates-dir",
+            templates_dir,
+            "--proxyrules-record-scrubber",
+            "json:dumps",
+        ]
+    )
+    assert settings.proxyrules_record_scrubber is json.dumps
+
+
+@pytest.mark.parametrize(
+    "reference",
+    ["no_such_module_for_mockstack:scrub", "json:no_such_function", "json:__doc__"],
+    ids=["unimportable-module", "missing-attribute", "not-callable"],
+)
+def test_record_scrubber_rejects_a_bad_reference(templates_dir, reference):
+    with pytest.raises((ValidationError, ValueError), match="proxyrules_record_scrubber"):
+        Settings(templates_dir=templates_dir, proxyrules_record_scrubber=reference)

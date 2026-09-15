@@ -1,8 +1,6 @@
 """Unit tests for mockstack.recording: fixture encoding, confinement and writing."""
 
-import json
 from pathlib import Path
-from typing import cast
 
 import pytest
 
@@ -10,7 +8,6 @@ from mockstack.recording import (
     RECORDED_MARKER,
     encode_fixture,
     is_recorded,
-    load_scrubber,
     resolve_inside,
     write_fixture_atomically,
 )
@@ -177,28 +174,3 @@ def test_recorded_file_read_like_the_strategy_renders_back_to_the_body(env, tmp_
     # The way ProxyRulesStrategy.handle_template_result reads a fixture.
     with open(path) as file:
         assert env.from_string(file.read()).render() == body
-
-
-# --- scrubber --------------------------------------------------------------------------
-
-
-def test_load_scrubber_imports_a_module_function():
-    # cast: `Scrubber` (a Protocol) and `json.dumps`'s concrete signature don't
-    # structurally overlap, so mypy's strict_equality flags a bare identity check here.
-    assert cast(object, load_scrubber("json:dumps")) is json.dumps
-
-
-@pytest.mark.parametrize(
-    ("reference", "message"),
-    [
-        ("json.dumps", "must look like 'module:function'"),
-        (":dumps", "must look like 'module:function'"),
-        ("json:", "must look like 'module:function'"),
-        ("no_such_module_for_mockstack:scrub", "cannot import 'no_such_module_for_mockstack'"),
-        ("json:no_such_function", "'json:no_such_function' is not a callable"),
-        ("json:__doc__", "'json:__doc__' is not a callable"),
-    ],
-)
-def test_load_scrubber_rejects_bad_references(reference, message):
-    with pytest.raises(ValueError, match=message):
-        load_scrubber(reference)

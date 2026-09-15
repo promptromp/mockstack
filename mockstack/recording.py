@@ -5,15 +5,12 @@ it was recorded from. It starts with ``RECORDED_MARKER`` so that ``overwrite`` m
 tell it from a hand-written fixture.
 """
 
-import importlib
 import json
 import os
 import re
 import tempfile
 from pathlib import Path
-from typing import Final, Protocol, cast
-
-from fastapi import Request
+from typing import Final
 
 
 RECORDED_MARKER: Final = "{# mockstack:recorded #}"
@@ -78,32 +75,3 @@ def write_fixture_atomically(path: Path, text: str) -> None:
         temporary.replace(path)
     finally:
         temporary.unlink(missing_ok=True)
-
-
-class Scrubber(Protocol):
-    """Called with every body before it is recorded: returns the text to write, or ``None``
-    to skip recording that response."""
-
-    def __call__(self, body: str, *, request: Request, rule_name: str | None, path: Path) -> str | None: ...
-
-
-def load_scrubber(reference: str) -> Scrubber:
-    """Import the ``module:function`` scrubber named by ``reference``.
-
-    Raises ``ValueError``, naming the setting, when the reference is malformed, the module
-    cannot be imported, or the attribute is not callable.
-    """
-    module_name, separator, attribute = reference.partition(":")
-    if not separator or not module_name or not attribute:
-        raise ValueError(f"proxyrules_record_scrubber must look like 'module:function', got {reference!r}")
-    try:
-        module = importlib.import_module(module_name)
-    except ImportError as exc:
-        raise ValueError(f"proxyrules_record_scrubber: cannot import {module_name!r}: {exc}") from exc
-    scrubber = getattr(module, attribute, None)
-    if not callable(scrubber):
-        # Every proxyrules_record_scrubber mistake is a ValueError naming the setting.
-        raise ValueError(  # noqa: TRY004
-            f"proxyrules_record_scrubber: {reference!r} is not a callable"
-        )
-    return cast(Scrubber, scrubber)

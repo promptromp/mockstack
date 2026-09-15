@@ -1,7 +1,8 @@
+from collections.abc import Callable
 from functools import lru_cache
 from typing import Any, Literal, Self
 
-from pydantic import DirectoryPath, FilePath, model_validator
+from pydantic import DirectoryPath, FilePath, ImportString, model_validator
 from pydantic_settings import (
     BaseSettings,
     CliImplicitFlag,
@@ -103,10 +104,11 @@ class Settings(BaseSettings):
     # required when proxyrules_record_mode is not off.
     proxyrules_record_root: DirectoryPath | None = None
 
-    # optional "module:function" called with every body before it is recorded. It returns
-    # the text to write, or None to skip recording that response. The module must be
-    # importable, e.g. from a directory on PYTHONPATH.
-    proxyrules_record_scrubber: str | None = None
+    # optional "module:function" (pydantic also accepts "module.function") called with
+    # every body before it is recorded. It returns the text to write, or None to skip
+    # recording that response. The reference is imported and checked when settings load,
+    # so a bad reference stops mockstack from starting.
+    proxyrules_record_scrubber: ImportString[Callable[..., Any]] | None = None
 
     # metadata fields to inject into created resources.
     # A few template fields are available. See documentation for more details.
