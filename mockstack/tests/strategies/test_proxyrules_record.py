@@ -376,6 +376,66 @@ async def test_recording_sets_span_attributes(recording, root, traced_request, u
     )
 
 
+@pytest.mark.asyncio
+async def test_recorded_span_attributes_describe_the_fixture_rule_not_the_passthrough(
+    proxyrules_strategy, root, traced_request, upstream_send, span_attributes
+):
+    """The shared rule attributes on a ``record`` response must always describe the
+    fixture rule stamped in X-Mockstack-Rule, never the passthrough used to reach the
+    upstream -- even when the fixture rule is unnamed and methodless and the
+    passthrough is named and has a method."""
+    strategy = proxyrules_strategy(
+        rules=[
+            {
+                "pattern": r"^/users/(?P<user_id>[a-z0-9-]+)$",
+                "replacement": f"file://{root}/users/{{{{ user_id }}}}.json.j2",
+            },
+            {
+                "name": "users-passthrough",
+                "method": "GET",
+                "pattern": r"^/users/(.*)",
+                "replacement": f"{UPSTREAM}/users/\\1",
+            },
+        ],
+        proxyrules_redirect_via=ProxyRulesRedirectVia.REVERSE_PROXY,
+        proxyrules_record_mode=ProxyRulesRecordMode.MISSING,
+        proxyrules_record_root=root,
+    )
+    upstream_send.return_value = upstream_response()
+
+    response = await strategy.apply(traced_request("/users/user-1"))
+
+    assert result_of(response) == (200, "record", r"^/users/(?P<user_id>[a-z0-9-]+)$")
+    attributes = span_attributes()
+    assert "mockstack.proxyrules.rule_name" not in attributes
+    assert "mockstack.proxyrules.rule_method" not in attributes
+    assert attributes["mockstack.proxyrules.rule_pattern"] == r"^/users/(?P<user_id>[a-z0-9-]+)$"
+    assert attributes["mockstack.proxyrules.result_type"] == "record"
+    assert attributes["mockstack.proxyrules.upstream_rule_name"] == "users-passthrough"
+    assert attributes["mockstack.proxyrules.rewritten_url"] == f"{UPSTREAM}/users/user-1"
+    assert attributes["mockstack.proxyrules.recorded_path"] == str((root / "users" / "user-1.json.j2").resolve())
+
+
+@pytest.mark.asyncio
+async def test_not_recorded_span_attributes_describe_the_passthrough(
+    recording, root, traced_request, upstream_send, span_attributes
+):
+    """When the response is not recorded, the response is stamped ``proxy`` with the
+    passthrough rule, so the shared attributes must describe the passthrough, plus the
+    not-recorded reason and the upstream details that led to it."""
+    upstream_send.return_value = upstream_response(status=404)
+
+    response = await recording().apply(traced_request("/users/user-1"))
+
+    assert result_of(response) == (404, "proxy", "users-passthrough")
+    attributes = span_attributes()
+    assert attributes["mockstack.proxyrules.rule_name"] == "users-passthrough"
+    assert attributes["mockstack.proxyrules.result_type"] == "proxy"
+    assert attributes["mockstack.proxyrules.not_recorded_reason"] == "upstream status 404, rule serves 200"
+    assert attributes["mockstack.proxyrules.upstream_rule_name"] == "users-passthrough"
+    assert attributes["mockstack.proxyrules.rewritten_url"] == f"{UPSTREAM}/users/user-1"
+
+
 # --- scrubber --------------------------------------------------------------------------
 #
 # The strategy fixture applies settings_overrides via `model_copy` (unvalidated), so these

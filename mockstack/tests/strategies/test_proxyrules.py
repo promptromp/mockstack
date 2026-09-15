@@ -304,6 +304,18 @@ async def test_redirect_response_carries_result_headers(apply_rule, traced_reque
 
 
 @pytest.mark.asyncio
+async def test_redirect_result_span_attribute_is_redirect(apply_rule, traced_request, span_attributes):
+    """A 307 redirect result sets the span's ``result_type`` to ``redirect``, the same
+    as the response's stamped header."""
+    await apply_rule(
+        {"pattern": r"^/api/(.*)", "replacement": r"https://api.example/\1"},
+        traced_request("/api/x"),
+        proxyrules_redirect_via=ProxyRulesRedirectVia.HTTP_TEMPORARY_REDIRECT,
+    )
+    assert span_attributes()["mockstack.proxyrules.result_type"] == "redirect"
+
+
+@pytest.mark.asyncio
 async def test_proxy_rules_strategy_apply_no_match(proxyrules_strategy, traced_request):
     """A request no rule matches is a 404 stamped ``missing``, with no rule header."""
     response = await proxyrules_strategy().apply(traced_request("/nonexistent/path"))
@@ -652,6 +664,23 @@ async def test_proxy_rules_strategy_apply_reverse_proxy(apply_rule, traced_reque
 
 
 @pytest.mark.asyncio
+async def test_reverse_proxy_result_span_attribute_is_proxy(apply_rule, traced_request, upstream_send, span_attributes):
+    """A plain reverse-proxy URL result (record mode off) sets the span's
+    ``result_type`` to ``proxy``, the same as the response's stamped header."""
+    upstream_send.return_value = httpx.Response(200, headers={"content-type": "application/json"}, content=b"{}")
+    await apply_rule(
+        {
+            "name": "api-passthrough",
+            "pattern": r"^/api/(.*)",
+            "replacement": r"https://api.example/\1",
+        },
+        traced_request(PROJECT_PATH),
+        proxyrules_redirect_via=ProxyRulesRedirectVia.REVERSE_PROXY,
+    )
+    assert span_attributes()["mockstack.proxyrules.result_type"] == "proxy"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("error", "status_code", "message"),
     [
@@ -895,13 +924,14 @@ def test_proxy_rules_strategy_update_opentelemetry(proxyrules_strategy, traced_r
     request = traced_request("/test")
     rule = Rule(pattern="/test", replacement="/target", method="GET", name="test_rule")
 
-    proxyrules_strategy().update_opentelemetry(request, rule, "/target")
+    proxyrules_strategy().update_opentelemetry(request, rule, "/target", result_type="proxy")
 
     span.set_attribute.assert_any_call("mockstack.proxyrules.rule_name", "test_rule")
     span.set_attribute.assert_any_call("mockstack.proxyrules.rule_method", "GET")
     span.set_attribute.assert_any_call("mockstack.proxyrules.rule_pattern", "/test")
     span.set_attribute.assert_any_call("mockstack.proxyrules.rule_replacement", "/target")
     span.set_attribute.assert_any_call("mockstack.proxyrules.rewritten_url", "/target")
+    span.set_attribute.assert_any_call("mockstack.proxyrules.result_type", "proxy")
 
 
 def test_maybe_update_response_headers_describes_buffered_body():

@@ -382,7 +382,8 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
 
     async def handle_url_result(self, request: Request, rule: Rule, result: URLRuleResult) -> Response:
         """Handle URL results by redirecting to the target URL."""
-        self.update_opentelemetry(request, rule, result.url)
+        result_type = "proxy" if self.redirect_via == ProxyRulesRedirectVia.REVERSE_PROXY else "redirect"
+        self.update_opentelemetry(request, rule, result.url, result_type=result_type)
 
         match self.redirect_via:
             case ProxyRulesRedirectVia.HTTP_TEMPORARY_REDIRECT:
@@ -390,18 +391,18 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
                     url=with_query_string(result.url, request.url.query),
                     status_code=status.HTTP_307_TEMPORARY_REDIRECT,
                 )
-                return with_result_headers(response, rule=rule, result_type="redirect")
+                return with_result_headers(response, rule=rule, result_type=result_type)
 
             case ProxyRulesRedirectVia.HTTP_PERMANENT_REDIRECT:
                 response = RedirectResponse(
                     url=with_query_string(result.url, request.url.query),
                     status_code=status.HTTP_301_MOVED_PERMANENTLY,
                 )
-                return with_result_headers(response, rule=rule, result_type="redirect")
+                return with_result_headers(response, rule=rule, result_type=result_type)
 
             case ProxyRulesRedirectVia.REVERSE_PROXY:
                 response = await self.reverse_proxy(request, result.url)
-                return with_result_headers(response, rule=rule, result_type="proxy")
+                return with_result_headers(response, rule=rule, result_type=result_type)
 
             case _:
                 raise ValueError(f"Invalid redirect via value: {self.redirect_via=}")
@@ -505,7 +506,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             return await self.handle_template_result(request, rule, result)
 
         upstream_rule, url = upstream
-        self.update_opentelemetry(request, upstream_rule, url)
+        self.update_opentelemetry_upstream(request, upstream_rule, url)
         response = await self.reverse_proxy(request, url)
         text, reason = self._recordable_text(request, rule, path, response)
         if text is None:
@@ -516,6 +517,11 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             expected = request.method.upper() in _UNRECORDED_METHODS or reason == _SCRUBBER_SKIPPED_REASON
             level = logging.INFO if expected else logging.WARNING
             self.logger.log(level, "[rule:%s] not recorded: %s", rule.name, reason)
+            # The response is stamped ``proxy`` with the upstream (passthrough) rule, so
+            # the shared attributes must describe that rule too, plus why it was not
+            # recorded.
+            self.update_opentelemetry(request, upstream_rule, url, result_type="proxy")
+            request.state.span.set_attribute("mockstack.proxyrules.not_recorded_reason", reason)
             return with_result_headers(response, rule=upstream_rule, result_type="proxy")
 
         self._write_fixture(rule, path, text)
@@ -713,8 +719,14 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         span.set_attribute("mockstack.proxyrules.template_path", result.template_path)
         span.set_attribute("mockstack.proxyrules.result_type", result_type)
 
-    def update_opentelemetry(self, request: Request, rule: Rule, url: str) -> None:
-        """Update the opentelemetry span with the proxy rules rule details."""
+    def update_opentelemetry(self, request: Request, rule: Rule, url: str, *, result_type: str) -> None:
+        """Update the opentelemetry span with the proxy rules rule details.
+
+        ``rule`` is always the rule named in ``X-Mockstack-Rule`` for this response,
+        and ``result_type`` its result type -- explicit rather than guessed, since the
+        caller (redirect, reverse proxy, or a record-mode response that was not
+        recorded) is the one that knows it.
+        """
         span = request.state.span
         if rule.name is not None:
             span.set_attribute("mockstack.proxyrules.rule_name", rule.name)
@@ -723,4 +735,17 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
 
         span.set_attribute("mockstack.proxyrules.rule_pattern", rule.pattern)
         span.set_attribute("mockstack.proxyrules.rule_replacement", rule.replacement)
+        span.set_attribute("mockstack.proxyrules.rewritten_url", url)
+        span.set_attribute("mockstack.proxyrules.result_type", result_type)
+
+    def update_opentelemetry_upstream(self, request: Request, upstream_rule: Rule, url: str) -> None:
+        """Record the record-mode upstream candidate's identity, before proxying to it.
+
+        This is deliberately separate from ``update_opentelemetry``: at this point the
+        response is not yet known to be stamped with ``upstream_rule`` (a fixture rule
+        may end up serving it instead, on ``record``), so the shared rule attributes
+        are left untouched here.
+        """
+        span = request.state.span
+        span.set_attribute("mockstack.proxyrules.upstream_rule_name", str(upstream_rule.name or upstream_rule.pattern))
         span.set_attribute("mockstack.proxyrules.rewritten_url", url)
