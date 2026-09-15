@@ -5,8 +5,24 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from mockstack.config import CliSettings, Settings
+from mockstack.config import CliSettings, OpenTelemetrySettings, Settings, SettingsDependencyError
 from mockstack.constants import ProxyRulesRecordMode, ProxyRulesRedirectVia
+
+
+@pytest.mark.parametrize("model", [Settings, CliSettings, OpenTelemetrySettings])
+def test_every_setting_has_help_text(model):
+    """Attribute docstrings become each setting's description, which ``--help`` shows."""
+    assert [name for name, field in model.model_fields.items() if not field.description] == []
+
+
+def test_settings_dependency_error_names_the_settings_plainly():
+    """Outside the command line (e.g. ``uvicorn --factory``), the message names settings
+    by their Python names; the CLI renders the same template with flags instead."""
+    error = SettingsDependencyError("{templates_dir} is required when {strategy} is filefixtures")
+
+    assert str(error) == "templates_dir is required when strategy is filefixtures"
+    assert error.template == "{templates_dir} is required when {strategy} is filefixtures"
+    assert error.settings == ("templates_dir", "strategy")
 
 
 def test_make_settings_ignores_mockstack_env_vars(monkeypatch, make_settings, templates_dir):

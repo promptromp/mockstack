@@ -13,7 +13,8 @@ Upper-case the option name and add the prefix: `proxyrules_rules_filename` becom
 `opentelemetry.enabled` becomes `MOCKSTACK__OPENTELEMETRY__ENABLED`. On the command
 line, use the kebab-case form, e.g. `--proxyrules-rules-filename`, with a dot for nested
 options (`--opentelemetry.enabled`); boolean options are flags with a `--no-` form.
-`mockstack --help` lists every flag.
+`mockstack --help` describes every flag, and `mockstack --version` prints the installed
+version.
 
 ## General Settings
 
@@ -140,3 +141,36 @@ uvx mockstack --strategy filefixtures --templates-dir ~/mockstack-templates/
 uvx mockstack --strategy proxyrules --proxyrules-rules-filename ./rules.yml --proxyrules-redirect-via http_307_temporary
 uvx mockstack --strategy proxyrules --proxyrules-rules-filename ./rules.yml --proxyrules-record-mode missing --proxyrules-record-root ./fixtures
 ```
+
+### Configuration errors
+
+When a setting is missing or invalid, a flag is not recognized, or the rules file does
+not load, mockstack exits with status 2 and a short message instead of a traceback. It
+names each setting by its flag and lists the environment variables for the same
+settings, since the value may have come from the command line, the environment or a
+`.env` file:
+
+```console
+$ mockstack
+mockstack: error: --templates-dir is required when --strategy is filefixtures (the default)
+  environment or .env: MOCKSTACK__TEMPLATES_DIR, MOCKSTACK__STRATEGY
+Run 'mockstack --help' to see all options.
+
+$ mockstack --port abc --strategy nope
+mockstack: error: 2 invalid settings
+  invalid value 'abc' for --port: input should be a valid integer, unable to parse string as an integer
+  invalid value 'nope' for --strategy: input should be 'filefixtures' or 'proxyrules'
+  environment or .env: MOCKSTACK__PORT, MOCKSTACK__STRATEGY
+Run 'mockstack --help' to see all options.
+
+$ mockstack --template-dir ./templates
+mockstack: error: unrecognized arguments: --template-dir ./templates
+  --template-dir: did you mean --templates-dir?
+Run 'mockstack --help' to see all options.
+```
+
+A rules file that does not load is named with the offending rule; see
+[Load-time validation](strategies/proxyrules.md#load-time-validation).
+
+Help and error output are coloured on a terminal. Set `NO_COLOR=1` to turn colour off,
+or `FORCE_COLOR=1` to keep it when the output is piped.
