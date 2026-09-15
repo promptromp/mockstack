@@ -6,10 +6,17 @@ from importlib import metadata
 from fastapi import FastAPI
 
 from mockstack.config import Settings
+from mockstack.constants import ProxyRulesRecordMode
 
 
 def announce(app: FastAPI, settings: Settings) -> None:
-    """Log the startup message with the active settings."""
+    """Log the startup message with the active settings.
+
+    This runs from the FastAPI lifespan, after ``dictConfig`` has applied the
+    configured logging (see ``lifespan_provider``), so a WARNING logged here reaches
+    the configured handlers -- unlike one logged while the strategy is constructed in
+    ``create_app``, which runs earlier, before logging is configured.
+    """
     logger = logging.getLogger("uvicorn")
     extra = {"markup": True}
 
@@ -35,3 +42,11 @@ def announce(app: FastAPI, settings: Settings) -> None:
         settings.opentelemetry.capture_response_body,
         extra=extra,
     )
+
+    if settings.strategy == "proxyrules" and settings.proxyrules_record_mode != ProxyRulesRecordMode.OFF:
+        logger.warning(
+            "proxyrules record mode %r is on: fixture files under %s are written from upstream responses",
+            str(settings.proxyrules_record_mode),
+            settings.proxyrules_record_root,
+            extra=extra,
+        )

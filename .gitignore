@@ -176,3 +176,4 @@ templates/*.j2
 
 # rules files rendered from the examples' ${VAR} placeholders
 examples/**/rules.local.yml
+examples/proxyrules-cookbook/09-recording/fixtures/

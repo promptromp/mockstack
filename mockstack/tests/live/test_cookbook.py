@@ -90,6 +90,10 @@ R8_THROTTLED = 'curl -i -H "X-Test-Scenario: throttled" http://127.0.0.1:8000/or
 R8_CREATED = """curl -i -H "Content-Type: application/json" -d '{"customer": "cust-7"}' http://127.0.0.1:8000/orders/api/v1/orders"""
 R8_UNTAGGED = "curl -i http://127.0.0.1:8000/orders/api/v1/orders/ord-1001"
 
+# Recipe 9: record fixtures from a real service. The same command records, then replays.
+R9_RECORD = 'curl -i "http://127.0.0.1:8000/users/api/v1/users/user-7?contact=ada@example.com"'
+R9_REPLAY = 'curl -i "http://127.0.0.1:8000/users/api/v1/users/user-7?contact=ada@example.com"'
+
 TESTED_CURLS = {name: value for name, value in dict(globals()).items() if re.fullmatch(r"R\d_[A-Z0-9_]+", name)}
 
 
@@ -522,6 +526,50 @@ def test_recipe8_untagged_request_passes_through(recipe8, upstream):
     assert [c["path"] for c in upstream.calls] == ["/api/v1/orders/ord-1001"]
 
 
+# --- Recipe 9 ---------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def recipe9(upstream, render_rules, mockstack_server, tmp_path_factory):
+    """mockstack recording recipe 9 into a temporary directory, never into the repository.
+
+    The page starts mockstack from the recipe directory with ``PYTHONPATH=.``, so the
+    ``scrubbers`` module is importable; the test puts the recipe directory on the path the
+    same way while the strategy loads it.
+    """
+    recipe_dir = COOKBOOK_DIR / "09-recording"
+    fixtures = tmp_path_factory.mktemp("recorded-fixtures")
+    rules_file = render_rules(recipe_dir / "rules.yml", FIXTURES_DIR=str(fixtures), UPSTREAM_URL=upstream.base_url)
+    with pytest.MonkeyPatch.context() as patch:
+        patch.syspath_prepend(str(recipe_dir))
+        live = mockstack_server(
+            rules_file,
+            proxyrules_record_mode="missing",
+            proxyrules_record_root=fixtures,
+            proxyrules_record_scrubber="scrubbers:mask_emails",
+        )
+    return str(live.base_url), fixtures
+
+
+def test_recipe9_first_request_is_recorded_with_emails_masked(recipe9, upstream):
+    base, fixtures = recipe9
+    r = curl(R9_RECORD, base)
+    assert_result(r, 200, "record", "users-recorded")
+    assert r.json()["query"] == {"contact": "***@***"}
+    assert len(upstream.calls) == 1
+    assert "ada@example.com" not in (fixtures / "users" / "user-7.json.j2").read_text()
+
+
+def test_recipe9_repeated_request_is_served_from_the_recorded_file(recipe9, upstream):
+    base, _ = recipe9
+    curl(R9_RECORD, base)  # records it, unless the previous test already did
+    upstream.calls.clear()
+    r = curl(R9_REPLAY, base)
+    assert_result(r, 200, "template", "users-recorded")
+    assert r.json()["query"] == {"contact": "***@***"}
+    assert upstream.calls == []
+
+
 # --- The page, the README and this module stay in step ----------------------
 
 
@@ -551,7 +599,10 @@ def test_cookbook_page_embeds_every_recipe_file():
     recipe_files = [
         path
         for path in sorted(COOKBOOK_DIR.glob("0*/**/*"))
-        if path.is_file() and "__pycache__" not in path.parts and path.name != "rules.local.yml"
+        if path.is_file()
+        and "__pycache__" not in path.parts
+        and path.name != "rules.local.yml"
+        and not path.is_relative_to(COOKBOOK_DIR / "09-recording" / "fixtures")
     ]
     assert recipe_files
     for path in recipe_files:

@@ -134,29 +134,37 @@ async def test_record_mode_matrix(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("method", "upstream", "reason"),
+    ("method", "upstream", "reason", "expected_level"),
     [
-        ("GET", upstream_response(status=404), "upstream status 404, rule serves 200"),
-        ("GET", upstream_response(content=b"\xff\xfe binary"), "the upstream body is not UTF-8"),
-        ("HEAD", upstream_response(), "HEAD responses are never recorded"),
-        ("OPTIONS", upstream_response(), "OPTIONS responses are never recorded"),
+        ("GET", upstream_response(status=404), "upstream status 404, rule serves 200", logging.WARNING),
+        ("GET", upstream_response(content=b"\xff\xfe binary"), "the upstream body is not UTF-8", logging.WARNING),
+        ("HEAD", upstream_response(), "HEAD responses are never recorded", logging.INFO),
+        ("OPTIONS", upstream_response(), "OPTIONS responses are never recorded", logging.INFO),
         (
             "GET",
             httpx.Response(200, headers={"content-type": "application/json", "content-encoding": "br"}, content=BODY),
             "the upstream body is still encoded (br)",
+            logging.WARNING,
         ),
     ],
     ids=["status-mismatch", "binary-body", "head", "options", "still-encoded"],
 )
 async def test_unrecordable_response_is_proxied_and_not_written(
-    recording, root, traced_request, upstream_send, caplog, span, method, upstream, reason
+    recording, root, traced_request, upstream_send, caplog, span, method, upstream, reason, expected_level
 ):
+    """M-c: HEAD/OPTIONS is expected on every request to a matched fixture rule while
+    it may still be recorded, so it is logged at INFO; every other not-recorded
+    reason is a genuine surprise and stays at WARNING."""
     upstream_send.return_value = upstream
-    with caplog.at_level(logging.WARNING, logger="ProxyRulesStrategy"):
+    with caplog.at_level(logging.INFO, logger="ProxyRulesStrategy"):
         response = await recording().apply(traced_request("/users/user-1", method=method))
     assert result_of(response) == (upstream.status_code, "proxy", "users-passthrough")
     assert not (root / "users").exists()
-    assert f"[rule:users-fixture] not recorded: {reason}" in caplog.text
+    matching = [
+        record for record in caplog.records if f"[rule:users-fixture] not recorded: {reason}" in record.getMessage()
+    ]
+    assert len(matching) == 1
+    assert matching[0].levelno == expected_level
     # M2: telemetry is updated for the proxied upstream even when its response is not
     # recorded, the same as a plain passthrough would get.
     span.set_attribute.assert_any_call("mockstack.proxyrules.rewritten_url", f"{UPSTREAM}/users/user-1")
@@ -337,16 +345,25 @@ async def test_dotdot_in_rendered_path_is_not_recorded(proxyrules_strategy, root
 
 @pytest.mark.asyncio
 async def test_write_failure_is_a_500_naming_the_fixture_rule(
-    recording, root, traced_request, upstream_send, monkeypatch
+    recording, root, traced_request, upstream_send, monkeypatch, caplog
 ):
     def read_only(path: Path, _text: str) -> None:
         raise PermissionError(f"read-only: {path}")
 
     monkeypatch.setattr("mockstack.strategies.proxyrules.write_fixture_atomically", read_only)
     upstream_send.return_value = upstream_response()
-    response = await recording().apply(traced_request("/users/user-1"))
+    fixture = root / "users" / "user-1.json.j2"
+    with caplog.at_level(logging.ERROR, logger="ProxyRulesStrategy"):
+        response = await recording().apply(traced_request("/users/user-1"))
     assert result_of(response) == (500, "error", "users-fixture")
-    assert not (root / "users" / "user-1.json.j2").exists()
+    assert not fixture.exists()
+    # M-d: a dedicated ERROR line names the fixture rule and the path that could not
+    # be written, distinct from `apply`'s generic unhandled-error log.
+    errors = [record for record in caplog.records if record.levelno == logging.ERROR]
+    assert any(
+        "[rule:users-fixture] could not record" in record.getMessage() and str(fixture.resolve()) in record.getMessage()
+        for record in errors
+    )
 
 
 @pytest.mark.asyncio
@@ -359,7 +376,82 @@ async def test_recording_sets_span_attributes(recording, root, traced_request, u
     )
 
 
-def test_record_mode_is_announced_at_startup(recording, caplog):
-    with caplog.at_level(logging.WARNING, logger="ProxyRulesStrategy"):
-        recording("overwrite")
-    assert "record mode 'overwrite' is on" in caplog.text
+# --- scrubber --------------------------------------------------------------------------
+#
+# The strategy fixture applies settings_overrides via `model_copy` (unvalidated), so these
+# pass the scrubber function itself rather than a "module:function" string -- Settings (and
+# its ImportString field) owns loading a string reference; see test_config.py.
+
+SCRUBBER_CALLS: list[dict[str, Any]] = []
+
+
+def mask_names(body: str, *, request: Any, rule_name: str | None, path: Path) -> str | None:
+    SCRUBBER_CALLS.append({"path": request.url.path, "rule_name": rule_name, "file": path})
+    return body.replace("Ada", "***")
+
+
+def skip_everything(body: str, *, request: Any, rule_name: str | None, path: Path) -> str | None:
+    return None
+
+
+def return_bytes(body: str, *, request: Any, rule_name: str | None, path: Path) -> Any:
+    return body.encode()
+
+
+def raise_error(body: str, *, request: Any, rule_name: str | None, path: Path) -> str | None:
+    raise RuntimeError("scrubber failed")
+
+
+@pytest.mark.asyncio
+async def test_scrubbed_body_is_written_and_served(recording, root, traced_request, upstream_send):
+    SCRUBBER_CALLS.clear()
+    upstream_send.return_value = upstream_response()
+    response = await recording(proxyrules_record_scrubber=mask_names).apply(traced_request("/users/user-1"))
+    fixture = root / "users" / "user-1.json.j2"
+    assert result_of(response) == (200, "record", "users-fixture")
+    assert response.body == b'{"id": "user-1", "name": "***"}'
+    assert "Ada" not in fixture.read_text()
+    assert [{"path": "/users/user-1", "rule_name": "users-fixture", "file": fixture.resolve()}] == SCRUBBER_CALLS
+
+
+@pytest.mark.asyncio
+async def test_scrubber_returning_none_skips_recording(recording, root, traced_request, upstream_send, caplog):
+    """A scrubber returning None is the documented, intentional way to skip recording an
+    endpoint, so the not-recorded reason is logged at INFO, not WARNING."""
+    upstream_send.return_value = upstream_response()
+    strategy = recording(proxyrules_record_scrubber=skip_everything)
+    with caplog.at_level(logging.INFO, logger="ProxyRulesStrategy"):
+        response = await strategy.apply(traced_request("/users/user-1"))
+    assert result_of(response) == (200, "proxy", "users-passthrough")
+    assert response.body == BODY
+    assert not (root / "users").exists()
+    matching = [record for record in caplog.records if "not recorded: the scrubber skipped it" in record.getMessage()]
+    assert len(matching) == 1
+    assert matching[0].levelno == logging.INFO
+    assert not any(record.levelno == logging.WARNING for record in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_scrubber_returning_a_non_string_is_a_500(recording, root, traced_request, upstream_send, caplog):
+    upstream_send.return_value = upstream_response()
+    with caplog.at_level(logging.ERROR, logger="ProxyRulesStrategy"):
+        response = await recording(proxyrules_record_scrubber=return_bytes).apply(traced_request("/users/user-1"))
+    assert result_of(response) == (500, "error", "users-fixture")
+    assert not (root / "users").exists()
+    # M-d: a dedicated ERROR line names the fixture rule and the path, distinct from
+    # `apply`'s generic unhandled-error log.
+    errors = [record for record in caplog.records if record.levelno == logging.ERROR]
+    assert any("[rule:users-fixture] scrubber failed for" in record.getMessage() for record in errors)
+
+
+@pytest.mark.asyncio
+async def test_scrubber_that_raises_is_a_500_and_nothing_is_written(
+    recording, root, traced_request, upstream_send, caplog
+):
+    upstream_send.return_value = upstream_response()
+    with caplog.at_level(logging.ERROR, logger="ProxyRulesStrategy"):
+        response = await recording(proxyrules_record_scrubber=raise_error).apply(traced_request("/users/user-1"))
+    assert result_of(response) == (500, "error", "users-fixture")
+    assert not (root / "users").exists()
+    errors = [record for record in caplog.records if record.levelno == logging.ERROR]
+    assert any("[rule:users-fixture] scrubber failed for" in record.getMessage() for record in errors)

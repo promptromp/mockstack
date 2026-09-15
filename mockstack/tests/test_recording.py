@@ -4,7 +4,13 @@ from pathlib import Path
 
 import pytest
 
-from mockstack.recording import RECORDED_MARKER, encode_fixture, is_recorded, resolve_inside, write_fixture_atomically
+from mockstack.recording import (
+    RECORDED_MARKER,
+    encode_fixture,
+    is_recorded,
+    resolve_inside,
+    write_fixture_atomically,
+)
 from mockstack.templating import templates_env_provider
 
 

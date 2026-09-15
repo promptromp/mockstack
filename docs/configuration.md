@@ -53,8 +53,9 @@ See [ProxyRules](strategies/proxyrules.md) for how rules are written and evaluat
 | `proxyrules_reverse_proxy_timeout` | `MOCKSTACK__PROXYRULES_REVERSE_PROXY_TIMEOUT` | float | `10.0` | Timeout in seconds for reverse-proxied upstream requests. An upstream that does not answer in time is answered with a 504 stamped `X-Mockstack-Result: error`. `None` (when constructing `Settings` in Python) disables the timeout |
 | `proxyrules_simulate_create_on_missing` | `MOCKSTACK__PROXYRULES_SIMULATE_CREATE_ON_MISSING` | boolean | `false` | Whether a request that matches no rule and looks like a resource creation (e.g. a POST) gets a simulated 201 (`X-Mockstack-Result: create`) instead of a 404 (`missing`) |
 | `proxyrules_verify_ssl_certificates` | `MOCKSTACK__PROXYRULES_VERIFY_SSL_CERTIFICATES` | boolean | `true` | Whether to verify the TLS certificates of HTTPS upstreams when reverse proxying. Disable with caution, e.g. for a trusted upstream with a self-signed certificate |
-| `proxyrules_record_mode` | `MOCKSTACK__PROXYRULES_RECORD_MODE` | string | `off` | Record mode. `missing` writes the upstream response into a fixture rule's file when that file does not exist yet; `overwrite` also re-records files that were recorded before, never hand-written ones. Requires `proxyrules_record_root` and `reverse_proxy`. Never enable on a shared or exposed instance; see [Recording fixtures](strategies/proxyrules.md#recording-fixtures) |
-| `proxyrules_record_root` | `MOCKSTACK__PROXYRULES_RECORD_ROOT` | path | - | Existing directory that every recorded fixture file must resolve inside, symlinks followed. Required when `proxyrules_record_mode` is not `off` |
+| `proxyrules_record_mode` | `MOCKSTACK__PROXYRULES_RECORD_MODE` | string | `off` | Applies to the `proxyrules` strategy. Record mode. `missing` writes the upstream response into a fixture rule's file when that file does not exist yet; `overwrite` also re-records files that were recorded before, never hand-written ones. Requires `proxyrules_record_root` and `reverse_proxy`. Never enable on a shared or exposed instance; see [Recording fixtures](strategies/proxyrules.md#recording-fixtures). Environment variables take the lower-case values; `mockstack --help` lists the enum names (`OFF`, `MISSING`, `OVERWRITE`), and the command line accepts either form |
+| `proxyrules_record_root` | `MOCKSTACK__PROXYRULES_RECORD_ROOT` | path | - | Applies to the `proxyrules` strategy. Existing directory that every recorded fixture file must resolve inside, symlinks followed. Required when `proxyrules_record_mode` is not `off` |
+| `proxyrules_record_scrubber` | `MOCKSTACK__PROXYRULES_RECORD_SCRUBBER` | string | - | Optional `module:function` called with every body before it is recorded; it returns the text to write, or `None` to skip that response. Imported and checked when settings load, so the module must be importable (e.g. `PYTHONPATH=.`); see [Scrubbing recorded bodies](strategies/proxyrules.md#scrubbing-recorded-bodies) |
 
 ## Resource Creation Settings
 
@@ -119,6 +120,16 @@ MOCKSTACK__PROXYRULES_REDIRECT_VIA=reverse_proxy
 MOCKSTACK__PROXYRULES_REVERSE_PROXY_TIMEOUT=5
 ```
 
+And one that records fixtures from the real services behind the rules (see
+[Recording fixtures](strategies/proxyrules.md#recording-fixtures)):
+
+```env
+MOCKSTACK__STRATEGY=proxyrules
+MOCKSTACK__PROXYRULES_RULES_FILENAME=./rules.yml
+MOCKSTACK__PROXYRULES_RECORD_MODE=missing
+MOCKSTACK__PROXYRULES_RECORD_ROOT=/path/to/fixtures
+```
+
 ## Command Line Usage
 
 You can also set configuration options via command line arguments:
@@ -126,4 +137,5 @@ You can also set configuration options via command line arguments:
 ```bash
 uvx mockstack --strategy filefixtures --templates-dir ~/mockstack-templates/
 uvx mockstack --strategy proxyrules --proxyrules-rules-filename ./rules.yml --proxyrules-redirect-via http_307_temporary
+uvx mockstack --strategy proxyrules --proxyrules-rules-filename ./rules.yml --proxyrules-record-mode missing --proxyrules-record-root ./fixtures
 ```

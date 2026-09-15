@@ -1,6 +1,9 @@
 """Tests for mockstack.config: settings construction isolation."""
 
+import json
+
 import pytest
+from pydantic import ValidationError
 
 from mockstack.config import CliSettings, Settings
 from mockstack.constants import ProxyRulesRecordMode, ProxyRulesRedirectVia
@@ -65,28 +68,47 @@ def test_record_mode_defaults_to_off(make_settings, templates_dir):
     assert settings.proxyrules_record_root is None
 
 
-def test_record_mode_requires_a_record_root(make_settings, templates_dir):
+def test_record_mode_requires_a_record_root(make_settings, proxyrules_rules_filename):
     with pytest.raises(ValueError, match="proxyrules_record_root is required when proxyrules_record_mode is not off"):
-        make_settings(templates_dir=templates_dir, proxyrules_record_mode="missing")
+        make_settings(
+            strategy="proxyrules",
+            proxyrules_rules_filename=proxyrules_rules_filename,
+            proxyrules_record_mode="missing",
+        )
 
 
-def test_record_mode_requires_reverse_proxy(make_settings, templates_dir, tmp_path):
+def test_record_mode_requires_reverse_proxy(make_settings, proxyrules_rules_filename, tmp_path):
     with pytest.raises(ValueError, match="proxyrules_record_mode requires proxyrules_redirect_via to be reverse_proxy"):
         make_settings(
-            templates_dir=templates_dir,
+            strategy="proxyrules",
+            proxyrules_rules_filename=proxyrules_rules_filename,
             proxyrules_record_mode="overwrite",
             proxyrules_record_root=tmp_path,
             proxyrules_redirect_via=ProxyRulesRedirectVia.HTTP_TEMPORARY_REDIRECT,
         )
 
 
-def test_record_root_must_be_an_existing_directory(make_settings, templates_dir, tmp_path):
+def test_record_root_must_be_an_existing_directory(make_settings, proxyrules_rules_filename, tmp_path):
     with pytest.raises(ValueError, match="proxyrules_record_root"):
         make_settings(
-            templates_dir=templates_dir,
+            strategy="proxyrules",
+            proxyrules_rules_filename=proxyrules_rules_filename,
             proxyrules_record_mode="missing",
             proxyrules_record_root=tmp_path / "absent",
         )
+
+
+def test_record_mode_validation_is_scoped_to_proxyrules(make_settings, templates_dir):
+    """M-f: the record-mode checks apply only to the proxyrules strategy, so a
+    filefixtures instance can set proxyrules_record_mode without also setting a
+    record root."""
+    settings = make_settings(
+        strategy="filefixtures",
+        templates_dir=templates_dir,
+        proxyrules_record_mode="missing",
+    )
+    assert settings.proxyrules_record_mode == ProxyRulesRecordMode.MISSING
+    assert settings.proxyrules_record_root is None
 
 
 def test_record_settings_from_env_vars(monkeypatch, templates_dir, tmp_path):
@@ -111,3 +133,36 @@ def test_record_settings_from_cli_flags(templates_dir, tmp_path):
     )
     assert settings.proxyrules_record_mode == ProxyRulesRecordMode.OVERWRITE
     assert settings.proxyrules_record_root == tmp_path
+
+
+def test_record_scrubber_defaults_to_none(templates_dir):
+    assert Settings(templates_dir=templates_dir).proxyrules_record_scrubber is None
+
+
+def test_record_scrubber_from_env_var_imports_the_callable(monkeypatch, templates_dir):
+    """``make_settings`` ignores ``MOCKSTACK__*``, so this builds ``Settings`` directly."""
+    monkeypatch.setenv("MOCKSTACK__PROXYRULES_RECORD_SCRUBBER", "json:dumps")
+    settings = Settings(templates_dir=templates_dir)
+    assert settings.proxyrules_record_scrubber is json.dumps
+
+
+def test_record_scrubber_from_cli_flag_imports_the_callable(templates_dir):
+    settings = CliSettings(
+        _cli_parse_args=[  # type: ignore[call-arg]
+            "--templates-dir",
+            templates_dir,
+            "--proxyrules-record-scrubber",
+            "json:dumps",
+        ]
+    )
+    assert settings.proxyrules_record_scrubber is json.dumps
+
+
+@pytest.mark.parametrize(
+    "reference",
+    ["no_such_module_for_mockstack:scrub", "json:no_such_function", "json:__doc__"],
+    ids=["unimportable-module", "missing-attribute", "not-callable"],
+)
+def test_record_scrubber_rejects_a_bad_reference(templates_dir, reference):
+    with pytest.raises((ValidationError, ValueError), match="proxyrules_record_scrubber"):
+        Settings(templates_dir=templates_dir, proxyrules_record_scrubber=reference)

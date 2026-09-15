@@ -1,7 +1,8 @@
+from collections.abc import Callable
 from functools import lru_cache
 from typing import Any, Literal, Self
 
-from pydantic import DirectoryPath, FilePath, model_validator
+from pydantic import DirectoryPath, FilePath, ImportString, model_validator
 from pydantic_settings import (
     BaseSettings,
     CliImplicitFlag,
@@ -103,6 +104,12 @@ class Settings(BaseSettings):
     # required when proxyrules_record_mode is not off.
     proxyrules_record_root: DirectoryPath | None = None
 
+    # optional "module:function" (pydantic also accepts "module.function") called with
+    # every body before it is recorded. It returns the text to write, or None to skip
+    # recording that response. The reference is imported and checked when settings load,
+    # so a bad reference stops mockstack from starting.
+    proxyrules_record_scrubber: ImportString[Callable[..., Any]] | None = None
+
     # metadata fields to inject into created resources.
     # A few template fields are available. See documentation for more details.
     created_resource_metadata: CliSuppress[dict[str, Any]] = {
@@ -174,7 +181,7 @@ class Settings(BaseSettings):
         if self.strategy == "filefixtures" and self.templates_dir is None:
             raise ValueError("templates_dir is required when strategy is filefixtures")
 
-        if self.proxyrules_record_mode != ProxyRulesRecordMode.OFF:
+        if self.strategy == "proxyrules" and self.proxyrules_record_mode != ProxyRulesRecordMode.OFF:
             if self.proxyrules_record_root is None:
                 raise ValueError("proxyrules_record_root is required when proxyrules_record_mode is not off")
             if self.proxyrules_redirect_via != ProxyRulesRedirectVia.REVERSE_PROXY:

@@ -366,9 +366,17 @@ A response is recorded only when:
   decoded.
 
 Otherwise the upstream's response is returned stamped `proxy` with the URL rule's name,
-and a warning in the log names the reason. With no later URL rule, a missing fixture is
+and the reason is logged -- at INFO for a `HEAD`/`OPTIONS` request or a scrubber that
+returns `None`, since both are expected; every other reason is logged at WARNING. With
+no later URL rule, a missing fixture is
 the usual 404 `error`. An upstream that fails is the usual 502 or 504 `error`, and a
 fixture file that cannot be written is a 500 `error`; nothing is written in either case.
+
+A later rule's `replacement` is still rendered even when it is a
+[dynamic replacement](#dynamic-replacements), to learn whether it gives a URL at all --
+so a later template replacement that fails (for example one that references a missing
+header) turns that record attempt into a 500, the same as it would for a plain proxied
+request to that rule.
 
 Recorded files:
 
@@ -382,8 +390,46 @@ Recorded files:
   outside it is served as usual and not recorded, with a warning the first time for each
   rule.
 
+While a fixture has not been recorded yet:
+
+- requests really reach the upstream, including non-idempotent methods such as `POST`,
+  `PUT` and `DELETE` -- recording a create endpoint creates real resources there;
+- a response that cannot be recorded (a status mismatch, a still-encoded or non-UTF-8
+  body, or a scrubber that returns `None`) is sent to the upstream again on every
+  request, not only the first;
+- there is no locking between requests: concurrent first requests for the same fixture
+  each reach the upstream, and the last write to complete wins. A reader never sees a
+  partial file, but overlapping requests can each record a different upstream response;
+- `HEAD` and `OPTIONS` requests for a fixture that may still be recorded are proxied
+  rather than served from a fixture file; in `overwrite` mode this also applies to a
+  fixture that was already recorded.
+
 Only the response body is recorded. The rule's `status` and `response_headers` apply when
 it is replayed, and the content type follows the file suffix as for any fixture.
+
+### Scrubbing recorded bodies
+
+`proxyrules_record_scrubber` names a `module:function` that is called with every body
+before it is written. It returns the text to write, or `None` to skip recording that
+response, which is then returned stamped `proxy`:
+
+```python
+def mask_emails(body: str, *, request: Request, rule_name: str | None, path: Path) -> str | None:
+    return EMAIL.sub("***@***", body)
+```
+
+The reference is imported and checked when the settings are loaded, so a typo or a
+target that is not callable stops mockstack from starting; the module must be
+importable, e.g. with `PYTHONPATH=.`. A scrubber that raises, or returns something
+other than a string or `None`, answers that request with a 500 `error` and nothing is
+written. `rule_name` is the matched fixture rule's `name` (`None` when the rule has
+none), and `path` is the resolved fixture file path that will be written.
+
+The scrubber must be a regular synchronous function, not `async def`: it is called
+directly, not awaited, so an `async def` scrubber returns a coroutine object rather
+than a string, and the request gets a 500 the same as any other non-`str`, non-`None`
+return value. See the cookbook's
+[Record fixtures from a real service](../guides/proxyrules-cookbook.md#9-record-fixtures-from-a-real-service).
 
 !!! warning
     Record mode writes files whose paths can be chosen by request data and whose content
