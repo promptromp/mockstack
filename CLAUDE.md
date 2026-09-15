@@ -26,6 +26,8 @@ CLI flags, `MOCKSTACK__*` environment variables, or a `.env` file.
   `create_mixin.py`, `factory.py`
 - `mockstack/rules.py`: the proxyrules `Rule`: predicates, load-time validation,
   template context
+- `mockstack/recording.py`: record-mode building blocks: fixture encoding that renders
+  back to the exact body, the recorded marker, root confinement and atomic writes
 - `mockstack/templating.py`: Jinja environment and path-to-template-name resolution
 - `mockstack/intent.py`, `mockstack/identifiers.py`: POST intent (search, command,
   create) and path-identifier heuristics

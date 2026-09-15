@@ -6,7 +6,9 @@ tell it from a hand-written fixture.
 """
 
 import json
+import os
 import re
+import tempfile
 from pathlib import Path
 from typing import Final
 
@@ -41,3 +43,35 @@ def is_recorded(path: Path) -> bool:
             return file.read(len(marker)) == marker
     except OSError:
         return False
+
+
+def resolve_inside(root: Path, path: Path) -> Path | None:
+    """``path`` resolved through any symlinks, or ``None`` unless it lies strictly inside
+    ``root`` (also resolved)."""
+    resolved_root = root.resolve()
+    resolved = path.resolve()
+    if resolved == resolved_root or not resolved.is_relative_to(resolved_root):
+        return None
+    return resolved
+
+
+def write_fixture_atomically(path: Path, text: str) -> None:
+    """Write ``text`` to ``path`` as UTF-8 with newlines untranslated, creating parent
+    directories.
+
+    The text goes to a temporary file in the same directory, which is then renamed over
+    ``path``. A concurrent reader sees the old file or the new one, never a partial
+    write, and the temporary file never outlives the call.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary_name = tempfile.mkstemp(dir=path.parent, prefix=".mockstack-record-", suffix=".tmp")
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as file:
+            file.write(text)
+            file.flush()
+            os.fsync(file.fileno())
+        temporary.chmod(0o644)
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
