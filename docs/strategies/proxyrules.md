@@ -611,6 +611,8 @@ URL rule also sets:
 
 - `mockstack.proxyrules.upstream_rule_name`: The name (or pattern, when unnamed) of the
   rule the request was proxied to while attempting to record
+- `mockstack.proxyrules.rewritten_url`: The upstream URL the request was proxied to while
+  attempting to record, whether or not the response ended up recorded
 - `mockstack.proxyrules.recorded_path`: The fixture path written, when the response was
   recorded (`result_type` is `record`; the shared rule attributes describe the fixture
   rule)
