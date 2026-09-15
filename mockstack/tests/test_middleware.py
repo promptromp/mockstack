@@ -1,11 +1,12 @@
 """Tests for the middleware module."""
 
-from starlette.testclient import TestClient
+import pytest
 
 from mockstack.middleware import middleware_provider
 
 
-def test_middleware_provider_process_time(app, settings):
+@pytest.mark.asyncio
+async def test_middleware_provider_process_time(app, settings, asgi_client):
     """Test that the middleware provider adds the process time header."""
     middleware_provider(app, settings)
 
@@ -13,7 +14,7 @@ def test_middleware_provider_process_time(app, settings):
     def route():
         return {"message": "test"}
 
-    response = TestClient(app).get("/test")
+    response = await asgi_client.get("/test")
 
     assert response.status_code == 200
     assert response.json() == {"message": "test"}

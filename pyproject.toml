@@ -21,7 +21,7 @@ classifiers = [
 requires-python = ">=3.13"
 dependencies = [
     "colorama>=0.4.6",
-    "fastapi[standard]>=0.141.1",
+    "fastapi>=0.141.1",
     "httpx>=0.28.1",
     "jinja2>=3.1.6",
     "opentelemetry-distro[otlp]>=0.65b0",
@@ -31,7 +31,8 @@ dependencies = [
     "pyyaml>=6.0.3",
     "rich>=15.0.0",
     "typer>=0.27.2",
-    "uvicorn>=0.53.0",
+    # The standard extra installs uvloop and httptools, which uvicorn uses when present.
+    "uvicorn[standard]>=0.53.0",
 ]
 dynamic = ["version"]
 
@@ -94,11 +95,8 @@ addopts = "-m 'not slow'"
 # strict_config, strict_markers, strict_xfail and strict_parametrization_ids.
 strict = true
 filterwarnings = [
-    # A warning raised from mockstack's own modules (tests included) is an error...
+    # A warning raised from mockstack's own modules (tests included) is an error.
     "error:::mockstack",
-    # ...except Starlette's deprecation of httpx in its test client, which it attributes
-    # to the module importing `starlette.testclient`.
-    "default:Using `httpx` with `starlette.testclient` is deprecated",
 ]
 
 [tool.coverage.run]
