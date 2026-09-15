@@ -212,8 +212,8 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         self.rules_filename = settings.proxyrules_rules_filename
         self.simulate_create_on_missing = settings.proxyrules_simulate_create_on_missing
         self.verify_ssl_certificates = settings.proxyrules_verify_ssl_certificates
-        self.record_mode = ProxyRulesRecordMode(settings.proxyrules_record_mode)
-        self.record_root = Path(settings.proxyrules_record_root) if settings.proxyrules_record_root else None
+        self.record_mode = settings.proxyrules_record_mode
+        self.record_root = settings.proxyrules_record_root
         # Rule identities (name, falling back to pattern -- the same identity
         # `with_result_headers` stamps) already warned about an outside-root path, so the
         # WARNING is logged only once per rule; later requests log it at DEBUG instead.
