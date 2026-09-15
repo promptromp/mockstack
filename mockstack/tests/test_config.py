@@ -111,3 +111,9 @@ def test_record_settings_from_cli_flags(templates_dir, tmp_path):
     )
     assert settings.proxyrules_record_mode == ProxyRulesRecordMode.OVERWRITE
     assert settings.proxyrules_record_root == tmp_path
+
+
+def test_record_scrubber_defaults_to_none_and_reads_its_env_var(monkeypatch, templates_dir):
+    assert Settings(templates_dir=templates_dir).proxyrules_record_scrubber is None
+    monkeypatch.setenv("MOCKSTACK__PROXYRULES_RECORD_SCRUBBER", "scrubbers:mask_emails")
+    assert Settings(templates_dir=templates_dir).proxyrules_record_scrubber == "scrubbers:mask_emails"

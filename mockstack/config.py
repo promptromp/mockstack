@@ -103,6 +103,11 @@ class Settings(BaseSettings):
     # required when proxyrules_record_mode is not off.
     proxyrules_record_root: DirectoryPath | None = None
 
+    # optional "module:function" called with every body before it is recorded. It returns
+    # the text to write, or None to skip recording that response. The module must be
+    # importable, e.g. from a directory on PYTHONPATH.
+    proxyrules_record_scrubber: str | None = None
+
     # metadata fields to inject into created resources.
     # A few template fields are available. See documentation for more details.
     created_resource_metadata: CliSuppress[dict[str, Any]] = {

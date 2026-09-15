@@ -363,3 +363,63 @@ def test_record_mode_is_announced_at_startup(recording, caplog):
     with caplog.at_level(logging.WARNING, logger="ProxyRulesStrategy"):
         recording("overwrite")
     assert "record mode 'overwrite' is on" in caplog.text
+
+
+# --- scrubber --------------------------------------------------------------------------
+
+SCRUBBERS = "mockstack.tests.strategies.test_proxyrules_record"
+SCRUBBER_CALLS: list[dict[str, Any]] = []
+
+
+def mask_names(body: str, *, request: Any, rule_name: str | None, path: Path) -> str | None:
+    SCRUBBER_CALLS.append({"path": request.url.path, "rule_name": rule_name, "file": path})
+    return body.replace("Ada", "***")
+
+
+def skip_everything(body: str, *, request: Any, rule_name: str | None, path: Path) -> str | None:
+    return None
+
+
+def return_bytes(body: str, *, request: Any, rule_name: str | None, path: Path) -> Any:
+    return body.encode()
+
+
+@pytest.mark.asyncio
+async def test_scrubbed_body_is_written_and_served(recording, root, traced_request, upstream_send):
+    SCRUBBER_CALLS.clear()
+    upstream_send.return_value = upstream_response()
+    response = await recording(proxyrules_record_scrubber=f"{SCRUBBERS}:mask_names").apply(
+        traced_request("/users/user-1")
+    )
+    fixture = root / "users" / "user-1.json.j2"
+    assert result_of(response) == (200, "record", "users-fixture")
+    assert response.body == b'{"id": "user-1", "name": "***"}'
+    assert "Ada" not in fixture.read_text()
+    assert [{"path": "/users/user-1", "rule_name": "users-fixture", "file": fixture.resolve()}] == SCRUBBER_CALLS
+
+
+@pytest.mark.asyncio
+async def test_scrubber_returning_none_skips_recording(recording, root, traced_request, upstream_send, caplog):
+    upstream_send.return_value = upstream_response()
+    strategy = recording(proxyrules_record_scrubber=f"{SCRUBBERS}:skip_everything")
+    with caplog.at_level(logging.WARNING, logger="ProxyRulesStrategy"):
+        response = await strategy.apply(traced_request("/users/user-1"))
+    assert result_of(response) == (200, "proxy", "users-passthrough")
+    assert response.body == BODY
+    assert not (root / "users").exists()
+    assert "not recorded: the scrubber skipped it" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_scrubber_returning_a_non_string_is_a_500(recording, root, traced_request, upstream_send):
+    upstream_send.return_value = upstream_response()
+    response = await recording(proxyrules_record_scrubber=f"{SCRUBBERS}:return_bytes").apply(
+        traced_request("/users/user-1")
+    )
+    assert result_of(response) == (500, "error", "users-fixture")
+    assert not (root / "users").exists()
+
+
+def test_unloadable_scrubber_fails_at_startup(recording):
+    with pytest.raises(ValueError, match="cannot import 'no_such_module_for_mockstack'"):
+        recording(proxyrules_record_scrubber="no_such_module_for_mockstack:scrub")

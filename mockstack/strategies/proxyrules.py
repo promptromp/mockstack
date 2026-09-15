@@ -27,7 +27,14 @@ from mockstack.constants import (
     ProxyRulesRedirectVia,
 )
 from mockstack.intent import looks_like_a_create
-from mockstack.recording import encode_fixture, is_recorded, resolve_inside, write_fixture_atomically
+from mockstack.recording import (
+    Scrubber,
+    encode_fixture,
+    is_recorded,
+    load_scrubber,
+    resolve_inside,
+    write_fixture_atomically,
+)
 from mockstack.rules import RequestPayload, Rule, RuleResult, TemplateRuleResult, URLRuleResult
 from mockstack.strategies.base import BaseStrategy
 from mockstack.strategies.create_mixin import CreateMixin
@@ -214,6 +221,8 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         self.verify_ssl_certificates = settings.proxyrules_verify_ssl_certificates
         self.record_mode = settings.proxyrules_record_mode
         self.record_root = settings.proxyrules_record_root
+        scrubber = settings.proxyrules_record_scrubber
+        self.record_scrubber: Scrubber | None = load_scrubber(scrubber) if scrubber else None
         # Rule identities (name, falling back to pattern -- the same identity
         # `with_result_headers` stamps) already warned about an outside-root path, so the
         # WARNING is logged only once per rule; later requests log it at DEBUG instead.
@@ -498,7 +507,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         upstream_rule, url = upstream
         self.update_opentelemetry(request, upstream_rule, url)
         response = await self.reverse_proxy(request, url)
-        text, reason = self._recordable_text(request, rule, response)
+        text, reason = self._recordable_text(request, rule, path, response)
         if text is None:
             self.logger.warning("[rule:%s] not recorded: %s", rule.name, reason)
             return with_result_headers(response, rule=upstream_rule, result_type="proxy")
@@ -551,8 +560,8 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
                 return candidate, candidate_result.url
         return None
 
-    def _recordable_text(self, request: Request, rule: Rule, response: Response) -> tuple[str | None, str]:
-        """The body to write, or ``None`` with the reason the response is not recorded."""
+    def _recordable_text(self, request: Request, rule: Rule, path: Path, response: Response) -> tuple[str | None, str]:
+        """The body to write, after the scrubber, or ``None`` with the reason it is not recorded."""
         method = request.method.upper()
         if method in _UNRECORDED_METHODS:
             return None, f"{method} responses are never recorded"
@@ -569,7 +578,20 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             text = bytes(response.body).decode("utf-8")
         except UnicodeDecodeError:
             return None, "the upstream body is not UTF-8"
-        return text, ""
+        if self.record_scrubber is None:
+            return text, ""
+        return self._scrub(self.record_scrubber, text, request=request, rule=rule, path=path)
+
+    @staticmethod
+    def _scrub(scrubber: Scrubber, text: str, *, request: Request, rule: Rule, path: Path) -> tuple[str | None, str]:
+        """Apply ``scrubber`` to ``text``, raising when it returns anything but ``str`` or ``None``."""
+        # Typed as object: a user-supplied scrubber may break its contract.
+        scrubbed: object = scrubber(text, request=request, rule_name=rule.name, path=path)
+        if scrubbed is None:
+            return None, "the scrubber skipped it"
+        if not isinstance(scrubbed, str):
+            raise TypeError(f"proxyrules_record_scrubber returned {type(scrubbed).__name__}, not str or None")
+        return scrubbed, ""
 
     async def reverse_proxy(self, request: Request, url: str) -> Response:
         """Reverse proxy the request to the target URL.
