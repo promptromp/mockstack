@@ -55,6 +55,11 @@ class Settings(BaseSettings):
     # port to run the server on
     port: int = 8000
 
+    # whether to serve FastAPI's documentation routes (/docs, /redoc, /openapi.json and
+    # /docs/oauth2-redirect). They take precedence over the catch-all route, so they are
+    # off by default and those paths reach the strategy like any other.
+    openapi_docs_enabled: CliImplicitFlag[bool] = False
+
     # OpenTelemetry configuration
     opentelemetry: OpenTelemetrySettings = OpenTelemetrySettings()
 
