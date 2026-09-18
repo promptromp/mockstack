@@ -1,10 +1,11 @@
 """The ``mockstack`` command line: coloured help, and configuration errors without tracebacks.
 
-A configuration mistake (an unknown flag or setting, a missing or invalid setting, or a
-rules file that does not load) is printed to stderr as ``mockstack: error: ...`` and exits
-with status 2, as argparse does for usage errors. Settings are named the way a user sets
-them: by flag, followed by the ``MOCKSTACK__*`` environment variables (also used in
-``.env`` files) involved. Any other exception is a bug and keeps its traceback.
+A configuration mistake (an unknown flag or setting, a missing or invalid setting, a
+rules file that does not load, or tracing enabled without the OpenTelemetry packages) is
+printed to stderr as ``mockstack: error: ...`` and exits with status 2, as argparse does
+for usage errors. Settings are named the way a user sets them: by flag, followed by the
+``MOCKSTACK__*`` environment variables (also used in ``.env`` files) involved. Any other
+exception is a bug and keeps its traceback.
 
 Help and errors are coloured with rich, which leaves colour out when the output is not a
 terminal and honours ``NO_COLOR`` and ``FORCE_COLOR``.
@@ -30,6 +31,7 @@ from rich_argparse import RichHelpFormatter
 from mockstack.config import CliSettings, Settings, SettingsDependencyError
 from mockstack.constants import ENV_NESTED_DELIMITER, ENV_PREFIX
 from mockstack.strategies.proxyrules import RulesFileError
+from mockstack.telemetry import OPENTELEMETRY_EXTRA, OpenTelemetryUnavailableError
 
 
 PROG: Final = "mockstack"
@@ -160,13 +162,24 @@ def parse_settings(source: CliSettingsSource[CliArgumentParser], argv: Sequence[
     return CliApp.run(CliSettings, cli_args=None if argv is None else list(argv), cli_settings_source=source)
 
 
-def report_for(exc: ValidationError | SettingsError | RulesFileError) -> ErrorReport:
-    """The report for a settings error or a rules file that does not load."""
+def report_for(exc: ValidationError | SettingsError | RulesFileError | OpenTelemetryUnavailableError) -> ErrorReport:
+    """The report for a settings error, a rules file that does not load, or tracing
+    enabled without the OpenTelemetry packages."""
     if isinstance(exc, ValidationError):
         return _validation_report(exc)
     if isinstance(exc, RulesFileError):
         return ErrorReport([Text.assemble((str(exc.path), "bold"), f": {exc.problem}")], help_hint=False)
+    if isinstance(exc, OpenTelemetryUnavailableError):
+        return _opentelemetry_unavailable_report()
     return ErrorReport([_settings_error_problem(exc)])
+
+
+def _opentelemetry_unavailable_report() -> ErrorReport:
+    """E.g. ``--opentelemetry.enabled is on, but the OpenTelemetry packages are not installed``."""
+    name = setting_name(("opentelemetry", "enabled"))
+    problem = Text.assemble((name.display, FLAG_STYLE), " is on, but the OpenTelemetry packages are not installed")
+    install = Text.assemble(("install them with: ", NOTE_STYLE), (f"pip install '{OPENTELEMETRY_EXTRA}'", VALUE_STYLE))
+    return ErrorReport([problem], settings=[name], hints=[install], help_hint=False)
 
 
 def print_report(prog: str, report: ErrorReport) -> None:

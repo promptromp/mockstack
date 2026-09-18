@@ -2,7 +2,7 @@
 
 # Define build argument for version
 ARG PYTHON_IMAGE_VERSION=3.13-slim
-ARG MOCKSTACK_VERSION=0.15.0
+ARG MOCKSTACK_VERSION=0.16.0
 
 # ---------------------------- Base Image --------------------------------
 
@@ -48,7 +48,9 @@ ENV SETUPTOOLS_SCM_PRETEND_VERSION=${MOCKSTACK_VERSION}
 RUN uv venv && \
     . .venv/bin/activate
 
-RUN uv pip install -e .
+# The image includes the optional OpenTelemetry packages, so tracing can be turned on
+# with MOCKSTACK__OPENTELEMETRY__ENABLED.
+RUN uv pip install -e '.[opentelemetry]'
 
 # ---------------------------- Runner --------------------------------
 

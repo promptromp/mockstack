@@ -36,6 +36,7 @@ from mockstack.recording import (
 from mockstack.rules import RequestPayload, Rule, RuleError, RuleResult, TemplateRuleResult, URLRuleResult
 from mockstack.strategies.base import BaseStrategy
 from mockstack.strategies.create_mixin import CreateMixin
+from mockstack.telemetry import SpanLike, current_span
 from mockstack.templating import templates_env_provider
 
 
@@ -575,14 +576,14 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             # the shared attributes must describe that rule too, plus why it was not
             # recorded.
             self.update_opentelemetry(request, upstream_rule, url, result_type="proxy")
-            request.state.span.set_attribute("mockstack.proxyrules.not_recorded_reason", reason)
+            current_span(request).set_attribute("mockstack.proxyrules.not_recorded_reason", reason)
             return with_result_headers(response, rule=upstream_rule, result_type="proxy")
 
         self._write_fixture(rule, path, text)
         self.logger.info(
             "[rule:%s] recorded %s from rule %s", rule.name, path, upstream_rule.name or upstream_rule.pattern
         )
-        request.state.span.set_attribute("mockstack.proxyrules.recorded_path", str(path))
+        current_span(request).set_attribute("mockstack.proxyrules.recorded_path", str(path))
         replay = TemplateRuleResult(template_path=str(path), template_context=result.template_context)
         return await self.handle_template_result(request, rule, replay, result_type="record")
 
@@ -759,7 +760,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         return content_types.get(suffix, "text/plain")
 
     @staticmethod
-    def _set_shared_rule_attributes(span: Any, rule: Rule) -> None:
+    def _set_shared_rule_attributes(span: SpanLike, rule: Rule) -> None:
         """Set the shared rule attributes describing the rule named in ``X-Mockstack-Rule``.
 
         Shared by every ``update_opentelemetry*`` method below, so every response that
@@ -777,7 +778,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         self, request: Request, rule: Rule, result: TemplateRuleResult, result_type: str = "template"
     ) -> None:
         """Update the opentelemetry span with template-specific details."""
-        span = request.state.span
+        span = current_span(request)
         self._set_shared_rule_attributes(span, rule)
         span.set_attribute("mockstack.proxyrules.template_path", result.template_path)
         span.set_attribute("mockstack.proxyrules.result_type", result_type)
@@ -790,7 +791,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         caller (redirect, reverse proxy, or a record-mode response that was not
         recorded) is the one that knows it.
         """
-        span = request.state.span
+        span = current_span(request)
         self._set_shared_rule_attributes(span, rule)
         span.set_attribute("mockstack.proxyrules.rewritten_url", url)
         span.set_attribute("mockstack.proxyrules.result_type", result_type)
@@ -805,7 +806,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         ``update_opentelemetry(..., result_type="proxy")`` before a reverse proxy that
         then failed) had set, since span attributes are last-write-wins.
         """
-        span = request.state.span
+        span = current_span(request)
         self._set_shared_rule_attributes(span, rule)
         span.set_attribute("mockstack.proxyrules.result_type", "error")
 
@@ -817,6 +818,6 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         may end up serving it instead, on ``record``), so the shared rule attributes
         are left untouched here.
         """
-        span = request.state.span
+        span = current_span(request)
         span.set_attribute("mockstack.proxyrules.upstream_rule_name", str(upstream_rule.name or upstream_rule.pattern))
         span.set_attribute("mockstack.proxyrules.rewritten_url", url)

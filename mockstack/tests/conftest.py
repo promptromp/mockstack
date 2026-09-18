@@ -1,6 +1,7 @@
 """Fixtures shared by the unit tests and the live tests."""
 
 import os
+import sys
 from collections.abc import AsyncIterator, Callable, Iterable, Mapping
 from pathlib import Path
 from typing import Any
@@ -13,6 +14,7 @@ import yaml
 from fastapi import FastAPI, Request
 from starlette.types import Message
 
+import mockstack
 from mockstack.config import OpenTelemetrySettings, Settings
 from mockstack.constants import ProxyRulesRedirectVia
 from mockstack.strategies.filefixtures import FileFixturesStrategy
@@ -57,6 +59,18 @@ def make_settings() -> Callable[..., Settings]:
         return _EnvIsolatedSettings(**options)
 
     return _make
+
+
+@pytest.fixture
+def without_opentelemetry(monkeypatch):
+    """Make the OpenTelemetry packages unimportable, as when the ``opentelemetry`` extra
+    is not installed. ``mockstack.tracing``, which imports them, is unloaded too."""
+    loaded = [name for name in sys.modules if name == "opentelemetry" or name.startswith("opentelemetry.")]
+    # A module left in sys.modules would still import; None makes each import fail.
+    for name in {"opentelemetry", *loaded}:
+        monkeypatch.setitem(sys.modules, name, None)
+    monkeypatch.delitem(sys.modules, "mockstack.tracing", raising=False)
+    monkeypatch.delattr(mockstack, "tracing", raising=False)
 
 
 @pytest.fixture

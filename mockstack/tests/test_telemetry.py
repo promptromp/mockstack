@@ -1,185 +1,155 @@
-"""Unit tests for the telemetry module."""
+"""Unit tests for the telemetry module: tracing is optional, and so are its packages."""
 
-from unittest.mock import MagicMock, patch
+import subprocess
+import sys
+import textwrap
+from unittest.mock import patch
 
+import httpx
 import pytest
 from fastapi import FastAPI
-from starlette.responses import Response, StreamingResponse
 
+import mockstack
 from mockstack.config import OpenTelemetrySettings
+from mockstack.main import create_app
 from mockstack.telemetry import (
-    extract_body,
+    NULL_SPAN,
+    OpenTelemetryUnavailableError,
+    current_span,
     opentelemetry_provider,
-    span_name_for,
-    with_request_attributes,
-    with_response_attributes,
-    with_response_body,
 )
 
 
-def test_span_name_for(make_request):
-    """Test span name generation."""
-    assert span_name_for(make_request("/test/path")) == "GET /test/path"
-
-
-def test_with_request_attributes(make_request):
-    """Test adding request attributes to span."""
-    request = make_request(
-        "/test/path",
-        method="POST",
-        query=b"key=value&other=123",
-        headers={
-            "user-agent": "test-client",
-            "authorization": "Bearer token",
-            "content-type": "application/json",
-            "host": "example.com:8443",  # Required for URL construction
-        },
-        scheme="https",
-        client=("127.0.0.1", 12345),
-        server=("example.com", 8443),
-    )
-
-    span = MagicMock()
-    sensitive_headers = ["authorization"]
-
-    with_request_attributes(request, span, sensitive_headers=sensitive_headers)
-
-    # Verify basic request attributes
-    span.set_attribute.assert_any_call("http.method", "POST")
-    span.set_attribute.assert_any_call("http.url", "https://example.com:8443/test/path?key=value&other=123")
-    span.set_attribute.assert_any_call("http.scheme", "https")
-    span.set_attribute.assert_any_call("http.host", "example.com")
-    span.set_attribute.assert_any_call("http.target", "/test/path")
-    span.set_attribute.assert_any_call("http.server_port", 8443)
-
-    # Verify client information
-    span.set_attribute.assert_any_call("net.peer.ip", "127.0.0.1")
-    span.set_attribute.assert_any_call("net.peer.port", 12345)
-
-    # Verify headers (excluding sensitive)
-    span.set_attribute.assert_any_call("http.request.header.user-agent", "test-client")
-    span.set_attribute.assert_any_call("http.request.header.content-type", "application/json")
-
-    # Verify query parameters
-    span.set_attribute.assert_any_call("http.request.query.key", "value")
-    span.set_attribute.assert_any_call("http.request.query.other", "123")
-
-    # Verify sensitive headers are not included
-    for args in span.set_attribute.call_args_list:
-        assert not any("authorization" in str(arg) for arg in args[0])
-
-
-def test_with_response_attributes():
-    """Test adding response attributes to span."""
-    response = Response(
-        content="test content",
-        status_code=200,
-        headers={
-            "content-type": "text/plain",
-            "content-length": "11",
-            "x-secret": "sensitive",
-        },
-    )
-    span = MagicMock()
-    sensitive_headers = ["x-secret"]
-
-    with_response_attributes(response, span, sensitive_headers=sensitive_headers)
-
-    # Verify response attributes
-    span.set_attribute.assert_any_call("http.status_code", 200)
-    span.set_attribute.assert_any_call("http.response_content_length", "11")
-
-    # Verify headers (excluding sensitive)
-    span.set_attribute.assert_any_call("http.response.header.content-type", "text/plain")
-    span.set_attribute.assert_any_call("http.response.header.content-length", "11")
-
-    # Verify sensitive headers are not included
-    for args in span.set_attribute.call_args_list:
-        assert not any("x-secret" in str(arg) for arg in args[0])
-
-
-@pytest.mark.asyncio
-async def test_with_response_body():
-    """Test adding response body to span."""
-    body_content = b"test response body"
-    response = StreamingResponse(
-        content=iter([body_content]),
-        status_code=200,
-        headers={"content-type": "text/plain"},
-    )
-    span = MagicMock()
-
-    new_response, _ = await with_response_body(response, span)
-
-    # Verify response body was added to span
-    span.set_attribute.assert_called_once_with("http.response.body", body_content.decode())
-
-    # Verify new response has same properties
-    assert new_response.status_code == 200
-    assert new_response.headers["content-type"] == "text/plain"
-    assert new_response.body == body_content
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "chunks",
-    [[b"part1", b"part2", b"part3"], ["part1", "part2", "part3"]],
-    ids=["bytes", "str"],
-)
-async def test_extract_body(chunks):
-    """Test extracting body from a streaming response of bytes or str chunks."""
-    body = await extract_body(StreamingResponse(content=iter(chunks)))
-    assert body == "part1part2part3"
-
-
-def test_opentelemetry_provider_disabled(settings_filefixtures):
-    """Test OpenTelemetry provider when disabled: no tracer provider is configured."""
-    with patch("mockstack.telemetry.trace") as mock_trace:
-        opentelemetry_provider(FastAPI(), settings_filefixtures)
-    mock_trace.set_tracer_provider.assert_not_called()
-
-
-@patch("mockstack.telemetry.OTLPSpanExporter")
-@patch("mockstack.telemetry.BatchSpanProcessor")
-@patch("mockstack.telemetry.TracerProvider")
-@patch("mockstack.telemetry.trace")
-@patch("mockstack.telemetry.metadata")
-def test_opentelemetry_provider_enabled(
-    mock_metadata,
-    mock_trace,
-    mock_tracer_provider,
-    mock_batch_processor,
-    mock_otlp_exporter,
-    make_settings,
-    templates_dir,
-):
-    """Test OpenTelemetry provider when enabled."""
-    settings = make_settings(
+@pytest.fixture
+def tracing_settings(make_settings, templates_dir):
+    return make_settings(
         strategy="filefixtures",
         templates_dir=templates_dir,
-        opentelemetry=OpenTelemetrySettings(
-            enabled=True,
-            endpoint="http://localhost:4317",
-        ),
+        opentelemetry=OpenTelemetrySettings(enabled=True),
     )
 
-    # Mock distribution metadata
-    mock_dist = MagicMock()
-    mock_dist.name = "mockstack"
-    mock_dist.version = "1.0.0"
-    mock_metadata.distribution.return_value = mock_dist
 
-    # Mock provider instance
-    mock_provider_instance = MagicMock()
-    mock_tracer_provider.return_value = mock_provider_instance
+def test_current_span_without_tracing_records_nothing(make_request):
+    span = current_span(make_request("/"))
 
-    opentelemetry_provider(FastAPI(), settings)
+    assert span is NULL_SPAN
+    span.set_attribute("key", "value")
 
-    # Verify tracer provider setup
-    mock_tracer_provider.assert_called_once()
-    mock_trace.set_tracer_provider.assert_called_once_with(mock_provider_instance)
 
-    # Verify exporter setup
-    mock_otlp_exporter.assert_called_once_with(endpoint="http://localhost:4317")
-    mock_batch_processor.assert_called_once_with(mock_otlp_exporter.return_value)
-    mock_provider_instance.add_span_processor.assert_called_once_with(mock_batch_processor.return_value)
+def test_current_span_is_the_tracing_middlewares_span(make_request, span):
+    request = make_request("/")
+    request.state.span = span
+
+    assert current_span(request) is span
+
+
+def test_disabled_does_not_import_opentelemetry(without_opentelemetry, settings_filefixtures):
+    app = FastAPI()
+
+    opentelemetry_provider(app, settings_filefixtures)
+
+    assert app.user_middleware == []
+    assert "mockstack.tracing" not in sys.modules
+
+
+def test_enabled_installs_tracing(tracing_settings):
+    app = FastAPI()
+
+    with patch("mockstack.tracing.install") as install:
+        opentelemetry_provider(app, tracing_settings)
+
+    install.assert_called_once_with(app, tracing_settings)
+
+
+def test_enabled_without_the_extra_names_it(without_opentelemetry, tracing_settings):
+    with pytest.raises(OpenTelemetryUnavailableError) as excinfo:
+        opentelemetry_provider(FastAPI(), tracing_settings)
+
+    assert excinfo.value.missing_module.startswith("opentelemetry")
+    assert "pip install 'mockstack[opentelemetry]'" in str(excinfo.value)
+    assert isinstance(excinfo.value.__cause__, ModuleNotFoundError)
+
+
+def test_another_missing_module_keeps_its_error(monkeypatch, tracing_settings):
+    """Only missing OpenTelemetry packages mean the extra is not installed."""
+    monkeypatch.setitem(sys.modules, "mockstack.tracing", None)
+    monkeypatch.delattr(mockstack, "tracing", raising=False)
+
+    with pytest.raises(ModuleNotFoundError) as excinfo:
+        opentelemetry_provider(FastAPI(), tracing_settings)
+
+    assert not isinstance(excinfo.value, OpenTelemetryUnavailableError)
+    assert excinfo.value.name == "mockstack.tracing"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("strategy", ["filefixtures", "proxyrules"])
+async def test_app_serves_without_opentelemetry(
+    without_opentelemetry, make_settings, write_template, write_rules, tmp_path, strategy
+):
+    """Without the extra, and with tracing off, both strategies serve and simulate
+    creating resources, adding their span attributes to ``NULL_SPAN``."""
+    template = write_template("api-projects.j2", '{"id": "1234"}')
+    rules = write_rules([{"name": "projects", "pattern": "/api/projects/1234", "replacement": f"file:///{template}"}])
+    settings = make_settings(
+        strategy=strategy,
+        templates_dir=tmp_path,
+        proxyrules_rules_filename=rules,
+        proxyrules_simulate_create_on_missing=True,
+    )
+
+    app = create_app(settings)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://testserver") as client:
+        fetched = await client.get("/api/projects/1234")
+        created = await client.post("/api/orders", json={"name": "new"})
+
+    assert fetched.json() == {"id": "1234"}
+    assert created.status_code == 201
+    assert "mockstack.tracing" not in sys.modules
+
+
+def test_mockstack_never_imports_opentelemetry_unless_enabled(tmp_path):
+    """A fresh interpreter serves a request without importing OpenTelemetry, and
+    enabling tracing without it is a configuration error, not a traceback."""
+    (tmp_path / "index.j2").write_text("{}")
+    script = textwrap.dedent(
+        f"""
+        import sys
+        from importlib.abc import MetaPathFinder
+
+        class NoOpenTelemetry(MetaPathFinder):
+            def find_spec(self, name, path, target=None):
+                if name == "opentelemetry" or name.startswith("opentelemetry."):
+                    raise ModuleNotFoundError(f"No module named {{name!r}}", name=name)
+
+        sys.meta_path.insert(0, NoOpenTelemetry())
+
+        import httpx
+        from mockstack.main import create_app, run
+        from mockstack.config import Settings
+
+        import asyncio
+
+        app = create_app(Settings(templates_dir={str(tmp_path)!r}))
+
+        async def get():
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+                return (await client.get("/")).status_code
+
+        assert asyncio.run(get()) == 200
+        assert not any(name.split(".")[0] == "opentelemetry" for name in sys.modules), "imported"
+        run(["--templates-dir", {str(tmp_path)!r}, "--opentelemetry.enabled"])
+        """
+    )
+
+    result = subprocess.run(  # noqa: S603 -- runs this interpreter on the script above
+        [sys.executable, "-c", script], capture_output=True, text=True, cwd=tmp_path, check=False
+    )
+
+    assert result.returncode == 2, result.stderr
+    assert result.stderr == (
+        "mockstack: error: --opentelemetry.enabled is on, but the OpenTelemetry packages are not installed\n"
+        "  environment or .env: MOCKSTACK__OPENTELEMETRY__ENABLED\n"
+        "  install them with: pip install 'mockstack[opentelemetry]'\n"
+    )

@@ -52,6 +52,33 @@ def test_run_serves_the_parsed_settings(served, tmp_path):
     assert (call["host"], call["port"]) == ("127.0.0.1", 9001)
 
 
+OPENTELEMETRY_UNAVAILABLE = (
+    "mockstack: error: --opentelemetry.enabled is on, but the OpenTelemetry packages are not installed\n"
+    "  environment or .env: MOCKSTACK__OPENTELEMETRY__ENABLED\n"
+    "  install them with: pip install 'mockstack[opentelemetry]'\n"
+)
+
+
+def test_tracing_without_the_extra_says_how_to_install_it(served, capsys, tmp_path, without_opentelemetry):
+    assert fail(["--templates-dir", str(tmp_path), "--opentelemetry.enabled"], capsys) == OPENTELEMETRY_UNAVAILABLE
+    assert served == []
+
+
+def test_tracing_enabled_from_the_environment_without_the_extra(
+    served, capsys, tmp_path, monkeypatch, without_opentelemetry
+):
+    monkeypatch.setenv("MOCKSTACK__OPENTELEMETRY__ENABLED", "true")
+
+    assert fail(["--templates-dir", str(tmp_path)], capsys) == OPENTELEMETRY_UNAVAILABLE
+
+
+def test_run_without_the_extra_serves_with_tracing_off(served, tmp_path, without_opentelemetry):
+    run(["--templates-dir", str(tmp_path)])
+
+    [call] = served
+    assert call["port"] == 8000
+
+
 def test_run_without_arguments_names_the_missing_setting(served, capsys):
     assert fail([], capsys) == (
         "mockstack: error: --templates-dir is required when --strategy is filefixtures (the default)\n"

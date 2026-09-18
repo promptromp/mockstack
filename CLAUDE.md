@@ -23,8 +23,14 @@ CLI flags, `MOCKSTACK__*` environment variables, or a `.env` file.
 
 - `mockstack/main.py`: app factory (`create_app`) and the `mockstack` CLI entry point
 - `mockstack/cli.py`: the command line: rich-argparse help, `--version`, and
-  configuration errors (`ValidationError`, `SettingsError`, `RulesFileError`) printed
-  without a traceback, naming each setting by flag and environment variable, exit status 2
+  configuration errors (`ValidationError`, `SettingsError`, `RulesFileError`,
+  `OpenTelemetryUnavailableError`) printed without a traceback, naming each setting by
+  flag and environment variable, exit status 2
+- `mockstack/telemetry.py`: optional tracing: `current_span(request)` (a no-op span
+  without tracing) and `opentelemetry_provider`, which imports `mockstack/tracing.py`
+  only when `opentelemetry.enabled` is on, raising `OpenTelemetryUnavailableError` when
+  the `opentelemetry` extra is not installed; `mockstack/tracing.py`: the tracer
+  provider, OTLP exporter and per-request span middleware
 - `mockstack/config.py`: `Settings`, whose attribute docstrings are the `--help` text,
   and `SettingsDependencyError` for checks across settings;
   `mockstack/constants.py`: enums, header names
@@ -105,6 +111,11 @@ file fails it. CI runs the unit tests, the live tests, mypy, ruff and the docs b
   strategy is constructed; a file that does not load raises `RulesFileError`, naming
   the file and the rule by position. Every `proxyrules` response, including errors, carries the
   result headers.
+- **OpenTelemetry is an optional extra** (`mockstack[opentelemetry]`; the `dev` group
+  installs it). Only `mockstack/tracing.py` imports `opentelemetry`; strategies add span
+  attributes through `telemetry.current_span(request)`, never `request.state.span`.
+  `test_mockstack_never_imports_opentelemetry_unless_enabled` guards this, and the
+  `without_opentelemetry` fixture simulates an install without the extra.
 - **Keep names generic** in code, tests, docs and examples: projects service,
   analytics SQL gateway, `sales_facts`, orders, users. Never use company, product or
   internal service names.

@@ -28,6 +28,21 @@ version.
 
 ## OpenTelemetry Settings
 
+Tracing needs the optional `opentelemetry` extra, which installs the OpenTelemetry SDK
+and its OTLP gRPC exporter. A plain install leaves them out, and with tracing off
+mockstack never imports them:
+
+```bash
+uvx --from 'mockstack[opentelemetry]' mockstack --opentelemetry.enabled ...
+uv tool install 'mockstack[opentelemetry]'
+pip install 'mockstack[opentelemetry]'
+```
+
+With `opentelemetry.enabled` on, each request gets a span, exported over OTLP gRPC to
+`opentelemetry.endpoint`, that the strategies add their attributes to. Turning tracing on
+without the extra is a [configuration error](#configuration-errors) that names the extra
+to install.
+
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `opentelemetry.enabled` | boolean | `false` | Whether to enable OpenTelemetry integration |
@@ -104,7 +119,8 @@ The logging configuration follows the Python logging configuration schema. By de
 
 ## Example Configuration
 
-Here's an example `.env` file. A `.env` file does not expand `~`, so give paths in full:
+Here's an example `.env` file, which turns tracing on and so needs the `opentelemetry`
+extra. A `.env` file does not expand `~`, so give paths in full:
 
 ```env
 MOCKSTACK__STRATEGY=filefixtures
@@ -146,8 +162,8 @@ uvx mockstack --strategy proxyrules --proxyrules-rules-filename ./rules.yml --pr
 
 Settings are checked before the server starts. When a setting is missing or invalid, a
 flag, a key in the `.env` file or a variable inside a settings group (such as
-`MOCKSTACK__OPENTELEMETRY__ENABLED`) is not recognized, or the rules file does not load,
-mockstack exits with status 2 and a short message instead of a traceback. It names each
+`MOCKSTACK__OPENTELEMETRY__ENABLED`) is not recognized, the rules file does not load, or
+tracing is on without the `opentelemetry` extra installed, mockstack exits with status 2 and a short message instead of a traceback. It names each
 setting by its flag and lists the environment variables for the same settings, since the
 value may have come from the command line, the environment or a `.env` file. Flags must
 be spelled in full, and a misspelt flag or `.env` key gets a suggestion. An exported
@@ -171,6 +187,11 @@ $ mockstack --template-dir ./templates
 mockstack: error: unrecognized arguments: --template-dir ./templates
   --template-dir: did you mean --templates-dir?
 Run 'mockstack --help' to see all options.
+
+$ mockstack --templates-dir ./templates --opentelemetry.enabled
+mockstack: error: --opentelemetry.enabled is on, but the OpenTelemetry packages are not installed
+  environment or .env: MOCKSTACK__OPENTELEMETRY__ENABLED
+  install them with: pip install 'mockstack[opentelemetry]'
 ```
 
 A rules file that does not load is named with the offending rule; see

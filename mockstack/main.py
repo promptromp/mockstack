@@ -12,7 +12,7 @@ from mockstack.middleware import middleware_provider
 from mockstack.routers.catchall import catchall_router_provider
 from mockstack.strategies.factory import strategy_provider
 from mockstack.strategies.proxyrules import RulesFileError
-from mockstack.telemetry import opentelemetry_provider
+from mockstack.telemetry import OpenTelemetryUnavailableError, opentelemetry_provider
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -51,7 +51,7 @@ def run(argv: Sequence[str] | None = None) -> None:
 
     try:
         app = create_app(settings=settings)
-    except RulesFileError as exc:
+    except (RulesFileError, OpenTelemetryUnavailableError) as exc:
         parser.exit_with(report_for(exc))
 
     uvicorn.run(app, host=settings.host, port=settings.port)

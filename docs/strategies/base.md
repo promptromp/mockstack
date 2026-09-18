@@ -28,7 +28,7 @@ This is the main method that all strategies must implement. It takes a FastAPI `
 def update_opentelemetry(self, request: Request, *args, **kwargs) -> None
 ```
 
-This method allows strategies to add strategy-specific attributes to the OpenTelemetry span. The span is available on `request.state.span`. When OpenTelemetry is not enabled, this span will exist but will not be reported.
+This method allows strategies to add strategy-specific attributes to the request's OpenTelemetry span, which `mockstack.telemetry.current_span(request)` returns. When OpenTelemetry is not enabled, that span records nothing, so a strategy can set attributes without checking whether tracing is on or its optional packages are installed.
 
 ## Creating Custom Strategies
 
@@ -42,6 +42,7 @@ Example:
 
 ```python
 from mockstack.strategies.base import BaseStrategy
+from mockstack.telemetry import current_span
 from fastapi import Request, Response
 
 
@@ -52,5 +53,5 @@ class CustomStrategy(BaseStrategy):
 
     def update_opentelemetry(self, request: Request, *args, **kwargs) -> None:
         # Add custom telemetry attributes
-        request.state.span.set_attribute("custom.attribute", "value")
+        current_span(request).set_attribute("custom.attribute", "value")
 ```
