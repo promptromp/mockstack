@@ -1,6 +1,9 @@
 """Tests for mockstack.config: settings construction isolation."""
 
 import json
+import os
+import subprocess
+import sys
 
 import pytest
 from pydantic import ValidationError
@@ -30,6 +33,72 @@ def test_settings_dependency_error_names_a_setting_in_a_group_with_a_dot():
 
     assert str(error) == "opentelemetry.enabled requires strategy to be proxyrules"
     assert error.settings == ("opentelemetry.enabled", "strategy")
+
+
+# Unprefixed variables named like the OpenTelemetry settings, as another program might set them.
+UNPREFIXED_OPENTELEMETRY_ENV = {
+    "ENABLED": "true",
+    "ENDPOINT": "http://elsewhere:4317/",
+    "CAPTURE_RESPONSE_BODY": "true",
+}
+
+
+@pytest.fixture
+def isolated_env(monkeypatch, tmp_path):
+    """No ``MOCKSTACK__*`` variables and no ``.env`` file: the settings come from defaults
+    and whatever the test sets."""
+    monkeypatch.chdir(tmp_path)
+    for name in list(os.environ):
+        if name.upper().startswith("MOCKSTACK__"):
+            monkeypatch.delenv(name)
+
+
+def test_opentelemetry_settings_ignore_unprefixed_environment_variables(isolated_env, monkeypatch):
+    for name, value in UNPREFIXED_OPENTELEMETRY_ENV.items():
+        monkeypatch.setenv(name, value)
+
+    assert OpenTelemetrySettings().model_dump() == {
+        "enabled": False,
+        "endpoint": "http://localhost:4317/",
+        "capture_response_body": False,
+    }
+
+
+def test_settings_ignore_unprefixed_opentelemetry_variables_at_import(tmp_path):
+    """Unprefixed variables set before mockstack.config is imported do not reach the
+    OpenTelemetry settings. A fresh interpreter guards against default settings built at
+    import, as a nested ``BaseSettings`` once was, reading them."""
+    env = {name: value for name, value in os.environ.items() if not name.upper().startswith("MOCKSTACK__")}
+    script = (
+        f"from mockstack.config import Settings; print(Settings(templates_dir={str(tmp_path)!r}).model_dump_json())"
+    )
+
+    # S603: runs this interpreter on the script above, with no untrusted input.
+    result = subprocess.run(  # noqa: S603
+        [sys.executable, "-c", script],
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+        env={**env, **UNPREFIXED_OPENTELEMETRY_ENV},
+        check=True,
+    )
+
+    assert json.loads(result.stdout)["opentelemetry"] == {
+        "enabled": False,
+        "endpoint": "http://localhost:4317/",
+        "capture_response_body": False,
+    }
+
+
+def test_opentelemetry_settings_come_from_prefixed_environment_variables(isolated_env, monkeypatch, tmp_path):
+    monkeypatch.setenv("MOCKSTACK__OPENTELEMETRY__ENABLED", "true")
+    monkeypatch.setenv("MOCKSTACK__OPENTELEMETRY__ENDPOINT", "http://collector:4317/")
+
+    settings = Settings(templates_dir=tmp_path)
+
+    assert settings.opentelemetry.enabled is True
+    assert settings.opentelemetry.endpoint == "http://collector:4317/"
+    assert settings.opentelemetry.capture_response_body is False
 
 
 def test_port_must_be_a_valid_port_number(make_settings, templates_dir):

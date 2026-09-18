@@ -104,6 +104,10 @@ file fails it. CI runs the unit tests, the live tests, mypy, ruff and the docs b
   docs, examples and `.env.example` files names a real setting.
 - **Regexes in YAML** go in plain or single-quoted scalars: a double-quoted `"\1"`
   does not parse.
+- **A settings group is a `BaseModel`, not a `BaseSettings`** (`OpenTelemetrySettings`),
+  as pydantic-settings requires of nested models: `Settings` fills it from
+  `MOCKSTACK__<GROUP>__*` variables. A nested `BaseSettings` reads the environment itself,
+  unprefixed. Give a group `extra="forbid"` so a mistyped variable is still an error.
 - **Every setting has an attribute docstring.** It is the setting's `--help` text, and
   `test_every_setting_has_help_text` fails without it. A check across settings raises
   `SettingsDependencyError` naming each setting in braces, so the CLI can show flags.
