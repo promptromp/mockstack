@@ -3,7 +3,7 @@ from functools import lru_cache
 from string import Formatter
 from typing import Any, Literal, Self
 
-from pydantic import DirectoryPath, Field, FilePath, ImportString, model_validator
+from pydantic import BaseModel, ConfigDict, DirectoryPath, Field, FilePath, ImportString, model_validator
 from pydantic_settings import (
     BaseSettings,
     CliImplicitFlag,
@@ -36,10 +36,17 @@ class SettingsDependencyError(ValueError):
         super().__init__("".join(literal + (field or "") for literal, field, _, _ in parts))
 
 
-class OpenTelemetrySettings(BaseSettings):
-    """Settings for OpenTelemetry."""
+class OpenTelemetrySettings(BaseModel):
+    """Settings for OpenTelemetry.
 
-    model_config = SettingsConfigDict(use_attribute_docstrings=True)
+    A plain model, as pydantic-settings requires of a nested group: ``Settings`` fills it
+    from ``MOCKSTACK__OPENTELEMETRY__*`` variables. As a ``BaseSettings`` it would also
+    read unprefixed ``ENABLED``, ``ENDPOINT`` and ``CAPTURE_RESPONSE_BODY`` variables.
+    Unknown keys are rejected, as ``BaseSettings`` rejects them, so a mistyped
+    ``MOCKSTACK__OPENTELEMETRY__*`` variable is an error.
+    """
+
+    model_config = ConfigDict(use_attribute_docstrings=True, extra="forbid")
 
     enabled: CliImplicitFlag[bool] = False
     """Whether to enable the OpenTelemetry integration."""
@@ -83,7 +90,7 @@ class Settings(BaseSettings):
     /docs/oauth2-redirect). They take precedence over the catch-all route, so they are off by default and
     those paths reach the strategy like any other."""
 
-    opentelemetry: OpenTelemetrySettings = OpenTelemetrySettings()
+    opentelemetry: OpenTelemetrySettings = Field(default_factory=OpenTelemetrySettings)
     """OpenTelemetry configuration."""
 
     strategy: Literal["filefixtures", "proxyrules"] = "filefixtures"
