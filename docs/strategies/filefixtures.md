@@ -119,7 +119,9 @@ Here's an example template for a user resource, `api-v1-users.j2`, which serves
 
 ## OpenTelemetry Integration
 
-The strategy automatically adds the following OpenTelemetry attributes:
+With tracing on (see [OpenTelemetry settings](../configuration.md#opentelemetry-settings),
+which need the `opentelemetry` extra), the strategy adds the following attributes to the
+request's span:
 
 - `mockstack.filefixtures.template_name`: The name of the template being rendered
 

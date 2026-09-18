@@ -19,7 +19,8 @@ Thank you for your interest in contributing to mockstack! We welcome contributio
    git clone https://github.com/YOUR_USERNAME/mockstack.git
    cd mockstack
    ```
-3. Install the package in development mode, with its development dependencies. `uv sync`
+3. Install the package in development mode, with its development dependencies (which
+   include the optional `opentelemetry` extra, since the tests exercise tracing). `uv sync`
    creates the `.venv` virtual environment itself:
    ```bash
    uv sync

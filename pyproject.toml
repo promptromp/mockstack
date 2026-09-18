@@ -24,8 +24,6 @@ dependencies = [
     "fastapi>=0.141.1",
     "httpx>=0.28.1",
     "jinja2>=3.1.6",
-    "opentelemetry-distro[otlp]>=0.65b0",
-    "opentelemetry-instrumentation-fastapi>=0.65b0",
     "pydantic>=2.13.5",
     "pydantic-settings>=2.15.0",
     "pyyaml>=6.0.3",
@@ -47,9 +45,17 @@ mockstack = "mockstack.main:run"
 llm = [
     "ollama>=0.6.2",
 ]
+# Tracing with MOCKSTACK__OPENTELEMETRY__ENABLED: the SDK and its OTLP gRPC exporter.
+opentelemetry = [
+    "opentelemetry-api>=1.44.0",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.44.0",
+    "opentelemetry-sdk>=1.44.0",
+]
 
 [dependency-groups]
 dev = [
+    # The tests exercise tracing, so development installs include the extra.
+    "mockstack[opentelemetry]",
     "mypy>=2.3.1",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",

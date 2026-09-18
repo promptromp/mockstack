@@ -17,6 +17,7 @@ from mockstack.intent import (
 )
 from mockstack.strategies.base import BaseStrategy
 from mockstack.strategies.create_mixin import CreateMixin
+from mockstack.telemetry import current_span
 from mockstack.templating import (
     iter_possible_template_arguments,
     templates_env_provider,
@@ -203,6 +204,6 @@ class FileFixturesStrategy(BaseStrategy, CreateMixin):
 
     def update_opentelemetry(self, request: Request, template_args: dict) -> None:
         """Update the opentelemetry span with the file fixtures details."""
-        span = request.state.span
+        span = current_span(request)
 
         span.set_attribute("mockstack.filefixtures.template_name", template_args["name"])

@@ -589,8 +589,9 @@ The default metadata fields are controlled via the configuration file and at the
 
 ## OpenTelemetry integration
 
-The strategy automatically adds the following OpenTelemetry attributes when a rule
-matches. The shared rule attributes (`rule_name`, `rule_method`, `rule_pattern`,
+With tracing on (see [OpenTelemetry settings](../configuration.md#opentelemetry-settings),
+which need the `opentelemetry` extra), the strategy adds the following attributes to the
+request's span when a rule matches. The shared rule attributes (`rule_name`, `rule_method`, `rule_pattern`,
 `rule_replacement`) always describe the rule named in the response's
 `X-Mockstack-Rule` header, never some other rule that was merely consulted along the
 way (e.g. a record-mode upstream rule whose response ends up recorded and replayed

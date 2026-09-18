@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from jinja2 import Environment
 
 from mockstack.intent import wants_json
+from mockstack.telemetry import current_span
 
 
 class CreateMixin:
@@ -81,7 +82,7 @@ class CreateMixin:
 
     def _create_mixin_update_opentelemetry(self, request: Request, created_resource_metadata: dict) -> None:
         """Update the opentelemetry span with the create mixin details."""
-        span = request.state.span
+        span = current_span(request)
         span.set_attribute(
             "mockstack.create_mixin.created_resource_metadata",
             json.dumps(created_resource_metadata),

@@ -22,7 +22,7 @@ class BaseStrategy(ABC):
     def update_opentelemetry(self, request: Request, *args: Any, **kwargs: Any) -> None:  # noqa: B027
         """Update the opentelemetry span with strategy-specific attributes.
 
-        A span is made available on `request.state.span` to use.
-        When OpenTelemetry is not enabled, this span will exist but will not be reported.
+        Add attributes to ``mockstack.telemetry.current_span(request)``. When OpenTelemetry
+        is not enabled, that span records nothing.
 
         """

@@ -37,6 +37,8 @@ jobs:
           set -euo pipefail
           uvx --from mockstack python -c \
             "import fastapi, starlette, uvicorn, pydantic; \
+             from importlib.metadata import version; \
+             print(f'mockstack={version(\"mockstack\")}'); \
              print(f'fastapi={fastapi.__version__}'); \
              print(f'starlette={starlette.__version__}'); \
              print(f'uvicorn={uvicorn.__version__}'); \
@@ -90,3 +92,32 @@ jobs:
 
           kill "$SERVER_PID" 2>/dev/null || true
           wait "$SERVER_PID" 2>/dev/null || true
+
+      - name: Tracing needs the opentelemetry extra
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          # Without the extra, turning tracing on is a configuration error naming the extra.
+          # A server that starts instead of refusing would never exit: timeout fails the check.
+          status=0
+          timeout 60 uvx mockstack --templates-dir /tmp/mockstack-templates --opentelemetry.enabled \
+            2> error.txt || status=$?
+          cat error.txt
+          test "$status" = 2
+          grep -F "pip install 'mockstack[opentelemetry]'" error.txt
+
+          # With it, the server starts with tracing on and serves requests. Exporting to
+          # the default endpoint fails quietly in the background: nothing listens there.
+          uvx --from 'mockstack[opentelemetry]' mockstack --templates-dir /tmp/mockstack-templates \
+            --port 18998 --opentelemetry.enabled > traced.log 2>&1 &
+          SERVER_PID=$!
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:18998/ -o /dev/null; then READY=1; break; fi
+            if ! kill -0 "$SERVER_PID" 2>/dev/null; then cat traced.log; exit 1; fi
+            sleep 1
+          done
+          kill "$SERVER_PID" 2>/dev/null || true
+          if [ "${READY:-0}" != "1" ]; then cat traced.log; exit 1; fi
+          # The startup summary confirms the server really ran with tracing on.
+          grep -F "OpenTelemetry enabled: True" traced.log || { cat traced.log; exit 1; }
+          echo "tracing smoke test passed"

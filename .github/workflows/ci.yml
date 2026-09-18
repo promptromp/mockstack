@@ -49,6 +49,29 @@ jobs:
       run: uv run pytest
     - name: Run live tests
       run: uv run pytest -m slow mockstack/tests/live -v
+    - name: Check an install without the opentelemetry extra
+      # The OpenTelemetry packages are optional: a plain install has none of them and
+      # reports how to install them when tracing is turned on.
+      timeout-minutes: 5
+      run: |
+        set -euo pipefail
+        uv build --wheel --out-dir "$RUNNER_TEMP/dist"
+        uv venv "$RUNNER_TEMP/base"
+        uv pip install --python "$RUNNER_TEMP/base/bin/python" "$RUNNER_TEMP"/dist/*.whl
+        uv pip list --python "$RUNNER_TEMP/base/bin/python" > "$RUNNER_TEMP/packages.txt"
+        grep -q '^mockstack ' "$RUNNER_TEMP/packages.txt"
+        if grep -i opentelemetry "$RUNNER_TEMP/packages.txt"; then
+          echo "a plain install should not include OpenTelemetry packages"; exit 1
+        fi
+        cd "$RUNNER_TEMP"
+        status=0
+        # A server that starts instead of refusing would never exit: timeout fails the check.
+        timeout 60 "$RUNNER_TEMP/base/bin/mockstack" --templates-dir . --opentelemetry.enabled 2> error.txt \
+          || status=$?
+        cat error.txt
+        test "$status" = 2
+        grep -F "pip install 'mockstack[opentelemetry]'" error.txt
+        if grep -F Traceback error.txt; then exit 1; fi
 
   docs:
 
