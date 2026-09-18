@@ -29,7 +29,7 @@ CLI flags, `MOCKSTACK__*` environment variables, or a `.env` file.
 - `mockstack/telemetry.py`: optional tracing: `current_span(request)` (a no-op span
   without tracing) and `opentelemetry_provider`, which imports `mockstack/tracing.py`
   only when `opentelemetry.enabled` is on, raising `OpenTelemetryUnavailableError` when
-  the `opentelemetry` extra is not installed; `mockstack/tracing.py`: the tracer
+  the `opentelemetry` extra is not installed or does not import; `mockstack/tracing.py`: the tracer
   provider, OTLP exporter and per-request span middleware
 - `mockstack/config.py`: `Settings`, whose attribute docstrings are the `--help` text,
   and `SettingsDependencyError` for checks across settings;

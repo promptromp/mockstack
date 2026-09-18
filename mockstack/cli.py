@@ -170,14 +170,14 @@ def report_for(exc: ValidationError | SettingsError | RulesFileError | OpenTelem
     if isinstance(exc, RulesFileError):
         return ErrorReport([Text.assemble((str(exc.path), "bold"), f": {exc.problem}")], help_hint=False)
     if isinstance(exc, OpenTelemetryUnavailableError):
-        return _opentelemetry_unavailable_report()
+        return _opentelemetry_unavailable_report(exc)
     return ErrorReport([_settings_error_problem(exc)])
 
 
-def _opentelemetry_unavailable_report() -> ErrorReport:
+def _opentelemetry_unavailable_report(exc: OpenTelemetryUnavailableError) -> ErrorReport:
     """E.g. ``--opentelemetry.enabled is on, but the OpenTelemetry packages are not installed``."""
     name = setting_name(("opentelemetry", "enabled"))
-    problem = Text.assemble((name.display, FLAG_STYLE), " is on, but the OpenTelemetry packages are not installed")
+    problem = Text.assemble((name.display, FLAG_STYLE), f" is on, but {exc.problem}")
     install = Text.assemble(("install them with: ", NOTE_STYLE), (f"pip install '{OPENTELEMETRY_EXTRA}'", VALUE_STYLE))
     return ErrorReport([problem], settings=[name], hints=[install], help_hint=False)
 

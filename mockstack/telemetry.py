@@ -33,13 +33,20 @@ NULL_SPAN = NullSpan()
 
 
 class OpenTelemetryUnavailableError(RuntimeError):
-    """OpenTelemetry is enabled, but the optional packages it needs are not installed."""
+    """OpenTelemetry is enabled, but the optional packages it needs do not import.
 
-    def __init__(self, missing_module: str) -> None:
-        self.missing_module = missing_module
+    ``problem`` says why: the packages are not installed at all, or ``cause``, the
+    ``ImportError`` raised by an incomplete install or mismatched versions.
+    """
+
+    def __init__(self, cause: ImportError) -> None:
+        self.cause = cause
+        if isinstance(cause, ModuleNotFoundError) and cause.name == "opentelemetry":
+            self.problem = "the OpenTelemetry packages are not installed"
+        else:
+            self.problem = f"the OpenTelemetry packages cannot be imported: {cause}"
         super().__init__(
-            f"OpenTelemetry is enabled, but its packages are not installed (no module named {missing_module!r}); "
-            f"install them with: pip install '{OPENTELEMETRY_EXTRA}'"
+            f"OpenTelemetry is enabled, but {self.problem}; install them with: pip install '{OPENTELEMETRY_EXTRA}'"
         )
 
 
@@ -53,7 +60,7 @@ def opentelemetry_provider(app: FastAPI, settings: Settings) -> None:
     """Trace ``app``'s requests when OpenTelemetry is enabled.
 
     Raises ``OpenTelemetryUnavailableError`` when it is enabled but the ``opentelemetry``
-    extra is not installed.
+    extra is not installed, or is incomplete.
     """
     if not settings.opentelemetry.enabled:
         return
@@ -61,11 +68,12 @@ def opentelemetry_provider(app: FastAPI, settings: Settings) -> None:
     try:
         # Imported here: the OpenTelemetry packages are optional and only needed when enabled.
         from mockstack import tracing  # noqa: PLC0415
-    except ModuleNotFoundError as exc:
-        # Only a missing OpenTelemetry package means the extra is not installed; anything
-        # else missing is a broken environment and keeps its traceback.
-        if exc.name is None or not (exc.name == "opentelemetry" or exc.name.startswith("opentelemetry.")):
+    except ImportError as exc:
+        # mockstack's own modules are imported already, so any other import that fails is
+        # the extra's: missing, incomplete (e.g. without grpc) or at mismatched versions.
+        # A mockstack module that does not import is a bug and keeps its traceback.
+        if exc.name is not None and (exc.name == "mockstack" or exc.name.startswith("mockstack.")):
             raise
-        raise OpenTelemetryUnavailableError(exc.name) from exc
+        raise OpenTelemetryUnavailableError(exc) from exc
 
     tracing.install(app, settings)

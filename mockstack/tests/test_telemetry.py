@@ -1,8 +1,10 @@
 """Unit tests for the telemetry module: tracing is optional, and so are its packages."""
 
+import os
 import subprocess
 import sys
 import textwrap
+import types
 from unittest.mock import patch
 
 import httpx
@@ -18,6 +20,7 @@ from mockstack.telemetry import (
     current_span,
     opentelemetry_provider,
 )
+from mockstack.tests.test_cli import TERMINAL_ENV_VARS
 
 
 @pytest.fixture
@@ -65,13 +68,40 @@ def test_enabled_without_the_extra_names_it(without_opentelemetry, tracing_setti
     with pytest.raises(OpenTelemetryUnavailableError) as excinfo:
         opentelemetry_provider(FastAPI(), tracing_settings)
 
-    assert excinfo.value.missing_module.startswith("opentelemetry")
+    assert excinfo.value.problem == "the OpenTelemetry packages are not installed"
     assert "pip install 'mockstack[opentelemetry]'" in str(excinfo.value)
     assert isinstance(excinfo.value.__cause__, ModuleNotFoundError)
 
 
-def test_another_missing_module_keeps_its_error(monkeypatch, tracing_settings):
-    """Only missing OpenTelemetry packages mean the extra is not installed."""
+@pytest.mark.parametrize(
+    ("module", "replacement", "cause"),
+    [
+        # An incomplete install: the exporter, or a dependency such as grpc, is missing.
+        (
+            "opentelemetry.exporter.otlp.proto.grpc.trace_exporter",
+            None,
+            "import of opentelemetry.exporter.otlp.proto.grpc.trace_exporter halted",
+        ),
+        # Mismatched versions: a module without a name the tracing module imports.
+        ("opentelemetry.propagate", types.ModuleType("opentelemetry.propagate"), "cannot import name 'extract'"),
+    ],
+    ids=["missing-module", "missing-name"],
+)
+def test_enabled_with_a_broken_extra_names_the_cause(monkeypatch, tracing_settings, module, replacement, cause):
+    monkeypatch.setitem(sys.modules, module, replacement)
+    monkeypatch.delitem(sys.modules, "mockstack.tracing", raising=False)
+    monkeypatch.delattr(mockstack, "tracing", raising=False)
+
+    with pytest.raises(OpenTelemetryUnavailableError) as excinfo:
+        opentelemetry_provider(FastAPI(), tracing_settings)
+
+    assert excinfo.value.problem.startswith("the OpenTelemetry packages cannot be imported: ")
+    assert cause in excinfo.value.problem
+    assert excinfo.value.cause is excinfo.value.__cause__
+
+
+def test_a_mockstack_module_that_does_not_import_keeps_its_error(monkeypatch, tracing_settings):
+    """A mockstack module that does not import is a bug, not a missing extra."""
     monkeypatch.setitem(sys.modules, "mockstack.tracing", None)
     monkeypatch.delattr(mockstack, "tracing", raising=False)
 
@@ -143,8 +173,15 @@ def test_mockstack_never_imports_opentelemetry_unless_enabled(tmp_path):
         """
     )
 
-    result = subprocess.run(  # noqa: S603 -- runs this interpreter on the script above
-        [sys.executable, "-c", script], capture_output=True, text=True, cwd=tmp_path, check=False
+    # Without MOCKSTACK__* or terminal variables, as the CLI tests run: either would change the output.
+    env = {
+        name: value
+        for name, value in os.environ.items()
+        if not name.upper().startswith("MOCKSTACK__") and name not in TERMINAL_ENV_VARS
+    }
+    # S603: runs this interpreter on the script above, with no untrusted input.
+    result = subprocess.run(  # noqa: S603
+        [sys.executable, "-c", script], capture_output=True, text=True, cwd=tmp_path, env=env, check=False
     )
 
     assert result.returncode == 2, result.stderr

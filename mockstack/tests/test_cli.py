@@ -2,12 +2,15 @@
 
 import os
 import re
+import sys
+import types
 from importlib import metadata
 
 import pytest
 from pydantic import BaseModel, ValidationError
 from pydantic_settings import SettingsError
 
+import mockstack
 from mockstack.cli import SettingName, build_parser, report_for, setting_name, settings_source
 from mockstack.config import OpenTelemetrySettings, Settings, SettingsDependencyError
 from mockstack.main import run
@@ -70,6 +73,24 @@ def test_tracing_enabled_from_the_environment_without_the_extra(
     monkeypatch.setenv("MOCKSTACK__OPENTELEMETRY__ENABLED", "true")
 
     assert fail(["--templates-dir", str(tmp_path)], capsys) == OPENTELEMETRY_UNAVAILABLE
+
+
+def test_tracing_with_an_incomplete_extra_names_the_cause(served, capsys, tmp_path, monkeypatch):
+    monkeypatch.setitem(sys.modules, "opentelemetry.propagate", types.ModuleType("opentelemetry.propagate"))
+    monkeypatch.delitem(sys.modules, "mockstack.tracing", raising=False)
+    monkeypatch.delattr(mockstack, "tracing", raising=False)
+
+    error = fail(["--templates-dir", str(tmp_path), "--opentelemetry.enabled"], capsys)
+
+    first, *rest = error.splitlines()
+    assert first.startswith(
+        "mockstack: error: --opentelemetry.enabled is on, but the OpenTelemetry packages cannot be imported: "
+        "cannot import name 'extract' from 'opentelemetry.propagate'"
+    )
+    assert rest == [
+        "  environment or .env: MOCKSTACK__OPENTELEMETRY__ENABLED",
+        "  install them with: pip install 'mockstack[opentelemetry]'",
+    ]
 
 
 def test_run_without_the_extra_serves_with_tracing_off(served, tmp_path, without_opentelemetry):

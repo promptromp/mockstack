@@ -170,14 +170,31 @@ def test_install_exports_to_the_endpoint(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("capture_response_body", [False, True])
-async def test_enabled_app_traces_each_request(make_settings, write_template, tmp_path, capture_response_body):
+@pytest.mark.parametrize(
+    ("strategy", "capture_response_body", "strategy_attributes"),
+    [
+        ("filefixtures", False, {"mockstack.filefixtures.template_name": "api-v1-projects.j2"}),
+        ("filefixtures", True, {"mockstack.filefixtures.template_name": "api-v1-projects.j2"}),
+        (
+            "proxyrules",
+            False,
+            {"mockstack.proxyrules.rule_name": "projects", "mockstack.proxyrules.result_type": "template"},
+        ),
+    ],
+)
+async def test_enabled_app_traces_each_request(
+    make_settings, write_template, write_rules, tmp_path, strategy, capture_response_body, strategy_attributes
+):
     """With tracing enabled, each request gets a span that the strategy adds to."""
-    write_template("api-v1-projects.j2", '{"id": "1234"}')
+    template = write_template("api-v1-projects.j2", '{"id": "1234"}')
+    rules = write_rules(
+        [{"name": "projects", "pattern": "/api/v1/projects/1234", "replacement": f"file:///{template}"}]
+    )
     span = MagicMock()
     settings = make_settings(
-        strategy="filefixtures",
+        strategy=strategy,
         templates_dir=tmp_path,
+        proxyrules_rules_filename=rules,
         opentelemetry=OpenTelemetrySettings(enabled=True, capture_response_body=capture_response_body),
     )
     with (
@@ -197,5 +214,5 @@ async def test_enabled_app_traces_each_request(make_settings, write_template, tm
     assert mock_trace.get_tracer.return_value.start_as_current_span.call_args.args[0] == "GET /api/v1/projects/1234"
     attributes = {call.args[0]: call.args[1] for call in span.set_attribute.call_args_list}
     assert attributes["http.status_code"] == 200
-    assert attributes["mockstack.filefixtures.template_name"] == "api-v1-projects.j2"
+    assert strategy_attributes.items() <= attributes.items()
     assert ("http.response.body" in attributes) is capture_response_body

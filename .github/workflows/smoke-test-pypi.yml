@@ -94,11 +94,13 @@ jobs:
           wait "$SERVER_PID" 2>/dev/null || true
 
       - name: Tracing needs the opentelemetry extra
+        timeout-minutes: 5
         run: |
           set -euo pipefail
           # Without the extra, turning tracing on is a configuration error naming the extra.
+          # A server that starts instead of refusing would never exit: timeout fails the check.
           status=0
-          uvx mockstack --templates-dir /tmp/mockstack-templates --opentelemetry.enabled \
+          timeout 60 uvx mockstack --templates-dir /tmp/mockstack-templates --opentelemetry.enabled \
             2> error.txt || status=$?
           cat error.txt
           test "$status" = 2
@@ -116,4 +118,6 @@ jobs:
           done
           kill "$SERVER_PID" 2>/dev/null || true
           if [ "${READY:-0}" != "1" ]; then cat traced.log; exit 1; fi
+          # The startup summary confirms the server really ran with tracing on.
+          grep -F "OpenTelemetry enabled: True" traced.log || { cat traced.log; exit 1; }
           echo "tracing smoke test passed"
