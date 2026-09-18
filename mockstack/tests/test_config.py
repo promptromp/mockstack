@@ -64,9 +64,10 @@ def test_opentelemetry_settings_ignore_unprefixed_environment_variables(isolated
     }
 
 
-def test_settings_ignore_unprefixed_opentelemetry_variables_at_import(isolated_env, tmp_path):
-    """The default OpenTelemetry settings are built when mockstack.config is imported, so
-    only a fresh interpreter shows whether unprefixed variables leak into them."""
+def test_settings_ignore_unprefixed_opentelemetry_variables_at_import(tmp_path):
+    """Unprefixed variables set before mockstack.config is imported do not reach the
+    OpenTelemetry settings. A fresh interpreter guards against default settings built at
+    import, as a nested ``BaseSettings`` once was, reading them."""
     env = {name: value for name, value in os.environ.items() if not name.upper().startswith("MOCKSTACK__")}
     script = (
         f"from mockstack.config import Settings; print(Settings(templates_dir={str(tmp_path)!r}).model_dump_json())"
