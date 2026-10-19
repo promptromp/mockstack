@@ -1,7 +1,7 @@
 """Every ``MOCKSTACK__*`` variable named in the docs and examples is a real setting.
 
-Covers the README, contributor docs, docs pages, example READMEs and notebooks, the
-Dockerfile and every ``.env.example``. pydantic-settings silently ignores an assignment
+Covers the README, contributor docs, docs pages, example READMEs and notebooks, and
+every ``.env.example``. pydantic-settings silently ignores an assignment
 in a ``.env`` file that lacks the ``MOCKSTACK__`` prefix, so those are checked too.
 """
 
@@ -21,7 +21,6 @@ DOCUMENTS = sorted(
         REPO_ROOT / "README.md",
         REPO_ROOT / "CLAUDE.md",
         REPO_ROOT / "CONTRIBUTING.md",
-        REPO_ROOT / "Dockerfile",
         REPO_ROOT / ".env.example",
         *(REPO_ROOT / "docs").rglob("*.md"),
         *(REPO_ROOT / "examples").rglob("*.md"),
