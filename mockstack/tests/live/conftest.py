@@ -11,6 +11,7 @@ servers are joined when the session ends.
 
 import asyncio
 import contextlib
+import gzip
 import socket
 import string
 import threading
@@ -22,7 +23,7 @@ from typing import Any
 import pytest
 import uvicorn
 from fastapi import FastAPI, Request, Response
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from mockstack.config import Settings
 from mockstack.constants import ProxyRulesRedirectVia
@@ -140,7 +141,7 @@ def upstream(_live_servers) -> Iterator[LiveServer]:
     calls: list[dict[str, Any]] = []
     app = FastAPI()
 
-    @app.get("/cookies")
+    @app.api_route("/cookies", methods=["GET", "HEAD"])
     async def cookies():
         # Registered before the catch-all: a response with repeated Set-Cookie headers.
         response = JSONResponse({"source": "upstream"})
@@ -152,6 +153,18 @@ def upstream(_live_servers) -> Iterator[LiveServer]:
     async def sized():
         # Registered before the catch-all: a fixed 1234-byte body for GET and HEAD.
         return Response(content=b"x" * 1234, media_type="application/octet-stream")
+
+    @app.api_route("/unsized", methods=["GET", "HEAD"])
+    async def unsized():
+        # Registered before the catch-all: a streamed body, so no Content-Length (and a
+        # HEAD answered without one).
+        return StreamingResponse(iter([b'{"source": "upstream"}']), media_type="application/json")
+
+    @app.api_route("/gzipped", methods=["GET", "HEAD"])
+    async def gzipped():
+        # Registered before the catch-all: a gzip-encoded body, which the proxy decodes.
+        content = gzip.compress(b'{"source": "upstream"}' * 50, mtime=0)
+        return Response(content=content, media_type="application/json", headers={"content-encoding": "gzip"})
 
     @app.get("/slow")
     async def slow(request: Request):

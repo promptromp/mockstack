@@ -117,7 +117,7 @@ async def test_with_response_body():
     )
     span = MagicMock()
 
-    new_response, _ = await with_response_body(response, span)
+    new_response, _ = await with_response_body(response, span, request_method="GET")
 
     # Verify response body was added to span
     span.set_attribute.assert_called_once_with("http.response.body", body_content.decode())
@@ -143,7 +143,7 @@ async def test_with_response_body_keeps_a_body_that_is_not_utf8(body):
     )
     span = MagicMock()
 
-    new_response, _ = await with_response_body(response, span)
+    new_response, _ = await with_response_body(response, span, request_method="GET")
 
     span.set_attribute.assert_called_once_with("http.response.body", f"<{len(body)} bytes, not UTF-8>")
     assert new_response.body == body
@@ -154,9 +154,10 @@ async def test_with_response_body_keeps_a_body_that_is_not_utf8(body):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("status_code", "body", "raw_headers"),
+    ("request_method", "status_code", "body", "raw_headers"),
     [
         (
+            "GET",
             200,
             b'{"ok": true}',
             [
@@ -168,19 +169,22 @@ async def test_with_response_body_keeps_a_body_that_is_not_utf8(body):
             ],
         ),
         # A HEAD response keeps the length a GET would have, although its body is empty.
-        (200, b"", [(b"content-length", b"1234"), (b"set-cookie", b"a=1"), (b"set-cookie", b"b=2")]),
+        ("HEAD", 200, b"", [(b"content-length", b"1234"), (b"set-cookie", b"a=1"), (b"set-cookie", b"b=2")]),
+        # A HEAD response without one (the proxy leaves out a length it cannot vouch for)
+        # gets none: the empty body's would claim that a GET sends nothing.
+        ("HEAD", 200, b"", [(b"content-type", b"application/json"), (b"set-cookie", b"a=1"), (b"set-cookie", b"b=2")]),
         # A 204 has no Content-Length, and the rebuilt one gets none either.
-        (204, b"", [(b"set-cookie", b"a=1"), (b"set-cookie", b"b=2")]),
+        ("GET", 204, b"", [(b"set-cookie", b"a=1"), (b"set-cookie", b"b=2")]),
     ],
-    ids=["get", "head", "204"],
+    ids=["get", "head", "head-without-length", "204"],
 )
-async def test_with_response_body_keeps_every_header_as_sent(status_code, body, raw_headers):
+async def test_with_response_body_keeps_every_header_as_sent(request_method, status_code, body, raw_headers):
     """The rebuilt response sends exactly the headers of the original, repeated ones
-    such as several ``Set-Cookie`` included, and the same ``Content-Length``."""
+    such as several ``Set-Cookie`` included, and the same ``Content-Length`` (or none)."""
     response = StreamingResponse(content=iter([body]), status_code=status_code)
     response.raw_headers = list(raw_headers)
 
-    new_response, _ = await with_response_body(response, MagicMock())
+    new_response, _ = await with_response_body(response, MagicMock(), request_method=request_method)
 
     assert new_response.body == body
     assert new_response.raw_headers == raw_headers

@@ -73,11 +73,12 @@ def with_response_attributes(response: Response, span: Span, *, sensitive_header
     return span
 
 
-async def with_response_body(response: StreamingResponse, span: Span) -> tuple[Response, Span]:
+async def with_response_body(response: StreamingResponse, span: Span, *, request_method: str) -> tuple[Response, Span]:
     """Add the response body to the span.
 
     A body that is not UTF-8, such as an image, is recorded as ``<N bytes, not UTF-8>``.
-    The response is rebuilt from the original bytes and headers either way.
+    The response is rebuilt from the original bytes and headers either way, framed as
+    the original was: ``request_method`` tells a HEAD response, whose body is empty.
     """
     body = await extract_body(response)
 
@@ -95,11 +96,13 @@ async def with_response_body(response: StreamingResponse, span: Span) -> tuple[R
     _response = Response(content=body, status_code=response.status_code)
     # Send the original headers item by item: a mapping would keep only one of several
     # Set-Cookie headers. An original Content-Length already describes these bytes (or,
-    # for a HEAD, the body a GET would send); without one, keep the one Starlette just
-    # set for them, if any (none on a 1xx, 204 or 304).
+    # for a HEAD, the body a GET would send). Without one, a buffered body gets the one
+    # Starlette just set for it, if any (none on a 1xx, 204 or 304), but a HEAD response
+    # gets none: the length of its empty body would claim that a GET sends nothing, where
+    # the original left out a length it could not vouch for.
     original = list(response.raw_headers)
-    has_length = any(name.lower() == b"content-length" for name, _ in original)
-    _response.raw_headers = original if has_length else original + _response.raw_headers
+    keep_original = request_method.upper() == "HEAD" or any(name.lower() == b"content-length" for name, _ in original)
+    _response.raw_headers = original if keep_original else original + _response.raw_headers
 
     return _response, span
 
@@ -153,6 +156,8 @@ def install(app: FastAPI, settings: Settings) -> None:
             if settings.opentelemetry.capture_response_body:
                 # call_next answers with Starlette's streaming response, whose body is an
                 # async iterator just like StreamingResponse's.
-                response, span = await with_response_body(cast(StreamingResponse, response), span)
+                response, span = await with_response_body(
+                    cast(StreamingResponse, response), span, request_method=request.method
+                )
 
             return response
