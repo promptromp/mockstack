@@ -1,6 +1,7 @@
 """Strategy for using proxy rules."""
 
 import logging
+import mimetypes
 import re
 from collections.abc import Callable, Iterator
 from functools import cached_property
@@ -204,6 +205,13 @@ _BODYLESS_STATUS_CODES = frozenset({status.HTTP_204_NO_CONTENT, status.HTTP_304_
 
 # Methods whose responses are never written to a fixture.
 _UNRECORDED_METHODS = frozenset({"HEAD", "OPTIONS"})
+
+# Python's built-in MIME types only. The module-level ``mimetypes`` functions also read
+# the host's mime.types files, so a fixture's content type would differ between machines.
+_BUILTIN_MIME_TYPES = mimetypes.MimeTypes()
+
+# The content type of a fixture served verbatim whose suffix gives none.
+_BINARY_CONTENT_TYPE = "application/octet-stream"
 
 # Reason text for a scrubber that opts a response out of recording; shared between where
 # the reason is produced (_scrub) and where the not-recorded log level is chosen (handle_record).
@@ -462,15 +470,16 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
     async def handle_template_result(
         self, request: Request, rule: Rule, result: TemplateRuleResult, result_type: str = "template"
     ) -> Response:
-        """Handle template results by rendering the template file.
+        """Handle template results by serving the fixture file, rendered or verbatim.
 
-        A rendered fixture is answered with the rule's ``status`` (200 by default) and
+        The file is rendered as a Jinja template unless ``_fixture_content`` sends it as
+        it is. Either way it is answered with the rule's ``status`` (200 by default) and
         ``response_headers``, with no body for a 204 or 304, and a ``Content-Type`` in
         ``response_headers`` replaces the one inferred from the file suffix. Only a
-        successful render is stamped ``template``; a missing fixture (404) or a failed
-        render (500) is stamped ``error``, without the rule's status or headers. Neither
-        echoes the rendered path, which may be built from request data, back to the
-        client.
+        fixture that was served is stamped ``template``; a missing fixture (404) or a
+        failed render (500) is stamped ``error``, without the rule's status or headers.
+        Neither echoes the rendered path, which may be built from request data, back to
+        the client.
         """
         template_path = Path(result.template_path)
 
@@ -487,7 +496,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
                 rule=rule,
             )
 
-        # Templates are small local files: checking and reading them synchronously is
+        # Fixtures are local files: checking and reading them synchronously is
         # intentional here rather than adding an async-file dependency.
         if not template_path.exists():  # noqa: ASYNC240
             self.logger.error("Template file not found: %s", template_path)
@@ -499,30 +508,35 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             )
 
         try:
-            # Read the template file content (synchronously, as above).
-            with open(template_path, encoding="utf-8") as f:  # noqa: ASYNC230
-                template_content = f.read()
-
-            # Create a template from the content
-            template = self.env.from_string(template_content)
-
-            # Render the template with context
-            rendered_content = template.render(**result.template_context)
+            # Read the file as bytes (synchronously, as above). Even a large binary
+            # fixture costs little here: about a millisecond per 10 MB from the page
+            # cache, far less than rendering a template of that size, which also runs
+            # on the event loop.
+            with open(template_path, "rb") as f:  # noqa: ASYNC230
+                content = self._fixture_content(rule, template_path, f.read(), result)
 
             # Update opentelemetry with template info
             self.update_opentelemetry_template(request, rule, result, result_type=result_type)
 
             status_code = rule.status if rule.status is not None else status.HTTP_200_OK
+            sets_content_type = any(name.lower() == "content-type" for name, _ in rule.response_headers)
             if status_code in _BODYLESS_STATUS_CODES:
                 response = Response(status_code=status_code)
-            else:
-                sets_content_type = any(name.lower() == "content-type" for name, _ in rule.response_headers)
+            elif isinstance(content, str):
                 response = Response(
-                    content=rendered_content,
+                    content=content,
                     # Determine content type based on file extension
                     media_type=None if sets_content_type else self._get_content_type(template_path),
                     status_code=status_code,
                 )
+            else:
+                response = Response(content=content, status_code=status_code)
+                if not sets_content_type:
+                    # Set directly: as a media_type, a text/* type would get Starlette's
+                    # "; charset=utf-8", which these bytes are not.
+                    response.headers["content-type"] = self._get_content_type(
+                        template_path, default=_BINARY_CONTENT_TYPE
+                    )
             for name, value in rule.response_headers:
                 response.headers.append(name, value)
             return with_result_headers(response, rule=rule, result_type=result_type)
@@ -538,6 +552,22 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 rule=rule,
             )
+
+    def _fixture_content(self, rule: Rule, template_path: Path, raw: bytes, result: TemplateRuleResult) -> str | bytes:
+        """The fixture file's rendered content, or ``raw`` itself to send it verbatim.
+
+        A ``.j2`` file is always a template, so one that is not UTF-8 raises
+        ``UnicodeDecodeError``. Any other file is a template when it is UTF-8 text and is
+        otherwise sent byte for byte, e.g. an image or a PDF.
+        """
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            if template_path.suffix.lower() == ".j2":
+                raise
+            self.logger.info("[rule:%s] %s is not UTF-8: served verbatim", rule.name, template_path)
+            return raw
+        return self.env.from_string(text).render(**result.template_context)
 
     async def handle_record(
         self,
@@ -744,8 +774,13 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
 
         return _headers
 
-    def _get_content_type(self, template_path: Path) -> str:
-        """Determine content type from the file extension, ignoring a trailing ``.j2``."""
+    def _get_content_type(self, template_path: Path, default: str = "text/plain") -> str:
+        """Determine content type from the file extension, ignoring a trailing ``.j2``.
+
+        mockstack's own suffix map comes first, then Python's built-in MIME types.
+        ``default`` is for a suffix that neither knows, and for a compressed one such as
+        ``.gz``, whose guessed type describes the content before compression.
+        """
         if template_path.suffix.lower() == ".j2":
             template_path = template_path.with_suffix("")
         suffix = template_path.suffix.lower()
@@ -757,7 +792,10 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             ".yaml": "application/x-yaml",
             ".yml": "application/x-yaml",
         }
-        return content_types.get(suffix, "text/plain")
+        if suffix in content_types:
+            return content_types[suffix]
+        media_type, encoding = _BUILTIN_MIME_TYPES.guess_file_type(template_path)
+        return media_type if media_type is not None and encoding is None else default
 
     @staticmethod
     def _set_shared_rule_attributes(span: SpanLike, rule: Rule) -> None:

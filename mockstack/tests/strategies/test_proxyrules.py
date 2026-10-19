@@ -4,8 +4,11 @@ import gzip
 import json
 import logging
 import os
+import struct
 import subprocess
 import sys
+import zlib
+from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import patch
 
@@ -570,11 +573,39 @@ async def test_apply_renders_request_json_from_body(apply_rule, traced_request, 
         ("project.xml.j2", "application/xml"),
         ("project.j2", "text/plain"),
         ("project", "text/plain"),
+        # Suffixes outside mockstack's own map: Python's built-in MIME types.
+        ("logo.png", "image/png"),
+        ("logo.PNG", "image/png"),
+        ("report.pdf", "application/pdf"),
+        ("export.csv", "text/csv"),
+        ("export.csv.j2", "text/csv"),
+        ("icon.ico", "image/vnd.microsoft.icon"),
+        ("blob.bin", "application/octet-stream"),
+        # A compressed suffix names a coding, not the body's type.
+        ("export.csv.gz", "text/plain"),
+        ("archive.tar.gz", "text/plain"),
+        ("user.pb", "text/plain"),
     ],
 )
 def test_proxy_rules_strategy_get_content_type(proxyrules_strategy, filename, expected):
-    """The content type follows the file extension, ignoring a trailing ``.j2``."""
+    """The content type follows the file extension, ignoring a trailing ``.j2``: mockstack's
+    own map first, then Python's built-in MIME types (never the host's ``mime.types``
+    files, which differ between machines), then ``text/plain``."""
     assert proxyrules_strategy()._get_content_type(Path(filename)) == expected
+
+
+@pytest.mark.parametrize(
+    ("filename", "expected"),
+    [
+        ("user.pb", "application/octet-stream"),
+        ("blob", "application/octet-stream"),
+        ("export.csv.gz", "application/octet-stream"),
+        ("logo.png", "image/png"),
+        ("legacy.json", "application/json"),
+    ],
+)
+def test_get_content_type_default_applies_only_to_unknown_suffixes(proxyrules_strategy, filename, expected):
+    assert proxyrules_strategy()._get_content_type(Path(filename), default="application/octet-stream") == expected
 
 
 @pytest.mark.asyncio
@@ -757,8 +788,9 @@ async def test_handlers_stamp_their_own_result_type(proxyrules_strategy, traced_
 
 @pytest.mark.asyncio
 async def test_rules_and_fixture_files_are_read_as_utf8(proxyrules_strategy, traced_request, write_template):
-    """Both ``open()`` calls the strategy makes -- for the rules file and for a matched
-    fixture file -- must request UTF-8 explicitly, independent of the machine's locale.
+    """Neither ``open()`` call the strategy makes depends on the machine's locale: the
+    rules file is opened as UTF-8 text, and a matched fixture file as bytes, which the
+    strategy decodes as UTF-8 itself (see ``test_locale_regression_utf8_replay_byte_identical``).
     """
     template_file = write_template("t.json", '{"ok": true}')
     with patch("mockstack.strategies.proxyrules.open", wraps=open, create=True) as mock_open:
@@ -767,9 +799,9 @@ async def test_rules_and_fixture_files_are_read_as_utf8(proxyrules_strategy, tra
 
     assert response.status_code == 200
     # One open() for the rules file (at construction) and one for the fixture (at apply).
-    assert len(mock_open.call_args_list) >= 2
-    for call in mock_open.call_args_list:
-        assert call.kwargs.get("encoding") == "utf-8", call
+    rules_open, fixture_open = mock_open.call_args_list
+    assert rules_open.kwargs.get("encoding") == "utf-8", rules_open
+    assert fixture_open.args == (Path(template_file), "rb"), fixture_open
 
 
 # Non-ASCII text to prove file reads survive a non-UTF-8 locale: Latin-1 range
@@ -1522,3 +1554,202 @@ async def test_status_on_rule_whose_replacement_renders_a_url_is_stamped_500(app
     assert response.headers[RESULT_RULE_HEADER] == "dynamic"
     assert json.loads(response.body) == {"error": "mockstack: internal error"}
     assert "status and response_headers only apply to file:/// fixtures" in caplog.text
+
+
+# --- binary fixtures -------------------------------------------------------------------
+
+
+def _png() -> bytes:
+    """A real 1x1 PNG image. Its signature holds a ``\\r\\n`` and a ``\\n``, which a Jinja
+    render would rewrite."""
+
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+
+    header = struct.pack(">IIBBBBB", 1, 1, 8, 6, 0, 0, 0)  # 1x1, 8-bit RGBA
+    pixels = zlib.compress(b"\x00\xff\x00\x00\xff")  # a filter byte, then one red pixel
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IDAT", pixels) + chunk(b"IEND", b"")
+
+
+PNG = _png()
+# The comment on a PDF's second line is made of bytes above 0x7f, so that tools treat
+# the file as binary.
+PDF = b"%PDF-1.7\n%\xe2\xe3\xcf\xd3\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n"
+# A protobuf message whose field 1 is 150: the varint's first byte, 0x96, is not UTF-8.
+PROTOBUF = b"\x08\x96\x01"
+
+
+@pytest.fixture
+def write_bytes(tmp_path: Path) -> Callable[[str, bytes], Path]:
+    """Factory: write ``content`` to ``name`` under ``tmp_path``; return the path."""
+
+    def _write(name: str, content: bytes) -> Path:
+        path = tmp_path / name
+        path.write_bytes(content)
+        return path
+
+    return _write
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("filename", "content", "content_type"),
+    [
+        ("logo.png", PNG, "image/png"),
+        ("report.pdf", PDF, "application/pdf"),
+        ("user.pb", PROTOBUF, "application/octet-stream"),
+        ("blob", bytes(range(256)) * 4, "application/octet-stream"),
+        ("export.csv.gz", gzip.compress(b"id,total\n1,10\n", mtime=0), "application/octet-stream"),
+        ("delimiters.bin", b"\xff{{ path }}{% if true %}\r\n", "application/octet-stream"),
+        # Text in another encoding is not UTF-8 either: served as it is, with no charset.
+        ("legacy.txt", "Zoë Müller\r\n".encode("latin-1"), "text/plain"),
+        ("legacy.csv", "id,name\r\n1,Zoë\r\n".encode("cp1252"), "text/csv"),
+        ("legacy.json", '{"name": "Zoë", "path": "{{ path }}"}'.encode("latin-1"), "application/json"),
+    ],
+    ids=["png", "pdf", "protobuf", "no-suffix", "gzip", "jinja-delimiters", "latin1-txt", "cp1252-csv", "latin1-json"],
+)
+async def test_fixture_that_is_not_utf8_is_served_verbatim(apply_rule, write_bytes, filename, content, content_type):
+    """A fixture file that is not ``.j2`` and not UTF-8 is sent byte for byte, never
+    rendered, stamped ``template`` like a rendered one."""
+    fixture = write_bytes(filename, content)
+    response = await apply_rule({"name": "binary", "pattern": r"^/x$", "replacement": f"file://{fixture}"})
+    assert response.status_code == 200
+    assert response.body == content
+    assert response.headers.getlist("content-type") == [content_type]
+    assert response.headers["content-length"] == str(len(content))
+    assert response.headers[RESULT_TYPE_HEADER] == "template"
+    assert response.headers[RESULT_RULE_HEADER] == "binary"
+
+
+@pytest.mark.asyncio
+async def test_verbatim_fixture_sets_template_span_attributes(apply_rule, write_bytes, span_attributes):
+    fixture = write_bytes("logo.png", PNG)
+    response = await apply_rule({"name": "logo", "pattern": r"^/x$", "replacement": f"file://{fixture}"})
+    assert response.status_code == 200
+    attributes = span_attributes()
+    assert attributes["mockstack.proxyrules.rule_name"] == "logo"
+    assert attributes["mockstack.proxyrules.template_path"] == str(fixture)
+    assert attributes["mockstack.proxyrules.result_type"] == "template"
+
+
+@pytest.mark.asyncio
+async def test_verbatim_fixture_is_logged(apply_rule, write_bytes, caplog):
+    """A template saved in another encoding is served unrendered, so the log says why."""
+    fixture = write_bytes("legacy.json", '{"name": "Zoë"}'.encode("latin-1"))
+    with caplog.at_level(logging.INFO, logger="ProxyRulesStrategy"):
+        response = await apply_rule({"name": "legacy", "pattern": r"^/x$", "replacement": f"file://{fixture}"})
+    assert response.status_code == 200
+    assert f"[rule:legacy] {fixture} is not UTF-8: served verbatim" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_binary_fixture_rule_status_and_response_headers(apply_rule, write_bytes):
+    fixture = write_bytes("avatar.png", PNG)
+    response = await apply_rule(
+        {
+            "name": "avatar-placeholder",
+            "pattern": r"^/x$",
+            "replacement": f"file://{fixture}",
+            "status": 404,
+            "response_headers": {"Cache-Control": "no-store", "Set-Cookie": ["a=1", "b=2"]},
+        }
+    )
+    assert response.status_code == 404
+    assert response.body == PNG
+    assert response.headers["content-type"] == "image/png"
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers.getlist("set-cookie") == ["a=1", "b=2"]
+    assert response.headers[RESULT_TYPE_HEADER] == "template"
+    assert response.headers[RESULT_RULE_HEADER] == "avatar-placeholder"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("filename", "content", "content_type"),
+    [
+        ("user.pb", PROTOBUF, "application/x-protobuf"),
+        ("legacy.csv", "id,name\r\n1,Zoë\r\n".encode("cp1252"), "text/csv; charset=windows-1252"),
+        ("report.pdf", PDF, "application/octet-stream"),
+    ],
+    ids=["protobuf", "csv-with-charset", "pdf"],
+)
+async def test_response_headers_content_type_replaces_the_verbatim_content_type(
+    apply_rule, write_bytes, filename, content, content_type
+):
+    fixture = write_bytes(filename, content)
+    response = await apply_rule(
+        {
+            "pattern": r"^/x$",
+            "replacement": f"file://{fixture}",
+            "response_headers": {"Content-Type": content_type, "Content-Disposition": "attachment"},
+        }
+    )
+    assert response.status_code == 200
+    assert response.body == content
+    assert response.headers.getlist("content-type") == [content_type]
+    assert response.headers["content-disposition"] == "attachment"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status_code", [204, 304])
+async def test_bodyless_binary_fixture_status_sends_no_body(apply_rule, write_bytes, status_code):
+    fixture = write_bytes("logo.png", PNG)
+    response = await apply_rule(
+        {"name": "logo", "pattern": r"^/x$", "replacement": f"file://{fixture}", "status": status_code},
+    )
+    assert response.status_code == status_code
+    assert response.body == b""
+    assert "content-length" not in response.headers
+    assert "content-type" not in response.headers
+    assert response.headers[RESULT_TYPE_HEADER] == "template"
+    assert response.headers[RESULT_RULE_HEADER] == "logo"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("filename", "content"),
+    [
+        ("logo.png.j2", PNG),
+        ("legacy.json.j2", '{"name": "Zoë"}'.encode("latin-1")),
+        ("fixture.j2", PROTOBUF),
+    ],
+    ids=["png", "latin1-json", "protobuf"],
+)
+async def test_j2_fixture_that_is_not_utf8_is_stamped_500_error(apply_rule, write_bytes, caplog, filename, content):
+    """A ``.j2`` file is always a template, so one that is not UTF-8 fails to render."""
+    fixture = write_bytes(filename, content)
+    with caplog.at_level(logging.ERROR, logger="ProxyRulesStrategy"):
+        response = await apply_rule({"name": "broken", "pattern": r"^/x$", "replacement": f"file://{fixture}"})
+    assert response.status_code == 500
+    assert json.loads(response.body) == {"error": "An internal error occurred while rendering the template."}
+    assert response.headers[RESULT_TYPE_HEADER] == "error"
+    assert response.headers[RESULT_RULE_HEADER] == "broken"
+    [error] = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert error.exc_info is not None
+    assert isinstance(error.exc_info[1], UnicodeDecodeError)
+    assert str(fixture) in error.getMessage()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("filename", "content", "body", "content_type"),
+    [
+        ("plain.json", b'{"a": {{ 1 + 1 }}}', b'{"a": 2}', "application/json"),
+        # As before, rendering normalises newlines and drops one trailing newline.
+        ("export.csv", b"path\r\n{{ path }}\r\n", b"path\n/x", "text/csv; charset=utf-8"),
+        # Bytes that look binary but are UTF-8 (a NUL, a control character, U+00E9).
+        ("payload.bin", b"\x00\x01\xc3\xa9{{ path }}", b"\x00\x01\xc3\xa9/x", "application/octet-stream"),
+        ("empty.png", b"", b"", "image/png"),
+    ],
+    ids=["json", "csv", "utf8-binary-looking", "empty"],
+)
+async def test_utf8_fixture_without_j2_suffix_is_still_rendered(
+    apply_rule, write_bytes, filename, content, body, content_type
+):
+    fixture = write_bytes(filename, content)
+    response = await apply_rule({"name": "text", "pattern": r"^/x$", "replacement": f"file://{fixture}"})
+    assert response.status_code == 200
+    assert response.body == body
+    assert response.headers.getlist("content-type") == [content_type]
+    assert response.headers[RESULT_TYPE_HEADER] == "template"
+    assert response.headers[RESULT_RULE_HEADER] == "text"
