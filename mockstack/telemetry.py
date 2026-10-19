@@ -16,7 +16,7 @@ from mockstack.config import Settings
 
 OPENTELEMETRY_EXTRA = "mockstack[opentelemetry]"
 
-# The top-level modules of the extra's packages: without the extra, these are missing.
+# The top-level modules of the extra's packages, which a plain install lacks.
 OPENTELEMETRY_EXTRA_MODULES = frozenset({"opentelemetry.sdk", "opentelemetry.exporter"})
 
 

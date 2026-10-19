@@ -120,8 +120,9 @@ file fails it. CI runs the unit tests, the live tests, mypy, ruff and the docs b
   that is always installed. Only `mockstack/tracing.py` imports `opentelemetry`;
   strategies add span attributes through `telemetry.current_span(request)`, never
   `request.state.span`. `test_mockstack_never_imports_the_opentelemetry_extra_unless_enabled`
-  guards this, and the `without_opentelemetry` fixture simulates an install without the
-  extra. FastAPI's built-in telemetry is configured in `create_app` from `opentelemetry.*`
+  guards that the extra's packages (`opentelemetry.sdk`, `opentelemetry.exporter`) load
+  only with tracing on, and the `without_opentelemetry` fixture simulates an install
+  without the extra. FastAPI's built-in telemetry is configured in `create_app` from `opentelemetry.*`
   settings (off by default), never from `FASTAPI_OTEL_*` variables.
 - **Keep names generic** in code, tests, docs and examples: projects service,
   analytics SQL gateway, `sales_facts`, orders, users. Never use company, product or

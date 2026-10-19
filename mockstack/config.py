@@ -41,7 +41,7 @@ class OpenTelemetrySettings(BaseModel):
 
     A plain model, as pydantic-settings requires of a nested group: ``Settings`` fills it
     from ``MOCKSTACK__OPENTELEMETRY__*`` variables. As a ``BaseSettings`` it would also
-    read unprefixed ``ENABLED``, ``ENDPOINT`` and ``CAPTURE_RESPONSE_BODY`` variables.
+    read unprefixed variables named after its settings, such as ``ENABLED`` and ``ENDPOINT``.
     Unknown keys are rejected, as ``BaseSettings`` rejects them, so a mistyped
     ``MOCKSTACK__OPENTELEMETRY__*`` variable is an error.
     """
@@ -58,12 +58,12 @@ class OpenTelemetrySettings(BaseModel):
     """Whether to capture response bodies in traces. Bodies can be large or contain sensitive data."""
 
     fastapi_tracing: CliImplicitFlag[bool] = False
-    """Whether FastAPI's built-in tracing also traces each request, with a span around mockstack's
-    named after the route (`GET /{full_path}`). Takes effect with tracing enabled."""
+    """Whether FastAPI's built-in tracing also traces each request, with a span named after the route
+    (GET /{full_path}) that mockstack's span is a child of. Takes effect with --opentelemetry.enabled."""
 
     fastapi_operation_spans: CliImplicitFlag[bool] = False
-    """Whether FastAPI's built-in tracing adds spans for dependency resolution, the endpoint,
-    serialization and background tasks. Takes effect with FastAPI's tracing on."""
+    """Whether FastAPI's built-in tracing adds spans for dependency resolution and the endpoint, as
+    children of mockstack's span. Takes effect with --opentelemetry.fastapi-tracing."""
 
 
 class Settings(BaseSettings):

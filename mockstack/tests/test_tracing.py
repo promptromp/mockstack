@@ -256,8 +256,10 @@ TOP = "top"
 def test_traced_request_spans(tmp_path, opentelemetry, spans, traceparent):
     """A traced request is exported as mockstack's span, inside FastAPI's own request span
     when FastAPI's built-in tracing is turned on, as one trace that continues the caller's.
-    ``FASTAPI_OTEL_AUTO_CONFIGURE`` is ignored: it would make FastAPI add exporters at
-    startup, which then fails without the packages FastAPI's own extra installs.
+    The same holds for a request sent from inside a span of an in-process caller (an app
+    embedded in a test suite): the headers, not that span, say which trace it belongs to.
+    ``FASTAPI_OTEL_AUTO_CONFIGURE`` is ignored: with an OTLP endpoint set, it would make
+    FastAPI add exporters at startup, which fails without FastAPI's own extra.
 
     Runs in a fresh interpreter, since a process can set its tracer provider only once.
     """
@@ -270,6 +272,7 @@ def test_traced_request_spans(tmp_path, opentelemetry, spans, traceparent):
         from unittest.mock import patch
 
         import httpx
+        from opentelemetry import trace
         from opentelemetry.sdk.trace.export import SimpleSpanProcessor
         from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
@@ -304,37 +307,54 @@ def test_traced_request_spans(tmp_path, opentelemetry, spans, traceparent):
             async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
                 return (await client.get("/api/v1/projects/1234", headers=headers)).status_code
 
+        async def get_in_process():
+            with trace.get_tracer("caller").start_as_current_span("in-process caller"):
+                return await get()
+
+        def spans():
+            finished = exporter.get_finished_spans()
+            exporter.clear()
+            names = {{span.context.span_id: span.name for span in finished}}
+
+            def parent(span):
+                if span.parent is None:
+                    return None
+                if (span.parent.trace_id, span.parent.span_id) == (CALLER_TRACE, CALLER_SPAN):
+                    return "caller"
+                return names.get(span.parent.span_id, "unexported")
+
+            pairs = ([span.name, parent(span)] for span in finished if span.name != "in-process caller")
+            return sorted(pairs, key=lambda pair: pair[0])
+
         assert asyncio.run(lifespan()) == ["lifespan.startup.complete", "lifespan.shutdown.complete"]
         assert asyncio.run(get()) == 200
-        finished = exporter.get_finished_spans()
-        names = {{span.context.span_id: span.name for span in finished}}
-
-        def parent(span):
-            if span.parent is None:
-                return None
-            if (span.parent.trace_id, span.parent.span_id) == (CALLER_TRACE, CALLER_SPAN):
-                return "caller"
-            return names.get(span.parent.span_id, "unexported")
-
-        print(json.dumps(sorted(([span.name, parent(span)] for span in finished), key=lambda pair: pair[0])))
+        sent = spans()
+        assert asyncio.run(get_in_process()) == 200
+        print(json.dumps({{"sent": sent, "in_process": spans()}}))
         """
     )
+    # OTEL_* variables (a sampler, propagators, an SDK switch) would change what is exported.
     env = {
         name: value
         for name, value in os.environ.items()
-        if not name.upper().startswith("MOCKSTACK__") and name not in TERMINAL_ENV_VARS
+        if not name.upper().startswith(("MOCKSTACK__", "OTEL_", "FASTAPI_OTEL_")) and name not in TERMINAL_ENV_VARS
     }
+    # FASTAPI_OTEL_AUTO_CONFIGURE acts only with an OTLP endpoint set; an unreachable one.
+    env |= {"FASTAPI_OTEL_AUTO_CONFIGURE": "true", "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT": "http://127.0.0.1:9/v1/traces"}
     # S603: runs this interpreter on the script above, with no untrusted input.
     result = subprocess.run(  # noqa: S603
         [sys.executable, "-c", script, json.dumps(opentelemetry), "1" if traceparent else ""],
         capture_output=True,
         text=True,
         cwd=tmp_path,
-        env={**env, "FASTAPI_OTEL_AUTO_CONFIGURE": "true"},
+        env=env,
         check=False,
+        timeout=60,
     )
 
     top = "caller" if traceparent else None
     expected = sorted(([name, top if parent == TOP else parent] for name, parent in spans), key=lambda pair: pair[0])
     assert result.returncode == 0, result.stderr
-    assert json.loads(result.stdout.splitlines()[-1]) == expected
+    # FastAPI logs a failed automatic configuration as a warning instead of failing startup.
+    assert "automatic telemetry" not in result.stderr
+    assert json.loads(result.stdout.splitlines()[-1]) == {"sent": expected, "in_process": expected}
