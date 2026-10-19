@@ -78,7 +78,8 @@ async def with_response_body(response: StreamingResponse, span: Span, *, request
 
     A body that is not UTF-8, such as an image, is recorded as ``<N bytes, not UTF-8>``.
     The response is rebuilt from the original bytes and headers either way, framed as
-    the original was: ``request_method`` tells a HEAD response, whose body is empty.
+    the original was: ``request_method`` identifies a HEAD response, whose missing
+    Content-Length must stay missing.
     """
     body = await extract_body(response)
 
