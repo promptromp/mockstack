@@ -1,8 +1,9 @@
 """OpenTelemetry integration.
 
-The OpenTelemetry packages are the optional ``opentelemetry`` extra, so this module does
-not import them: ``opentelemetry_provider`` loads ``mockstack.tracing``, which does, only
-when the integration is enabled. Strategies add attributes to ``current_span(request)``,
+The OpenTelemetry SDK and OTLP exporter are the optional ``opentelemetry`` extra, so this
+module does not import them: ``opentelemetry_provider`` loads ``mockstack.tracing``, which
+does, only when the integration is enabled. FastAPI depends on the OpenTelemetry API
+itself, so that is always installed. Strategies add attributes to ``current_span(request)``,
 which records nothing unless tracing is on.
 """
 
@@ -14,6 +15,9 @@ from mockstack.config import Settings
 
 
 OPENTELEMETRY_EXTRA = "mockstack[opentelemetry]"
+
+# The top-level modules of the extra's packages: without the extra, these are missing.
+OPENTELEMETRY_EXTRA_MODULES = frozenset({"opentelemetry.sdk", "opentelemetry.exporter"})
 
 
 class SpanLike(Protocol):
@@ -41,7 +45,7 @@ class OpenTelemetryUnavailableError(RuntimeError):
 
     def __init__(self, cause: ImportError) -> None:
         self.cause = cause
-        if isinstance(cause, ModuleNotFoundError) and cause.name == "opentelemetry":
+        if isinstance(cause, ModuleNotFoundError) and cause.name in OPENTELEMETRY_EXTRA_MODULES:
             self.problem = "the OpenTelemetry packages are not installed"
         else:
             self.problem = f"the OpenTelemetry packages cannot be imported: {cause}"

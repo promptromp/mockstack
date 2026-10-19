@@ -3,6 +3,7 @@
 import os
 import sys
 from collections.abc import AsyncIterator, Callable, Iterable, Mapping
+from importlib.abc import MetaPathFinder
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
@@ -63,12 +64,25 @@ def make_settings() -> Callable[..., Settings]:
 
 @pytest.fixture
 def without_opentelemetry(monkeypatch):
-    """Make the OpenTelemetry packages unimportable, as when the ``opentelemetry`` extra
-    is not installed. ``mockstack.tracing``, which imports them, is unloaded too."""
-    loaded = [name for name in sys.modules if name == "opentelemetry" or name.startswith("opentelemetry.")]
-    # A module left in sys.modules would still import; None makes each import fail.
-    for name in {"opentelemetry", *loaded}:
-        monkeypatch.setitem(sys.modules, name, None)
+    """Make the ``opentelemetry`` extra's packages, the SDK and the OTLP exporter,
+    unimportable, as when the extra is not installed. The OpenTelemetry API stays, since
+    FastAPI depends on it. ``mockstack.tracing``, which imports them, is unloaded too."""
+    extra = ("opentelemetry.sdk", "opentelemetry.exporter")
+
+    def in_extra(name: str) -> bool:
+        return name in extra or name.startswith(tuple(f"{package}." for package in extra))
+
+    class NotInstalled(MetaPathFinder):
+        """Finds none of the extra's modules, failing as a missing package does."""
+
+        def find_spec(self, name, path, target=None):
+            if in_extra(name):
+                raise ModuleNotFoundError(f"No module named {name!r}", name=name)
+
+    # A loaded module would still import, so the extra's are unloaded first.
+    for name in [name for name in sys.modules if in_extra(name)]:
+        monkeypatch.delitem(sys.modules, name)
+    monkeypatch.setattr(sys, "meta_path", [NotInstalled(), *sys.meta_path])
     monkeypatch.delitem(sys.modules, "mockstack.tracing", raising=False)
     monkeypatch.delattr(mockstack, "tracing", raising=False)
 

@@ -131,7 +131,10 @@ def install(app: FastAPI, settings: Settings) -> None:
     @app.middleware("http")
     async def instrument_opentelemetry(request: Request, call_next: RequestResponseEndpoint) -> Response:
         tracer = trace.get_tracer(__name__)
-        ctx = extract(request.headers)
+        # Inside FastAPI's own request span (``opentelemetry.fastapi_tracing``), which has
+        # continued the caller's trace already, the span is its child (the current context);
+        # otherwise the span continues the caller's trace itself.
+        ctx = None if trace.get_current_span().get_span_context().is_valid else extract(request.headers)
         with tracer.start_as_current_span(span_name_for(request), context=ctx) as span:
             span = with_request_attributes(request, span, sensitive_headers=SENSITIVE_HEADERS)
 

@@ -24,6 +24,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(
         lifespan=lifespan_provider(settings),
         openapi_url="/openapi.json" if settings.openapi_docs_enabled else None,
+        telemetry={
+            # FastAPI traces through the tracer provider that mockstack's tracing sets.
+            "tracing": settings.opentelemetry.fastapi_tracing,
+            "operation_spans": settings.opentelemetry.fastapi_operation_spans,
+            # mockstack sets no meter or logger provider, so FastAPI's metrics and logs
+            # would record nothing. Exporters come from mockstack's own settings, never
+            # from FASTAPI_OTEL_* variables: FastAPI's automatic exporters also need
+            # packages the opentelemetry extra does not install.
+            "metrics": False,
+            "logs": False,
+            "auto_configure": False,
+        },
     )
 
     strategy_provider(app, settings)
