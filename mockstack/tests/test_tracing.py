@@ -154,6 +154,41 @@ async def test_with_response_body_keeps_a_body_that_is_not_utf8(body):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
+    ("status_code", "body", "raw_headers"),
+    [
+        (
+            200,
+            b'{"ok": true}',
+            [
+                (b"content-length", b"12"),
+                (b"content-type", b"application/json"),
+                (b"set-cookie", b"a=1"),
+                (b"set-cookie", b"b=2"),
+                (b"x-mockstack-result", b"template"),
+            ],
+        ),
+        # A HEAD response keeps the length a GET would have, although its body is empty.
+        (200, b"", [(b"content-length", b"1234"), (b"set-cookie", b"a=1"), (b"set-cookie", b"b=2")]),
+        # A 204 has no Content-Length, and the rebuilt one gets none either.
+        (204, b"", [(b"set-cookie", b"a=1"), (b"set-cookie", b"b=2")]),
+    ],
+    ids=["get", "head", "204"],
+)
+async def test_with_response_body_keeps_every_header_as_sent(status_code, body, raw_headers):
+    """The rebuilt response sends exactly the headers of the original, repeated ones
+    such as several ``Set-Cookie`` included, and the same ``Content-Length``."""
+    response = StreamingResponse(content=iter([body]), status_code=status_code)
+    response.raw_headers = list(raw_headers)
+
+    new_response, _ = await with_response_body(response, MagicMock())
+
+    assert new_response.body == body
+    assert new_response.raw_headers == raw_headers
+    assert new_response.headers.getlist("set-cookie") == ["a=1", "b=2"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
     "chunks",
     [[b"part1", b"part2", b"part3"], ["part1", "part2", "part3"]],
     ids=["bytes", "str"],
@@ -288,6 +323,56 @@ async def test_captured_binary_fixture_is_served_byte_for_byte(make_settings, wr
     attributes = {call.args[0]: call.args[1] for call in span.set_attribute.call_args_list}
     assert attributes["http.response.body"] == f"<{len(logo)} bytes, not UTF-8>"
     assert attributes["mockstack.proxyrules.result_type"] == "template"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("filename", "content", "body"),
+    [
+        ("session.json.j2", b'{"user": {{ path | tojson }}}', b'{"user": "/session"}'),
+        ("logo.png", b"\x89PNG\r\n\x1a\n" + bytes(range(256)), b"\x89PNG\r\n\x1a\n" + bytes(range(256))),
+    ],
+    ids=["template", "binary"],
+)
+async def test_captured_fixture_keeps_repeated_response_headers(
+    make_settings, write_rules, tmp_path, filename, content, body
+):
+    """With response bodies captured, a fixture rule's repeated ``response_headers``,
+    such as two ``Set-Cookie`` values, all reach the client."""
+    fixture = tmp_path / filename
+    fixture.write_bytes(content)
+    rules = write_rules(
+        [
+            {
+                "name": "session",
+                "pattern": "^/session$",
+                "replacement": f"file://{fixture}",
+                "response_headers": {"Set-Cookie": ["a=1; Path=/", "b=2; Path=/"]},
+            }
+        ]
+    )
+    settings = make_settings(
+        strategy="proxyrules",
+        proxyrules_rules_filename=rules,
+        opentelemetry=OpenTelemetrySettings(enabled=True, capture_response_body=True),
+    )
+    with (
+        patch("mockstack.tracing.trace") as mock_trace,
+        patch("mockstack.tracing.OTLPSpanExporter"),
+        patch("mockstack.tracing.BatchSpanProcessor"),
+        patch("mockstack.tracing.TracerProvider"),
+    ):
+        mock_trace.get_tracer.return_value.start_as_current_span.return_value.__enter__.return_value = MagicMock()
+        app = create_app(settings)
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            response = await client.get("/session")
+
+    assert response.status_code == 200
+    assert response.content == body
+    assert response.headers.get_list("set-cookie") == ["a=1; Path=/", "b=2; Path=/"]
+    assert response.headers.get_list("content-length") == [str(len(body))]
+    assert response.headers["x-mockstack-rule"] == "session"
 
 
 MOCKSTACK_SPAN = "GET /api/v1/projects/1234"
