@@ -30,7 +30,8 @@ version.
 
 Tracing needs the optional `opentelemetry` extra, which installs the OpenTelemetry SDK
 and its OTLP gRPC exporter. A plain install leaves them out, and with tracing off
-mockstack never imports them:
+mockstack never imports them. (FastAPI depends on the OpenTelemetry API itself, so a
+plain install has that package.)
 
 ```bash
 uvx --from 'mockstack[opentelemetry]' mockstack --opentelemetry.enabled ...
@@ -43,11 +44,22 @@ With `opentelemetry.enabled` on, each request gets a span, exported over OTLP gR
 without the extra is a [configuration error](#configuration-errors) that names the extra
 to install.
 
+FastAPI's built-in telemetry is off by default, since mockstack's span already covers each
+request. With tracing on, `opentelemetry.fastapi_tracing` adds FastAPI's own request span,
+named after the route (`GET /{full_path}`), with mockstack's span as its child, and
+`opentelemetry.fastapi_operation_spans` adds FastAPI's spans for dependency resolution
+(`fastapi.dependencies`) and the endpoint (`fastapi.endpoint`) as children of mockstack's
+span. Either way a request is one trace, continuing the caller's when it sends a
+`traceparent` header. FastAPI's metrics, logs and automatic exporters stay off: mockstack
+exports traces only, as its settings configure, and ignores `FASTAPI_OTEL_*` variables.
+
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `opentelemetry.enabled` | boolean | `false` | Whether to enable OpenTelemetry integration |
 | `opentelemetry.endpoint` | string | `http://localhost:4317/` | OpenTelemetry endpoint |
 | `opentelemetry.capture_response_body` | boolean | `false` | Whether to capture response body in traces |
+| `opentelemetry.fastapi_tracing` | boolean | `false` | Whether FastAPI's built-in tracing also traces each request, with a span that mockstack's span is a child of. Takes effect with `opentelemetry.enabled` on |
+| `opentelemetry.fastapi_operation_spans` | boolean | `false` | Whether FastAPI's built-in tracing adds spans for dependency resolution and the endpoint, as children of mockstack's span. Takes effect with `opentelemetry.fastapi_tracing` on |
 
 ## Strategy-Specific Settings
 

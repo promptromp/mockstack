@@ -61,6 +61,8 @@ def test_opentelemetry_settings_ignore_unprefixed_environment_variables(isolated
         "enabled": False,
         "endpoint": "http://localhost:4317/",
         "capture_response_body": False,
+        "fastapi_tracing": False,
+        "fastapi_operation_spans": False,
     }
 
 
@@ -87,6 +89,8 @@ def test_settings_ignore_unprefixed_opentelemetry_variables_at_import(tmp_path):
         "enabled": False,
         "endpoint": "http://localhost:4317/",
         "capture_response_body": False,
+        "fastapi_tracing": False,
+        "fastapi_operation_spans": False,
     }
 
 
@@ -99,6 +103,19 @@ def test_opentelemetry_settings_come_from_prefixed_environment_variables(isolate
     assert settings.opentelemetry.enabled is True
     assert settings.opentelemetry.endpoint == "http://collector:4317/"
     assert settings.opentelemetry.capture_response_body is False
+
+
+def test_fastapi_tracing_is_off_unless_turned_on(isolated_env, monkeypatch, tmp_path):
+    """FastAPI's built-in tracing is off by default, and turned on, like the rest of the
+    group, with ``MOCKSTACK__OPENTELEMETRY__*`` variables."""
+    defaults = Settings(templates_dir=tmp_path).opentelemetry
+    monkeypatch.setenv("MOCKSTACK__OPENTELEMETRY__FASTAPI_TRACING", "true")
+    monkeypatch.setenv("MOCKSTACK__OPENTELEMETRY__FASTAPI_OPERATION_SPANS", "true")
+
+    settings = Settings(templates_dir=tmp_path)
+
+    assert (defaults.fastapi_tracing, defaults.fastapi_operation_spans) == (False, False)
+    assert (settings.opentelemetry.fastapi_tracing, settings.opentelemetry.fastapi_operation_spans) == (True, True)
 
 
 def test_port_must_be_a_valid_port_number(make_settings, templates_dir):

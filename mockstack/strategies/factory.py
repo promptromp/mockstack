@@ -23,7 +23,7 @@ def name_for(cls: type[BaseStrategy]) -> str:
 
 def available_strategies() -> dict[str, type[BaseStrategy]]:
     """Get all available strategies."""
-    return {name_for(subclass): subclass for subclass in BaseStrategy.__subclasses__()}  # type: ignore[type-abstract]
+    return {name_for(subclass): subclass for subclass in BaseStrategy.__subclasses__()}
 
 
 def strategy_provider(app: FastAPI, settings: Settings) -> BaseStrategy:

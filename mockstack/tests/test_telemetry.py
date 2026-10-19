@@ -138,21 +138,28 @@ async def test_app_serves_without_opentelemetry(
     assert "mockstack.tracing" not in sys.modules
 
 
-def test_mockstack_never_imports_opentelemetry_unless_enabled(tmp_path):
-    """A fresh interpreter serves a request without importing OpenTelemetry, and
-    enabling tracing without it is a configuration error, not a traceback."""
+def test_mockstack_never_imports_the_opentelemetry_extra_unless_enabled(tmp_path):
+    """A fresh interpreter without the extra's packages, the OpenTelemetry SDK and OTLP
+    exporter, serves a request without importing them, and enabling tracing without them
+    is a configuration error, not a traceback. The OpenTelemetry API stays importable,
+    since FastAPI depends on it."""
     (tmp_path / "index.j2").write_text("{}")
     script = textwrap.dedent(
         f"""
         import sys
         from importlib.abc import MetaPathFinder
 
-        class NoOpenTelemetry(MetaPathFinder):
+        EXTRA = ("opentelemetry.sdk", "opentelemetry.exporter")
+
+        def in_extra(name):
+            return name in EXTRA or name.startswith(tuple(package + "." for package in EXTRA))
+
+        class NoOpenTelemetryExtra(MetaPathFinder):
             def find_spec(self, name, path, target=None):
-                if name == "opentelemetry" or name.startswith("opentelemetry."):
+                if in_extra(name):
                     raise ModuleNotFoundError(f"No module named {{name!r}}", name=name)
 
-        sys.meta_path.insert(0, NoOpenTelemetry())
+        sys.meta_path.insert(0, NoOpenTelemetryExtra())
 
         import httpx
         from mockstack.main import create_app, run
@@ -168,7 +175,7 @@ def test_mockstack_never_imports_opentelemetry_unless_enabled(tmp_path):
                 return (await client.get("/")).status_code
 
         assert asyncio.run(get()) == 200
-        assert not any(name.split(".")[0] == "opentelemetry" for name in sys.modules), "imported"
+        assert not any(in_extra(name) or name == "mockstack.tracing" for name in sys.modules), "imported"
         run(["--templates-dir", {str(tmp_path)!r}, "--opentelemetry.enabled"])
         """
     )

@@ -21,16 +21,16 @@ classifiers = [
 requires-python = ">=3.13"
 dependencies = [
     "colorama>=0.4.6",
-    "fastapi>=0.141.1",
+    "fastapi>=0.147.0",
     "httpx>=0.28.1",
     "jinja2>=3.1.6",
-    "pydantic>=2.13.5",
-    "pydantic-settings>=2.15.0",
+    "pydantic>=2.14.1",
+    "pydantic-settings>=2.16.0",
     "pyyaml>=6.0.3",
     "rich>=15.0.0",
     "rich-argparse>=1.8.0",
     # The standard extra installs uvloop and httptools, which uvicorn uses when present.
-    "uvicorn[standard]>=0.53.0",
+    "uvicorn[standard]>=0.54.0",
 ]
 dynamic = ["version"]
 
@@ -43,24 +43,24 @@ mockstack = "mockstack.main:run"
 
 [project.optional-dependencies]
 llm = [
-    "ollama>=0.6.2",
+    "ollama>=0.6.3",
 ]
 # Tracing with MOCKSTACK__OPENTELEMETRY__ENABLED: the SDK and its OTLP gRPC exporter.
 opentelemetry = [
-    "opentelemetry-api>=1.44.0",
-    "opentelemetry-exporter-otlp-proto-grpc>=1.44.0",
-    "opentelemetry-sdk>=1.44.0",
+    "opentelemetry-api>=1.45.1",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.45.1",
+    "opentelemetry-sdk>=1.45.1",
 ]
 
 [dependency-groups]
 dev = [
     # The tests exercise tracing, so development installs include the extra.
     "mockstack[opentelemetry]",
-    "mypy>=2.3.1",
+    "mypy>=2.4.0",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=7.1.0",
-    "pytest-mock>=3.15.1",
+    "pytest-mock>=3.17.0",
     "types-pyyaml>=6.0.12.20260906",
 ]
 

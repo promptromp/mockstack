@@ -76,8 +76,8 @@ uvx pre-commit run --all-files                  # ruff, mypy, unit tests with co
 mockstack requires Python 3.13 or later; CI tests 3.13 and 3.14. Ruff (line length 120)
 and mypy are configured in `pyproject.toml`: production code must be fully annotated,
 and a `# noqa` names its rule code with the reason on the line above. CI and pre-commit
-pin ruff (0.16.7); if a newer `uvx ruff` reports findings they do not, run
-`uvx ruff@0.16.7`. Coverage measures production code only, and the pre-commit pytest
+pin ruff (0.17.1); if a newer `uvx ruff` reports findings they do not, run
+`uvx ruff@0.17.1`. Coverage measures production code only, and the pre-commit pytest
 hook fails below 90%.
 
 If `VIRTUAL_ENV` points at another checkout, `unset VIRTUAL_ENV` first so `uv` uses
@@ -115,11 +115,15 @@ file fails it. CI runs the unit tests, the live tests, mypy, ruff and the docs b
   strategy is constructed; a file that does not load raises `RulesFileError`, naming
   the file and the rule by position. Every `proxyrules` response, including errors, carries the
   result headers.
-- **OpenTelemetry is an optional extra** (`mockstack[opentelemetry]`; the `dev` group
-  installs it). Only `mockstack/tracing.py` imports `opentelemetry`; strategies add span
-  attributes through `telemetry.current_span(request)`, never `request.state.span`.
-  `test_mockstack_never_imports_opentelemetry_unless_enabled` guards this, and the
-  `without_opentelemetry` fixture simulates an install without the extra.
+- **OpenTelemetry is an optional extra** (`mockstack[opentelemetry]`: the SDK and OTLP
+  exporter; the `dev` group installs it). FastAPI depends on the OpenTelemetry API, so
+  that is always installed. Only `mockstack/tracing.py` imports `opentelemetry`;
+  strategies add span attributes through `telemetry.current_span(request)`, never
+  `request.state.span`. `test_mockstack_never_imports_the_opentelemetry_extra_unless_enabled`
+  guards that the extra's packages (`opentelemetry.sdk`, `opentelemetry.exporter`) load
+  only with tracing on, and the `without_opentelemetry` fixture simulates an install
+  without the extra. FastAPI's built-in telemetry is configured in `create_app` from `opentelemetry.*`
+  settings (off by default), never from `FASTAPI_OTEL_*` variables.
 - **Keep names generic** in code, tests, docs and examples: projects service,
   analytics SQL gateway, `sales_facts`, orders, users. Never use company, product or
   internal service names.
