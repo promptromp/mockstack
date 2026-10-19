@@ -206,16 +206,102 @@ _BODYLESS_STATUS_CODES = frozenset({status.HTTP_204_NO_CONTENT, status.HTTP_304_
 # Methods whose responses are never written to a fixture.
 _UNRECORDED_METHODS = frozenset({"HEAD", "OPTIONS"})
 
-# Python's built-in MIME types only. The module-level ``mimetypes`` functions also read
-# the host's mime.types files, so a fixture's content type would differ between machines.
+# Content types of rendered templates by suffix, ignoring a trailing ``.j2``; any other
+# suffix is ``text/plain``.
+_TEMPLATE_CONTENT_TYPES = {
+    ".json": "application/json",
+    ".xml": "application/xml",
+    ".html": "text/html",
+    ".txt": "text/plain",
+    ".yaml": "application/x-yaml",
+    ".yml": "application/x-yaml",
+}
+
+# Content types of fixtures sent verbatim by suffix, the same on every Python version.
+# Python's built-in MIME table, which has fewer of these on older versions, and some
+# under other names, is only consulted for other suffixes.
+_VERBATIM_CONTENT_TYPES = {
+    **_TEMPLATE_CONTENT_TYPES,
+    ".csv": "text/csv",
+    # Images
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".avif": "image/avif",
+    ".heic": "image/heic",
+    ".bmp": "image/bmp",
+    ".ico": "image/vnd.microsoft.icon",
+    ".tif": "image/tiff",
+    ".tiff": "image/tiff",
+    # Documents
+    ".pdf": "application/pdf",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ".doc": "application/msword",
+    ".xls": "application/vnd.ms-excel",
+    ".ppt": "application/vnd.ms-powerpoint",
+    ".epub": "application/epub+zip",
+    # Archives and compressed files
+    ".zip": "application/zip",
+    ".gz": "application/gzip",
+    ".tgz": "application/gzip",
+    ".tar": "application/x-tar",
+    ".bz2": "application/x-bzip2",
+    ".xz": "application/x-xz",
+    ".zst": "application/zstd",
+    ".7z": "application/x-7z-compressed",
+    ".rar": "application/vnd.rar",
+    ".jar": "application/java-archive",
+    # Fonts
+    ".woff": "font/woff",
+    ".woff2": "font/woff2",
+    ".ttf": "font/ttf",
+    ".otf": "font/otf",
+    # Audio and video
+    ".mp3": "audio/mpeg",
+    ".m4a": "audio/mp4",
+    ".aac": "audio/aac",
+    ".flac": "audio/flac",
+    ".ogg": "audio/ogg",
+    ".wav": "audio/wav",
+    ".mp4": "video/mp4",
+    ".mov": "video/quicktime",
+    ".webm": "video/webm",
+    # Other
+    ".wasm": "application/wasm",
+    ".bin": "application/octet-stream",
+}
+
+# Python's built-in MIME table, for suffixes outside ``_VERBATIM_CONTENT_TYPES``. The
+# module-level ``mimetypes`` functions also read the host's mime.types files, so their
+# answer would differ between machines; this instance's differs only between Python versions.
 _BUILTIN_MIME_TYPES = mimetypes.MimeTypes()
 
-# The content type of a fixture served verbatim whose suffix gives none.
+# The content type of a fixture sent verbatim whose suffix gives none.
 _BINARY_CONTENT_TYPE = "application/octet-stream"
+
+# Text media types besides ``text/*``, and the structured-syntax suffixes that mark one.
+_TEXT_MEDIA_TYPES = frozenset({"application/json", "application/xml", "application/x-yaml", "application/yaml"})
+_TEXT_MEDIA_TYPE_SUFFIXES = ("+json", "+xml", "+yaml")
 
 # Reason text for a scrubber that opts a response out of recording; shared between where
 # the reason is produced (_scrub) and where the not-recorded log level is chosen (handle_record).
 _SCRUBBER_SKIPPED_REASON = "the scrubber skipped it"
+
+
+def _is_text_without_charset(content_type: str) -> bool:
+    """True when ``content_type`` is a text type, such as JSON, that names no charset."""
+    media_type, _, parameters = content_type.partition(";")
+    media_type = media_type.strip().lower()
+    is_text = (
+        media_type.startswith("text/")
+        or media_type in _TEXT_MEDIA_TYPES
+        or media_type.endswith(_TEXT_MEDIA_TYPE_SUFFIXES)
+    )
+    return is_text and "charset=" not in parameters.lower()
 
 
 def _header_safe(value: str) -> str:
@@ -518,27 +604,7 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
             # Update opentelemetry with template info
             self.update_opentelemetry_template(request, rule, result, result_type=result_type)
 
-            status_code = rule.status if rule.status is not None else status.HTTP_200_OK
-            sets_content_type = any(name.lower() == "content-type" for name, _ in rule.response_headers)
-            if status_code in _BODYLESS_STATUS_CODES:
-                response = Response(status_code=status_code)
-            elif isinstance(content, str):
-                response = Response(
-                    content=content,
-                    # Determine content type based on file extension
-                    media_type=None if sets_content_type else self._get_content_type(template_path),
-                    status_code=status_code,
-                )
-            else:
-                response = Response(content=content, status_code=status_code)
-                if not sets_content_type:
-                    # Set directly: as a media_type, a text/* type would get Starlette's
-                    # "; charset=utf-8", which these bytes are not.
-                    response.headers["content-type"] = self._get_content_type(
-                        template_path, default=_BINARY_CONTENT_TYPE
-                    )
-            for name, value in rule.response_headers:
-                response.headers.append(name, value)
+            response = self._fixture_response(rule, template_path, content)
             return with_result_headers(response, rule=rule, result_type=result_type)
 
         except Exception:
@@ -565,9 +631,57 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
         except UnicodeDecodeError:
             if template_path.suffix.lower() == ".j2":
                 raise
-            self.logger.info("[rule:%s] %s is not UTF-8: served verbatim", rule.name, template_path)
             return raw
         return self.env.from_string(text).render(**result.template_context)
+
+    def _fixture_response(self, rule: Rule, template_path: Path, content: str | bytes) -> Response:
+        """The response serving a fixture's ``content``, with the rule's ``status`` and
+        ``response_headers``; its content type comes from the file suffix unless
+        ``response_headers`` sets one."""
+        status_code = rule.status if rule.status is not None else status.HTTP_200_OK
+        rule_content_type = next(
+            (value for name, value in rule.response_headers if name.lower() == "content-type"), None
+        )
+        verbatim = isinstance(content, bytes)
+        if rule_content_type is not None:
+            content_type = rule_content_type
+        elif verbatim:
+            content_type = self._get_verbatim_content_type(template_path)
+        else:
+            content_type = self._get_content_type(template_path)
+        if verbatim:
+            self._log_verbatim(rule, template_path, content_type)
+
+        if status_code in _BODYLESS_STATUS_CODES:
+            response = Response(status_code=status_code)
+        elif verbatim and rule_content_type is None:
+            response = Response(content=content, status_code=status_code)
+            # Set directly: as a media_type, a text/* type would get Starlette's
+            # "; charset=utf-8", which these bytes are not.
+            response.headers["content-type"] = content_type
+        else:
+            # A Content-Type the rule sets is added with its other headers below.
+            media_type = content_type if rule_content_type is None else None
+            response = Response(content=content, media_type=media_type, status_code=status_code)
+        for name, value in rule.response_headers:
+            response.headers.append(name, value)
+        return response
+
+    def _log_verbatim(self, rule: Rule, template_path: Path, content_type: str) -> None:
+        """Log a fixture sent verbatim: at WARNING when it is labelled as text without a
+        charset, as a template saved in another encoding would be, otherwise at DEBUG."""
+        if _is_text_without_charset(content_type):
+            self.logger.warning(
+                "[rule:%s] %s is not UTF-8, so it is sent verbatim, without rendering, as %s. "
+                "Name a template *.j2, or give a Content-Type with a charset in response_headers",
+                rule.name,
+                template_path,
+                content_type,
+            )
+        else:
+            self.logger.debug(
+                "[rule:%s] %s is not UTF-8: served verbatim as %s", rule.name, template_path, content_type
+            )
 
     async def handle_record(
         self,
@@ -774,28 +888,25 @@ class ProxyRulesStrategy(BaseStrategy, CreateMixin):
 
         return _headers
 
-    def _get_content_type(self, template_path: Path, default: str = "text/plain") -> str:
-        """Determine content type from the file extension, ignoring a trailing ``.j2``.
-
-        mockstack's own suffix map comes first, then Python's built-in MIME types.
-        ``default`` is for a suffix that neither knows, and for a compressed one such as
-        ``.gz``, whose guessed type describes the content before compression.
-        """
+    def _get_content_type(self, template_path: Path) -> str:
+        """Determine a rendered template's content type from the file extension, ignoring a trailing ``.j2``."""
         if template_path.suffix.lower() == ".j2":
             template_path = template_path.with_suffix("")
-        suffix = template_path.suffix.lower()
-        content_types = {
-            ".json": "application/json",
-            ".xml": "application/xml",
-            ".html": "text/html",
-            ".txt": "text/plain",
-            ".yaml": "application/x-yaml",
-            ".yml": "application/x-yaml",
-        }
-        if suffix in content_types:
-            return content_types[suffix]
-        media_type, encoding = _BUILTIN_MIME_TYPES.guess_file_type(template_path)
-        return media_type if media_type is not None and encoding is None else default
+        return _TEMPLATE_CONTENT_TYPES.get(template_path.suffix.lower(), "text/plain")
+
+    def _get_verbatim_content_type(self, path: Path) -> str:
+        """Determine the content type of a fixture sent verbatim from its suffix, in any case.
+
+        mockstack's own map comes first, then Python's built-in MIME table. A suffix
+        that neither knows is ``application/octet-stream``, and so is one that the table
+        only knows as compressed, such as ``.txz``, whose type would describe the
+        content before compression.
+        """
+        suffix = path.suffix.lower()
+        if suffix in _VERBATIM_CONTENT_TYPES:
+            return _VERBATIM_CONTENT_TYPES[suffix]
+        media_type, encoding = _BUILTIN_MIME_TYPES.guess_file_type(path.name.lower())
+        return media_type if media_type is not None and encoding is None else _BINARY_CONTENT_TYPE
 
     @staticmethod
     def _set_shared_rule_attributes(span: SpanLike, rule: Rule) -> None:

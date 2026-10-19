@@ -3,6 +3,7 @@
 import gzip
 import json
 import logging
+import mimetypes
 import os
 import struct
 import subprocess
@@ -26,6 +27,7 @@ from mockstack.constants import (
     ProxyRulesRedirectVia,
 )
 from mockstack.rules import TemplateRuleResult, URLRuleResult
+from mockstack.strategies import proxyrules as proxyrules_module
 from mockstack.strategies.proxyrules import (
     ProxyRulesStrategy,
     Rule,
@@ -573,39 +575,137 @@ async def test_apply_renders_request_json_from_body(apply_rule, traced_request, 
         ("project.xml.j2", "application/xml"),
         ("project.j2", "text/plain"),
         ("project", "text/plain"),
-        # Suffixes outside mockstack's own map: Python's built-in MIME types.
-        ("logo.png", "image/png"),
-        ("logo.PNG", "image/png"),
-        ("report.pdf", "application/pdf"),
-        ("export.csv", "text/csv"),
-        ("export.csv.j2", "text/csv"),
-        ("icon.ico", "image/vnd.microsoft.icon"),
-        ("blob.bin", "application/octet-stream"),
-        # A compressed suffix names a coding, not the body's type.
+        # A rendered template never gets the types of files sent verbatim.
+        ("logo.png", "text/plain"),
+        ("report.pdf", "text/plain"),
+        ("export.csv", "text/plain"),
+        ("export.csv.j2", "text/plain"),
+        ("app.js", "text/plain"),
+        ("vector.svg", "text/plain"),
+        ("blob.bin", "text/plain"),
         ("export.csv.gz", "text/plain"),
-        ("archive.tar.gz", "text/plain"),
-        ("user.pb", "text/plain"),
     ],
 )
 def test_proxy_rules_strategy_get_content_type(proxyrules_strategy, filename, expected):
-    """The content type follows the file extension, ignoring a trailing ``.j2``: mockstack's
-    own map first, then Python's built-in MIME types (never the host's ``mime.types``
-    files, which differ between machines), then ``text/plain``."""
+    """The content type of a rendered template follows the file extension, ignoring a
+    trailing ``.j2``: one of six suffixes, otherwise ``text/plain``."""
     assert proxyrules_strategy()._get_content_type(Path(filename)) == expected
+
+
+# The content types mockstack itself gives fixture files sent verbatim, by suffix. Python's
+# built-in MIME table answers differently for many of these on 3.13 and 3.14.
+VERBATIM_CONTENT_TYPES = {
+    ".json": "application/json",
+    ".xml": "application/xml",
+    ".html": "text/html",
+    ".txt": "text/plain",
+    ".yaml": "application/x-yaml",
+    ".yml": "application/x-yaml",
+    ".csv": "text/csv",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".avif": "image/avif",
+    ".heic": "image/heic",
+    ".bmp": "image/bmp",
+    ".ico": "image/vnd.microsoft.icon",
+    ".tif": "image/tiff",
+    ".tiff": "image/tiff",
+    ".pdf": "application/pdf",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ".doc": "application/msword",
+    ".xls": "application/vnd.ms-excel",
+    ".ppt": "application/vnd.ms-powerpoint",
+    ".epub": "application/epub+zip",
+    ".zip": "application/zip",
+    ".gz": "application/gzip",
+    ".tgz": "application/gzip",
+    ".tar": "application/x-tar",
+    ".bz2": "application/x-bzip2",
+    ".xz": "application/x-xz",
+    ".zst": "application/zstd",
+    ".7z": "application/x-7z-compressed",
+    ".rar": "application/vnd.rar",
+    ".jar": "application/java-archive",
+    ".woff": "font/woff",
+    ".woff2": "font/woff2",
+    ".ttf": "font/ttf",
+    ".otf": "font/otf",
+    ".mp3": "audio/mpeg",
+    ".m4a": "audio/mp4",
+    ".aac": "audio/aac",
+    ".flac": "audio/flac",
+    ".ogg": "audio/ogg",
+    ".wav": "audio/wav",
+    ".mp4": "video/mp4",
+    ".mov": "video/quicktime",
+    ".webm": "video/webm",
+    ".wasm": "application/wasm",
+    ".bin": "application/octet-stream",
+}
+
+
+@pytest.mark.parametrize(("suffix", "expected"), sorted(VERBATIM_CONTENT_TYPES.items()))
+def test_verbatim_content_type_of_a_mapped_suffix_does_not_use_pythons_table(
+    proxyrules_strategy, monkeypatch, suffix, expected
+):
+    """A suffix in mockstack's own map, in any case, gets the same type on every Python
+    version: Python's built-in MIME table is not consulted for it."""
+    strategy = proxyrules_strategy()
+
+    def python_table(*args, **kwargs):
+        raise AssertionError(f"Python's MIME table consulted for {suffix}")
+
+    monkeypatch.setattr(proxyrules_module._BUILTIN_MIME_TYPES, "guess_file_type", python_table)
+    assert strategy._get_verbatim_content_type(Path(f"file{suffix}")) == expected
+    assert strategy._get_verbatim_content_type(Path(f"FILE{suffix.upper()}")) == expected
+    assert strategy._get_verbatim_content_type(Path(f"archive.tar{suffix}")) == expected
 
 
 @pytest.mark.parametrize(
     ("filename", "expected"),
     [
+        # Long-tail suffixes come from Python's built-in table, in any case. These three
+        # answer the same on every supported Python version.
+        ("vector.svg", "image/svg+xml"),
+        ("NOTES.MD", "text/markdown"),
+        ("slides.ps", "application/postscript"),
+        # A suffix the table knows only as a compressed coding, or does not know at all.
+        ("vector.svgz", "application/octet-stream"),
+        ("archive.txz", "application/octet-stream"),
         ("user.pb", "application/octet-stream"),
         ("blob", "application/octet-stream"),
-        ("export.csv.gz", "application/octet-stream"),
-        ("logo.png", "image/png"),
-        ("legacy.json", "application/json"),
     ],
 )
-def test_get_content_type_default_applies_only_to_unknown_suffixes(proxyrules_strategy, filename, expected):
-    assert proxyrules_strategy()._get_content_type(Path(filename), default="application/octet-stream") == expected
+def test_verbatim_content_type_of_another_suffix(proxyrules_strategy, filename, expected):
+    assert proxyrules_strategy()._get_verbatim_content_type(Path(filename)) == expected
+
+
+def test_content_types_ignore_the_hosts_mime_types(proxyrules_strategy, monkeypatch):
+    """The module-level ``mimetypes`` functions also read the host's ``mime.types`` files,
+    so mockstack never calls them."""
+    strategy = proxyrules_strategy()
+    names = ["logo.png", "vector.svg", "NOTES.MD", "user.pb", "legacy.json", "project.json.j2", "export.csv"]
+
+    def answers() -> dict[str, tuple[str, str]]:
+        return {
+            name: (strategy._get_content_type(Path(name)), strategy._get_verbatim_content_type(Path(name)))
+            for name in names
+        }
+
+    before = answers()
+
+    def host_table(*args, **kwargs):
+        return ("text/x-host", None)
+
+    monkeypatch.setattr(mimetypes, "guess_file_type", host_table)
+    monkeypatch.setattr(mimetypes, "guess_type", host_table)
+    assert answers() == before
+    assert "text/x-host" not in {content_type for pair in before.values() for content_type in pair}
 
 
 @pytest.mark.asyncio
@@ -798,10 +898,12 @@ async def test_rules_and_fixture_files_are_read_as_utf8(proxyrules_strategy, tra
         response = await strategy.apply(traced_request("/x"))
 
     assert response.status_code == 200
-    # One open() for the rules file (at construction) and one for the fixture (at apply).
-    rules_open, fixture_open = mock_open.call_args_list
-    assert rules_open.kwargs.get("encoding") == "utf-8", rules_open
-    assert fixture_open.args == (Path(template_file), "rb"), fixture_open
+    fixture_opens = [call for call in mock_open.call_args_list if Path(call.args[0]) == template_file]
+    rules_opens = [call for call in mock_open.call_args_list if Path(call.args[0]) == strategy.rules_filename]
+    assert [call.args[1:] for call in fixture_opens] == [("rb",)]
+    assert rules_opens
+    for call in rules_opens:
+        assert call.kwargs.get("encoding") == "utf-8", call
 
 
 # Non-ASCII text to prove file reads survive a non-UTF-8 locale: Latin-1 range
@@ -1599,14 +1701,26 @@ def write_bytes(tmp_path: Path) -> Callable[[str, bytes], Path]:
         ("report.pdf", PDF, "application/pdf"),
         ("user.pb", PROTOBUF, "application/octet-stream"),
         ("blob", bytes(range(256)) * 4, "application/octet-stream"),
-        ("export.csv.gz", gzip.compress(b"id,total\n1,10\n", mtime=0), "application/octet-stream"),
+        ("export.csv.gz", gzip.compress(b"id,total\n1,10\n", mtime=0), "application/gzip"),
+        ("Brand.WOFF2", b"wOF2\x00\x01\x00\x00\xff\xfe", "font/woff2"),
         ("delimiters.bin", b"\xff{{ path }}{% if true %}\r\n", "application/octet-stream"),
         # Text in another encoding is not UTF-8 either: served as it is, with no charset.
         ("legacy.txt", "Zoë Müller\r\n".encode("latin-1"), "text/plain"),
         ("legacy.csv", "id,name\r\n1,Zoë\r\n".encode("cp1252"), "text/csv"),
         ("legacy.json", '{"name": "Zoë", "path": "{{ path }}"}'.encode("latin-1"), "application/json"),
     ],
-    ids=["png", "pdf", "protobuf", "no-suffix", "gzip", "jinja-delimiters", "latin1-txt", "cp1252-csv", "latin1-json"],
+    ids=[
+        "png",
+        "pdf",
+        "protobuf",
+        "no-suffix",
+        "gzip",
+        "upper-case-font",
+        "jinja-delimiters",
+        "latin1-txt",
+        "cp1252-csv",
+        "latin1-json",
+    ],
 )
 async def test_fixture_that_is_not_utf8_is_served_verbatim(apply_rule, write_bytes, filename, content, content_type):
     """A fixture file that is not ``.j2`` and not UTF-8 is sent byte for byte, never
@@ -1633,13 +1747,59 @@ async def test_verbatim_fixture_sets_template_span_attributes(apply_rule, write_
 
 
 @pytest.mark.asyncio
-async def test_verbatim_fixture_is_logged(apply_rule, write_bytes, caplog):
-    """A template saved in another encoding is served unrendered, so the log says why."""
-    fixture = write_bytes("legacy.json", '{"name": "Zoë"}'.encode("latin-1"))
-    with caplog.at_level(logging.INFO, logger="ProxyRulesStrategy"):
-        response = await apply_rule({"name": "legacy", "pattern": r"^/x$", "replacement": f"file://{fixture}"})
+@pytest.mark.parametrize(
+    ("filename", "content", "response_headers", "content_type"),
+    [
+        ("legacy.json", '{"name": "Zoë", "id": {{ id }}}'.encode("latin-1"), {}, "application/json"),
+        ("legacy.csv", "id,name\r\n1,Zoë\r\n".encode("cp1252"), {}, "text/csv"),
+        ("legacy.txt", "Zoë".encode("latin-1"), {}, "text/plain"),
+        ("logo.png", PNG, {"Content-Type": "application/problem+json"}, "application/problem+json"),
+    ],
+    ids=["latin1-json", "cp1252-csv", "latin1-txt", "text-override"],
+)
+async def test_verbatim_fixture_labelled_as_text_is_logged_as_a_warning(
+    apply_rule, write_bytes, caplog, filename, content, response_headers, content_type
+):
+    """Text that is not UTF-8 is most likely a template saved in another encoding, which
+    is now sent unrendered (it used to be a logged 500), so the log says so."""
+    fixture = write_bytes(filename, content)
+    rule = {"name": "legacy", "pattern": r"^/x$", "replacement": f"file://{fixture}"}
+    with caplog.at_level(logging.DEBUG, logger="ProxyRulesStrategy"):
+        response = await apply_rule({**rule, "response_headers": response_headers})
     assert response.status_code == 200
-    assert f"[rule:legacy] {fixture} is not UTF-8: served verbatim" in caplog.text
+    [warning] = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert warning.getMessage() == (
+        f"[rule:legacy] {fixture} is not UTF-8, so it is sent verbatim, without rendering, as {content_type}. "
+        "Name a template *.j2, or give a Content-Type with a charset in response_headers"
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("filename", "content", "response_headers"),
+    [
+        ("logo.png", PNG, {}),
+        ("user.pb", PROTOBUF, {}),
+        ("legacy.csv", "id,name\r\n1,Zoë\r\n".encode("cp1252"), {"Content-Type": "text/csv; charset=windows-1252"}),
+        ("legacy.json", '{"name": "Zoë"}'.encode("latin-1"), {"Content-Type": "application/octet-stream"}),
+    ],
+    ids=["png", "protobuf", "text-with-charset", "binary-override"],
+)
+async def test_other_verbatim_fixture_is_logged_at_debug(
+    apply_rule, write_bytes, caplog, filename, content, response_headers
+):
+    """Binary files, and text whose charset the rule names, are expected, so serving one
+    adds no line above DEBUG to the usual INFO ``template result`` line."""
+    fixture = write_bytes(filename, content)
+    rule = {"name": "binary", "pattern": r"^/x$", "replacement": f"file://{fixture}"}
+    with caplog.at_level(logging.DEBUG, logger="ProxyRulesStrategy"):
+        response = await apply_rule({**rule, "response_headers": response_headers})
+    assert response.status_code == 200
+    assert [r.getMessage() for r in caplog.records if r.levelno > logging.DEBUG] == [
+        f"[rule:binary] template result: {fixture}"
+    ]
+    debug = [r.getMessage() for r in caplog.records if r.levelno == logging.DEBUG]
+    assert any(message.startswith(f"[rule:binary] {fixture} is not UTF-8: served verbatim as ") for message in debug)
 
 
 @pytest.mark.asyncio
@@ -1735,17 +1895,20 @@ async def test_j2_fixture_that_is_not_utf8_is_stamped_500_error(apply_rule, writ
     ("filename", "content", "body", "content_type"),
     [
         ("plain.json", b'{"a": {{ 1 + 1 }}}', b'{"a": 2}', "application/json"),
-        # As before, rendering normalises newlines and drops one trailing newline.
-        ("export.csv", b"path\r\n{{ path }}\r\n", b"path\n/x", "text/csv; charset=utf-8"),
+        # As before, rendering normalises newlines and drops one trailing newline, and a
+        # suffix outside the six template suffixes is text/plain, even a binary one.
+        ("export.csv", b"path\r\n{{ path }}\r\n", b"path\n/x", "text/plain; charset=utf-8"),
+        ("report.pdf", b"%PDF-1.4\n{{ path }}\n%%EOF\n", b"%PDF-1.4\n/x\n%%EOF", "text/plain; charset=utf-8"),
         # Bytes that look binary but are UTF-8 (a NUL, a control character, U+00E9).
-        ("payload.bin", b"\x00\x01\xc3\xa9{{ path }}", b"\x00\x01\xc3\xa9/x", "application/octet-stream"),
-        ("empty.png", b"", b"", "image/png"),
+        ("payload.bin", b"\x00\x01\xc3\xa9{{ path }}", b"\x00\x01\xc3\xa9/x", "text/plain; charset=utf-8"),
+        ("empty.png", b"", b"", "text/plain; charset=utf-8"),
     ],
-    ids=["json", "csv", "utf8-binary-looking", "empty"],
+    ids=["json", "csv", "ascii-pdf", "utf8-binary-looking", "empty"],
 )
 async def test_utf8_fixture_without_j2_suffix_is_still_rendered(
     apply_rule, write_bytes, filename, content, body, content_type
 ):
+    """A UTF-8 fixture is rendered, and typed, exactly as before binary fixtures existed."""
     fixture = write_bytes(filename, content)
     response = await apply_rule({"name": "text", "pattern": r"^/x$", "replacement": f"file://{fixture}"})
     assert response.status_code == 200
@@ -1753,3 +1916,14 @@ async def test_utf8_fixture_without_j2_suffix_is_still_rendered(
     assert response.headers.getlist("content-type") == [content_type]
     assert response.headers[RESULT_TYPE_HEADER] == "template"
     assert response.headers[RESULT_RULE_HEADER] == "text"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("delimiter", [b"{{", b"{%", b"{#"])
+async def test_utf8_binary_with_an_unbalanced_delimiter_is_stamped_500_error(apply_rule, write_bytes, delimiter):
+    """A binary file that happens to be UTF-8 is a template, so a stray delimiter in it
+    fails to render."""
+    fixture = write_bytes("payload.bin", b"\x00\x01" + delimiter + b"\x02\x03")
+    response = await apply_rule({"name": "text", "pattern": r"^/x$", "replacement": f"file://{fixture}"})
+    assert response.status_code == 500
+    assert response.headers[RESULT_TYPE_HEADER] == "error"

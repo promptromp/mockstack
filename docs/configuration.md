@@ -57,7 +57,7 @@ exports traces only, as its settings configure, and ignores `FASTAPI_OTEL_*` var
 |--------|------|---------|-------------|
 | `opentelemetry.enabled` | boolean | `false` | Whether to enable OpenTelemetry integration |
 | `opentelemetry.endpoint` | string | `http://localhost:4317/` | OpenTelemetry endpoint |
-| `opentelemetry.capture_response_body` | boolean | `false` | Whether to capture response body in traces |
+| `opentelemetry.capture_response_body` | boolean | `false` | Whether to capture response body in traces, as the span's `http.response.body` attribute. A body that is not UTF-8, such as an image, is recorded as `<N bytes, not UTF-8>` and still sent to the client unchanged |
 | `opentelemetry.fastapi_tracing` | boolean | `false` | Whether FastAPI's built-in tracing also traces each request, with a span that mockstack's span is a child of. Takes effect with `opentelemetry.enabled` on |
 | `opentelemetry.fastapi_operation_spans` | boolean | `false` | Whether FastAPI's built-in tracing adds spans for dependency resolution and the endpoint, as children of mockstack's span. Takes effect with `opentelemetry.fastapi_tracing` on |
 

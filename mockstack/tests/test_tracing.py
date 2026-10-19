@@ -130,6 +130,30 @@ async def test_with_response_body():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
+    "body",
+    [b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR", "Zoë Müller".encode("latin-1")],
+    ids=["png", "latin1"],
+)
+async def test_with_response_body_keeps_a_body_that_is_not_utf8(body):
+    """A body that is not UTF-8 is sent on byte for byte; the span records a placeholder."""
+    response = StreamingResponse(
+        content=iter([body[:4], body[4:]]),
+        status_code=200,
+        headers={"content-type": "application/octet-stream", "x-mockstack-result": "template"},
+    )
+    span = MagicMock()
+
+    new_response, _ = await with_response_body(response, span)
+
+    span.set_attribute.assert_called_once_with("http.response.body", f"<{len(body)} bytes, not UTF-8>")
+    assert new_response.body == body
+    assert new_response.headers["content-type"] == "application/octet-stream"
+    assert new_response.headers["content-length"] == str(len(body))
+    assert new_response.headers["x-mockstack-result"] == "template"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
     "chunks",
     [[b"part1", b"part2", b"part3"], ["part1", "part2", "part3"]],
     ids=["bytes", "str"],
@@ -137,7 +161,13 @@ async def test_with_response_body():
 async def test_extract_body(chunks):
     """Test extracting body from a streaming response of bytes or str chunks."""
     body = await extract_body(StreamingResponse(content=iter(chunks)))
-    assert body == "part1part2part3"
+    assert body == b"part1part2part3"
+
+
+@pytest.mark.asyncio
+async def test_extract_body_keeps_bytes_that_are_not_utf8():
+    body = await extract_body(StreamingResponse(content=iter([b"\x89PNG", b"\xff\xfe"])))
+    assert body == b"\x89PNG\xff\xfe"
 
 
 @patch("mockstack.tracing.OTLPSpanExporter")
@@ -222,6 +252,42 @@ async def test_enabled_app_traces_each_request(
     assert attributes["http.status_code"] == 200
     assert strategy_attributes.items() <= attributes.items()
     assert ("http.response.body" in attributes) is capture_response_body
+
+
+@pytest.mark.asyncio
+async def test_captured_binary_fixture_is_served_byte_for_byte(make_settings, write_rules, tmp_path):
+    """With response bodies captured, a fixture served verbatim still reaches the client
+    unchanged and stamped, and the span records a placeholder for its body."""
+    logo = b"\x89PNG\r\n\x1a\n" + bytes(range(256))
+    fixture = tmp_path / "logo.png"
+    fixture.write_bytes(logo)
+    rules = write_rules([{"name": "logo", "pattern": "^/logo$", "replacement": f"file://{fixture}"}])
+    span = MagicMock()
+    settings = make_settings(
+        strategy="proxyrules",
+        proxyrules_rules_filename=rules,
+        opentelemetry=OpenTelemetrySettings(enabled=True, capture_response_body=True),
+    )
+    with (
+        patch("mockstack.tracing.trace") as mock_trace,
+        patch("mockstack.tracing.OTLPSpanExporter"),
+        patch("mockstack.tracing.BatchSpanProcessor"),
+        patch("mockstack.tracing.TracerProvider"),
+    ):
+        mock_trace.get_tracer.return_value.start_as_current_span.return_value.__enter__.return_value = span
+        app = create_app(settings)
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            response = await client.get("/logo")
+
+    assert response.status_code == 200
+    assert response.content == logo
+    assert response.headers["content-type"] == "image/png"
+    assert response.headers["content-length"] == str(len(logo))
+    assert (response.headers["x-mockstack-result"], response.headers["x-mockstack-rule"]) == ("template", "logo")
+    attributes = {call.args[0]: call.args[1] for call in span.set_attribute.call_args_list}
+    assert attributes["http.response.body"] == f"<{len(logo)} bytes, not UTF-8>"
+    assert attributes["mockstack.proxyrules.result_type"] == "template"
 
 
 MOCKSTACK_SPAN = "GET /api/v1/projects/1234"

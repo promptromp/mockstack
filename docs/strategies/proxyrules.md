@@ -215,20 +215,18 @@ rules:
     replacement: file:///fixtures/projects/project.json.j2
 ```
 
-The response content type comes from the file suffix, ignoring a trailing `.j2`
-(`project.json.j2` -> `application/json`). `.json`, `.xml`, `.html`, `.txt`, `.yaml` and
-`.yml` have mockstack's own types. Any other suffix gets its type from Python's built-in
-MIME table (`export.csv.j2` -> `text/csv`, `logo.png` -> `image/png`), which does not
-read the host's `mime.types` files, so the type is the same on every machine. A suffix
-the table does not know, a missing one, or a compressed one such as `.gz` gives
-`text/plain`. A `Content-Type` in [`response_headers`](#status-codes-and-headers)
-replaces the inferred type.
+The response content type of a rendered template comes from the file suffix, ignoring a
+trailing `.j2` (`project.json.j2` -> `application/json`): `.json`, `.xml`, `.html`,
+`.txt`, `.yaml` and `.yml` have their own types, and any other suffix is `text/plain`. A
+`Content-Type` in [`response_headers`](#status-codes-and-headers) replaces it. A
+[binary file](#binary-files) sent as is gets its type differently.
 
 A successfully rendered template returns HTTP 200, or the rule's `status`, stamped
 `X-Mockstack-Result: template`; see [Error handling](#error-handling) for the failure
 cases. Use the `tojson` filter to write request values into JSON fixtures, e.g.
-`{"id": {{ id | tojson }}}`. Fixture files and the rules file are read as UTF-8,
-matching how filefixtures reads its templates.
+`{"id": {{ id | tojson }}}`. Templates, like the rules file, are read as UTF-8, matching
+how filefixtures reads its templates; a fixture file that is not UTF-8 is a
+[binary file](#binary-files) instead.
 
 ### Status codes and headers
 
@@ -313,21 +311,38 @@ rules:
 
 - A file sent as is gets the rule's `status` and `response_headers`, with no body for a
   `204` or `304`, and is stamped `X-Mockstack-Result: template`, as a rendered template is.
-- Its content type comes from the suffix, as for a [template](#file-templates), except
-  that a suffix with no known type gives `application/octet-stream`, and a text type
-  gets no `charset`, since the file is not UTF-8. Set `Content-Type` in
-  `response_headers` to change it, e.g. to `text/csv; charset=windows-1252`.
-- mockstack logs each file it sends as is at INFO (`... is not UTF-8: served verbatim`).
-- A template saved in another encoding, such as Latin-1, is not UTF-8 either, so it is
-  sent without being rendered. Name templates `*.j2`: a `.j2` file that is not UTF-8 is
-  a 500 `error` instead.
+- Its content type comes from its suffix, in any case (`logo.PNG` -> `image/png`).
+  mockstack's own map comes first, so these are the same on every Python version:
+    - the six template suffixes, as for a rendered template, and `.csv` (`text/csv`);
+    - images: `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.avif`, `.heic`, `.bmp`, `.ico`,
+      `.tif`, `.tiff`;
+    - documents: `.pdf`, `.docx`, `.xlsx`, `.pptx`, `.doc`, `.xls`, `.ppt`, `.epub`;
+    - archives and compressed files: `.zip`, `.gz` and `.tgz` (`application/gzip`),
+      `.tar`, `.bz2`, `.xz`, `.zst`, `.7z`, `.rar`, `.jar`;
+    - fonts: `.woff`, `.woff2`, `.ttf`, `.otf`;
+    - audio and video: `.mp3`, `.m4a`, `.aac`, `.flac`, `.ogg`, `.wav`, `.mp4`, `.mov`,
+      `.webm`;
+    - `.wasm`, and `.bin` (`application/octet-stream`).
+- Any other suffix gets its type from Python's built-in MIME table (`vector.svg` ->
+  `image/svg+xml`), never from the host's `mime.types` files; that table can differ
+  between Python versions. A suffix it does not know, or one it only knows as compressed
+  (`.txz`), is `application/octet-stream`.
+- A text type gets no `charset`, since the file is not UTF-8. Set `Content-Type` in
+  `response_headers` to change the type, e.g. to `text/csv; charset=windows-1252`.
+- mockstack logs each file it sends as is at DEBUG, or at WARNING when the file is
+  labelled as text without a charset (`text/*`, JSON, XML or YAML): it is then most
+  likely a template saved in another encoding, such as Latin-1, which is sent without
+  being rendered. Name templates `*.j2`, so that a `.j2` file that is not UTF-8 is a
+  500 `error`.
 - A binary file that happens to be valid UTF-8 is rendered as a template, which can
   change it: rendering turns `\r\n` and `\r` into `\n`, drops one trailing newline, and
-  evaluates `{{`, `{%` and `{#`. Compressed formats (PNG, JPEG, GIF, WebP, ZIP, gzip,
-  fonts, audio, video) and almost every PDF are in practice never valid UTF-8, but small
-  uncompressed payloads can be, for example a protobuf message holding only ASCII
-  strings and numbers below 128, or a PDF without compressed streams. Compare such a
-  fixture with a response byte for byte before relying on it.
+  evaluates `{{ ... }}`, `{% ... %}` and `{# ... #}`. An unbalanced `{{`, `{%` or `{#`
+  in it is a 500 `error`, as for any template that fails to render. Compressed formats
+  (PNG, JPEG, GIF, WebP, ZIP, gzip, fonts, audio, video) and almost every PDF are in
+  practice never valid UTF-8, but small uncompressed payloads can be, for example a
+  protobuf message holding only ASCII strings and numbers below 128, or a PDF without
+  compressed streams. Compare such a fixture with a response byte for byte before
+  relying on it.
 - The file is read whole on every request: there is no streaming and no `Range` support.
 - Record mode does not write binary files: an upstream body that is not UTF-8 is not
   [recorded](#recording-fixtures).
