@@ -65,9 +65,9 @@ dev = [
 ]
 
 [tool.setuptools.packages.find]
-# Repository checkout (./mockstack) and Docker image (/app/src/mockstack); the explicit
-# include keeps untracked top-level directories such as mkdocs' site/ out of discovery.
-where = [".", "src"]
+# The explicit include keeps untracked top-level directories such as mkdocs' site/ out
+# of discovery.
+where = ["."]
 include = ["mockstack", "mockstack.*"]
 
 [tool.setuptools_scm]
