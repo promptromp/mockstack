@@ -74,41 +74,45 @@ def with_response_attributes(response: Response, span: Span, *, sensitive_header
 
 
 async def with_response_body(response: StreamingResponse, span: Span) -> tuple[Response, Span]:
-    """Add the response body to the span."""
+    """Add the response body to the span.
+
+    A body that is not UTF-8, such as an image, is recorded as ``<N bytes, not UTF-8>``.
+    The response is rebuilt from the original bytes and headers either way.
+    """
     body = await extract_body(response)
+
+    try:
+        text = body.decode("utf-8")
+    except UnicodeDecodeError:
+        text = f"<{len(body)} bytes, not UTF-8>"
 
     # for semantics of payload attribute naming see:
     # https://github.com/open-telemetry/oteps/pull/234
-    span.set_attribute("http.response.body", body)
+    span.set_attribute("http.response.body", text)
 
     # recreate response with the same body since when consuming it to log it above
     # we effectively "deplete" the iterator.
-    _response = Response(
-        content=body,
-        status_code=response.status_code,
-        headers=dict(response.headers),
-        media_type=response.media_type,
-    )
+    _response = Response(content=body, status_code=response.status_code)
+    # Send the original headers item by item: a mapping would keep only one of several
+    # Set-Cookie headers. An original Content-Length already describes these bytes (or,
+    # for a HEAD, the body a GET would send); without one, keep the one Starlette just
+    # set for them, if any (none on a 1xx, 204 or 304).
+    original = list(response.raw_headers)
+    has_length = any(name.lower() == b"content-length" for name, _ in original)
+    _response.raw_headers = original if has_length else original + _response.raw_headers
 
     return _response, span
 
 
-async def extract_body(response: StreamingResponse) -> str:
-    """Extract the body of a response."""
-
-    async def read_response_body(response: StreamingResponse) -> bytes:
-        """Helper function to read response body asynchronously into memory."""
-        body = b""
-        async for chunk in response.body_iterator:
-            if isinstance(chunk, str):
-                body += chunk.encode()
-            else:
-                body += chunk
-        return body
-
-    body = await read_response_body(response)
-
-    return body.decode()
+async def extract_body(response: StreamingResponse) -> bytes:
+    """Read the body of a response into memory, as the bytes sent."""
+    body = b""
+    async for chunk in response.body_iterator:
+        if isinstance(chunk, str):
+            body += chunk.encode()
+        else:
+            body += chunk
+    return body
 
 
 def install(app: FastAPI, settings: Settings) -> None:

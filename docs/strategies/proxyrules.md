@@ -1,9 +1,9 @@
 # ProxyRules Strategy
 
 The `ProxyRulesStrategy` routes each request through an ordered list of rules. A rule
-can serve a Jinja fixture file, reverse-proxy the request to a real service, or
-redirect the client there, so a single mockstack instance can mix mock responses with
-real service calls.
+can serve a fixture file, reverse-proxy the request to a real service, or redirect the
+client there, so a single mockstack instance can mix mock responses with real service
+calls.
 
 See also the [ProxyRules cookbook](../guides/proxyrules-cookbook.md): tested,
 copy-paste recipes for the most common setups.
@@ -15,8 +15,9 @@ This strategy:
 - Reads its rules from a YAML file; rules are tried in order and the first match wins
 - Matches requests on a path regex, the HTTP method, and optional `headers`, `query`,
   `body` and `json` predicates
-- Serves `file:///` Jinja templates as fixtures, with request data in the template
-  context, and the rule's own `status` and `response_headers`
+- Serves `file:///` fixtures with the rule's own `status` and `response_headers`:
+  Jinja templates, with request data in the template context, or binary files such as
+  images and PDFs, sent as they are
 - Renders a `replacement` that contains Jinja delimiters as a template of its own
   (dynamic replacements), e.g. to pick a fixture directory from a header
 - Reverse-proxies to the rewritten URL by default, or answers with an HTTP redirect
@@ -65,7 +66,7 @@ rules:
   it is anchored at the start of the path. The query string is not part of the path;
   match it with `query`.
 - `replacement`: Where the request goes. A URL is reverse-proxied or redirected to; a
-  `file:///` path serves a [file template](#file-templates). A plain replacement is
+  `file:///` path serves a [fixture file](#file-templates). A plain replacement is
   applied with `re.sub`, so backreferences such as `\1` work. A replacement containing
   `{{`/`{%` is a [dynamic replacement](#dynamic-replacements) instead.
 - `method`: Optional HTTP method to match, case-insensitive (if not specified,
@@ -87,11 +88,11 @@ rules:
   non-ASCII characters as they are. A path that is absent never matches, while a
   present `null` matches as the text `null`. A rule with `body`/`json` never matches a
   request without a body.
-- `status`: Optional HTTP status for the response of a [file template](#file-templates)
+- `status`: Optional HTTP status for the response of a [fixture](#file-templates)
   rule, an integer from 200 to 599 (default 200). See
   [Status codes and headers](#status-codes-and-headers).
 - `response_headers`: Optional mapping of header name -> value added to the response of
-  a file template rule. A list value sends the header once per item.
+  a fixture rule. A list value sends the header once per item.
 
 Predicate values must be strings. YAML reads unquoted `2`, `true` or `2024` as
 numbers and booleans; mockstack converts them back with `str()`, which turns `true`
@@ -197,7 +198,8 @@ rules:
 
 ## File templates
 
-A `replacement` starting with `file:///` serves a Jinja2 template instead of proxying.
+A `replacement` starting with `file:///` serves a fixture file instead of proxying: a
+Jinja2 template, or a [binary file](#binary-files) sent as it is.
 The path is an **absolute filesystem path**; `templates_dir` is not consulted.
 `file://` followed directly by an absolute path (i.e. `file:///abs/path`, three
 slashes total) is the canonical form; when building the path from a variable that
@@ -213,12 +215,18 @@ rules:
     replacement: file:///fixtures/projects/project.json.j2
 ```
 
-The response content type comes from the file suffix, ignoring a trailing `.j2`
-(`project.json.j2` -> `application/json`). A successfully rendered template returns
-HTTP 200, or the rule's `status`, stamped `X-Mockstack-Result: template`; see
-[Error handling](#error-handling) for the failure cases. Use the `tojson` filter to
-write request values into JSON fixtures, e.g. `{"id": {{ id | tojson }}}`. Fixture files
-and the rules file are read as UTF-8, matching how filefixtures reads its templates.
+The response content type of a rendered template comes from the file suffix, ignoring a
+trailing `.j2` (`project.json.j2` -> `application/json`): `.json`, `.xml`, `.html`,
+`.txt`, `.yaml` and `.yml` have their own types, and any other suffix is `text/plain`. A
+`Content-Type` in [`response_headers`](#status-codes-and-headers) replaces it. A
+[binary file](#binary-files) sent as is gets its type differently.
+
+A successfully rendered template returns HTTP 200, or the rule's `status`, stamped
+`X-Mockstack-Result: template`; see [Error handling](#error-handling) for the failure
+cases. Use the `tojson` filter to write request values into JSON fixtures, e.g.
+`{"id": {{ id | tojson }}}`. Templates, like the rules file, are read as UTF-8, matching
+how filefixtures reads its templates; a fixture file that is not UTF-8 is a
+[binary file](#binary-files) instead.
 
 ### Status codes and headers
 
@@ -240,9 +248,9 @@ rules:
 
 - The response is still stamped `X-Mockstack-Result: template`, so a test can tell a
   fixture's 503 from a 5xx `error` that mockstack itself returned.
-- The status and headers apply only once the fixture has rendered. A missing fixture
-  or a render failure is answered as described in [Error handling](#error-handling),
-  without them.
+- The status and headers apply only once the fixture has been read and, for a
+  template, rendered. A missing fixture or a render failure is answered as described in
+  [Error handling](#error-handling), without them.
 - A `204` or `304` is sent without a body; the fixture file must still exist.
 - Header values are sent as written. A list value sends the header once per item (for
   example several `Set-Cookie` headers), and a `Content-Type` replaces the type
@@ -278,6 +286,66 @@ inferred from the path. A named group that would shadow a reserved name, such as
 `(?P<headers>...)`, is rejected when the rules are loaded. A named group that did
 not participate in the match (an unmatched optional group) is absent from the
 context rather than `None`.
+
+### Binary files
+
+A fixture file whose name ends in `.j2` is always a Jinja template. Any other file is
+rendered as a template when it is UTF-8 text, and is otherwise sent byte for byte,
+without rendering, so images, PDFs, archives and other binary files are served as they
+are:
+
+```yaml
+rules:
+  - name: project-logo
+    method: GET
+    pattern: ^/projects/api/v1/project/(?P<id>[^/]+)/logo$
+    replacement: file:///fixtures/projects/logo.png
+
+  - name: sales-report
+    method: GET
+    pattern: ^/analytics/v1/reports/sales_facts\.pdf$
+    response_headers:
+      Content-Disposition: 'attachment; filename="sales_facts.pdf"'
+    replacement: file:///fixtures/analytics/sales_facts.pdf
+```
+
+- A file sent as is gets the rule's `status` and `response_headers`, with no body for a
+  `204` or `304`, and is stamped `X-Mockstack-Result: template`, as a rendered template is.
+- Its content type comes from its suffix, in any case (`logo.PNG` -> `image/png`).
+  mockstack's own map comes first, so these are the same on every Python version:
+    - the six template suffixes, as for a rendered template, and `.csv` (`text/csv`);
+    - images: `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.avif`, `.heic`, `.bmp`, `.ico`,
+      `.tif`, `.tiff`;
+    - documents: `.pdf`, `.docx`, `.xlsx`, `.pptx`, `.doc`, `.xls`, `.ppt`, `.epub`;
+    - archives and compressed files: `.zip`, `.gz` and `.tgz` (`application/gzip`),
+      `.tar`, `.bz2`, `.xz`, `.zst`, `.7z`, `.rar`, `.jar`;
+    - fonts: `.woff`, `.woff2`, `.ttf`, `.otf`;
+    - audio and video: `.mp3`, `.m4a`, `.aac`, `.flac`, `.ogg`, `.wav`, `.mp4`, `.mov`,
+      `.webm`;
+    - `.wasm`, and `.bin` (`application/octet-stream`).
+- Any other suffix gets its type from Python's built-in MIME table (`vector.svg` ->
+  `image/svg+xml`), never from the host's `mime.types` files; that table can differ
+  between Python versions. A suffix it does not know, or one it only knows as compressed
+  (`.txz`), is `application/octet-stream`.
+- A text type gets no `charset`, since the file is not UTF-8. Set `Content-Type` in
+  `response_headers` to change the type, e.g. to `text/csv; charset=windows-1252`.
+- mockstack logs each file it sends as is at DEBUG, or at WARNING when the file is
+  labelled as text without a charset (`text/*`, JSON, XML or YAML): it is then most
+  likely a template saved in another encoding, such as Latin-1, which is sent without
+  being rendered. Name templates `*.j2`, so that a `.j2` file that is not UTF-8 is a
+  500 `error`.
+- A binary file that happens to be valid UTF-8 is rendered as a template, which can
+  change it: rendering turns `\r\n` and `\r` into `\n`, drops one trailing newline, and
+  evaluates `{{ ... }}`, `{% ... %}` and `{# ... #}`. An unbalanced `{{`, `{%` or `{#`
+  in it is a 500 `error`, as for any template that fails to render. Compressed formats
+  (PNG, JPEG, GIF, WebP, ZIP, gzip, fonts, audio, video) and almost every PDF are in
+  practice never valid UTF-8, but small uncompressed payloads can be, for example a
+  protobuf message holding only ASCII strings and numbers below 128, or a PDF without
+  compressed streams. Compare such a fixture with a response byte for byte before
+  relying on it.
+- The file is read whole on every request: there is no streaming and no `Range` support.
+- Record mode does not write binary files: an upstream body that is not UTF-8 is not
+  [recorded](#recording-fixtures).
 
 ## Dynamic replacements
 
@@ -369,7 +437,8 @@ A response is recorded only when:
 - the request is not a `HEAD` or `OPTIONS`;
 - the upstream's status equals the fixture rule's `status` (200 by default), so the
   fixture replays with the status it was recorded with;
-- the body is UTF-8 text;
+- the body is UTF-8 text, so a binary response such as an image is not recorded; save
+  the file yourself to serve it as a [binary fixture](#binary-files);
 - the body is not still compressed with a coding mockstack does not decode (for example
   `br` without the optional `brotli` package); `gzip` and `deflate` bodies are recorded
   decoded.
@@ -451,7 +520,7 @@ return value. See the cookbook's
 ## Redirection methods
 
 `proxyrules_redirect_via` selects what a rule whose `replacement` is a URL does.
-Rules that serve a `file:///` template are unaffected.
+Rules that serve a `file:///` fixture are unaffected.
 
 1. **Reverse proxy** (`reverse_proxy`, the default; stamped `proxy`)
     - Server forwards the request to the target service
@@ -511,14 +580,14 @@ responses -- carries:
 
 | `X-Mockstack-Result` | Status | Meaning |
 | --- | --- | --- |
-| `template` | 200, or the rule's `status` | A `file:///` fixture was rendered |
+| `template` | 200, or the rule's `status` | A `file:///` fixture was rendered, or sent as is because it is not UTF-8 |
 | `record` | The rule's `status` (200 by default) | Record mode wrote the upstream response to the fixture file and served it from that file |
 | `proxy` | Upstream's | The request was reverse-proxied to the rewritten URL |
 | `redirect` | 301 / 307 | An HTTP redirect to the rewritten URL |
 | `create` | 201 | No rule matched; resource creation was simulated |
 | `missing` | 404 | No rule matched |
 | `error` | 404 | A rule matched but its fixture file does not exist (or its path contains `..`) |
-| `error` | 500 | A fixture failed to render, a template replacement failed, the rewritten URL is not a usable absolute URL, or another internal failure |
+| `error` | 500 | A fixture failed to render (a `.j2` file that is not UTF-8 included), a template replacement failed, the rewritten URL is not a usable absolute URL, or another internal failure |
 | `error` | 502 | The upstream request failed |
 | `error` | 504 | The upstream request timed out |
 
@@ -545,7 +614,7 @@ instead of surfacing as a bare, unstamped 500 from Starlette's
 | Failure | Status | Body |
 | --- | --- | --- |
 | The rendered fixture path does not exist, or contains `..` | 404 | `{"error": "Template file not found."}` |
-| The fixture fails to render | 500 | `{"error": "An internal error occurred while rendering the template."}` |
+| The fixture fails to render, e.g. a `.j2` file that is not UTF-8 | 500 | `{"error": "An internal error occurred while rendering the template."}` |
 | The upstream is unreachable, resets the connection or breaks the protocol | 502 | `{"error": "mockstack: upstream request failed"}` |
 | The upstream does not answer within `proxyrules_reverse_proxy_timeout` | 504 | `{"error": "mockstack: upstream request timed out"}` |
 | The rewritten URL cannot be sent at all: not an absolute URL (e.g. `/api/v1/users`), or an invalid port | 500 | `{"error": "mockstack: internal error"}` |

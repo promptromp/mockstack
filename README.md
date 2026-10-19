@@ -30,6 +30,7 @@ Highlights include:
 * Dynamic replacements: a rule's replacement can be a Jinja template, so a request header can pick the fixture scenario to serve. :twisted_rightwards_arrows:
 * Result headers: every `proxyrules` response is stamped with `X-Mockstack-Result` and `X-Mockstack-Rule`, so a test can assert it got a fixture and not the real service. :label:
 * Fixture status codes and headers: a `proxyrules` fixture can answer with any status and extra headers, e.g. a 503 with `Retry-After`, to test how a client handles a failing dependency. :vertical_traffic_light:
+* Binary fixtures: a `proxyrules` fixture file that is not UTF-8 text, such as an image or a PDF, is served byte for byte, with a content type from its suffix. :framed_picture:
 * Record mode: `proxyrules` can record real responses into the fixtures its rules serve, with an optional scrubber, then replay them without the real service. :red_circle:
 * Observability via [OpenTelemetry](https://opentelemetry.io/) integration. Get detailed traces of your sessions instantly reported to backends such as [Grafana](https://grafana.com/), [Jaeger](https://www.jaegertracing.io/), [Zipkin](https://zipkin.io/), etc. Tracing is optional: install the `opentelemetry` extra to use it. :eyes:
 * Configurability via [pydantic-settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/) supports customizing behaviour via command-line flags, environment variables and a `.env` file. :flags:
