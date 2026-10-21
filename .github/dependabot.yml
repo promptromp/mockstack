@@ -1,0 +1,19 @@
+# Weekly dependency-update pull requests against main: the GitHub Actions used by the
+# workflows and the packages pinned in uv.lock. Minor and patch bumps are grouped into one
+# pull request per ecosystem so the CI runs (and the reviews) stay few.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      actions:
+        patterns: ["*"]
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
