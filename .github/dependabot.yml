@@ -17,10 +17,12 @@ updates:
       interval: "weekly"
     groups:
       # typeshed's stub packages (types-*) put a date in a fourth version part
-      # (6.0.12.20260906). Dependabot does not count such a bump as minor or patch, and
-      # gives each its own pull request. Listed first, since a dependency joins the first
-      # group it matches, so every stub bump shares one pull request.
+      # (6.0.12.20260906), which Dependabot counts as neither a minor nor a patch bump.
+      # Dependabot gives a dependency to the most specific group it matches, whatever the
+      # order here, so minor-and-patch must exclude them: otherwise it claims each stub,
+      # leaves its bump out, and the bump gets a pull request of its own.
       type-stubs:
         patterns: ["types-*"]
       minor-and-patch:
         update-types: ["minor", "patch"]
+        exclude-patterns: ["types-*"]
