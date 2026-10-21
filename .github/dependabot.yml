@@ -1,6 +1,7 @@
 # Weekly dependency-update pull requests against main: the GitHub Actions used by the
 # workflows and the packages pinned in uv.lock. Minor and patch bumps are grouped into one
-# pull request per ecosystem so the CI runs (and the reviews) stay few.
+# pull request per ecosystem, and typeshed's stub packages into one more, so the CI runs
+# (and the reviews) stay few.
 version: 2
 updates:
   - package-ecosystem: "github-actions"
@@ -15,5 +16,11 @@ updates:
     schedule:
       interval: "weekly"
     groups:
+      # typeshed's stub packages (types-*) put a date in a fourth version part
+      # (6.0.12.20260906). Dependabot does not count such a bump as minor or patch, and
+      # gives each its own pull request. Listed first, since a dependency joins the first
+      # group it matches, so every stub bump shares one pull request.
+      type-stubs:
+        patterns: ["types-*"]
       minor-and-patch:
         update-types: ["minor", "patch"]
